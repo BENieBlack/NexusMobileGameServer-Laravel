@@ -16,7 +16,7 @@ return new class extends Migration
         // mst_vip_level: VIPレベルマスター
         // ========================================
         Schema::create('mst_vip_level', function (Blueprint $table) {
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('id')->primary()->comment('VIPレベルID（vip_0, vip_1, ...）');
             $table->smallInteger('level')->unique()->comment('VIPレベル (0-15)');
             $table->unsignedInteger('required_point')->comment('このレベルに到達するために必要な累積VIPポイント');
@@ -62,7 +62,7 @@ return new class extends Migration
         // ========================================
         Schema::create('mst_vip_level_reward', function (Blueprint $table) {
             $table->string('id')->primary()->comment('ID（{vip_level}:{content_type}:{content_mst_id}）');
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->smallInteger('vip_level')->comment('VIPレベル');
             $table->enum('content_type', ['item', 'unit', 'equipment', 'wallet', 'stamina'])->comment('コンテンツタイプ');
             $table->string('content_mst_id')->comment('コンテンツID (mst_item_id等、stamina/walletはダミー値。無償ダイヤは free_diamond)');

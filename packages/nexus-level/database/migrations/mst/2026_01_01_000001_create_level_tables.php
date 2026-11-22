@@ -17,7 +17,7 @@ return new class extends Migration
         // ========================================
         Schema::create('mst_player_level', function (Blueprint $table) {
             $table->string('id')->primary()->comment('ID（levelの文字列。例 1）');
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->unsignedInteger('level')->comment('レベル');
             $table->unsignedBigInteger('required_exp')->comment('このレベルに到達するために必要な累積経験値');
             $table->unsignedInteger('max_stamina')->comment('このレベルでの最大スタミナ');

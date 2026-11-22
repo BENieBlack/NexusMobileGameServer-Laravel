@@ -31,7 +31,7 @@ class CheckUseCaseTest extends TestCase
     public function test_handle_with_valid_deploy_version(): void
     {
         // Arrange
-        $deployVersion = 202601010;
+        $deployVersion = 2026010101;
 
         // VersionService returns array [sysDeploy, sysMaintenance] with null (up to date)
         $this->mockVersionService
@@ -79,7 +79,7 @@ class CheckUseCaseTest extends TestCase
     public function test_handle_delegates_to_version_check_service(): void
     {
         // Arrange
-        $deployVersion = 202601020;
+        $deployVersion = 2026010201;
 
         $this->mockVersionService
             ->shouldReceive('checkVersion')

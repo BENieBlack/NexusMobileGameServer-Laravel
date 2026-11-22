@@ -31,7 +31,7 @@ class MstUnitRepositoryTest extends TestCase
         // Arrange
         $unit = MstUnit::create([
             'id' => 'unit_001',
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'type' => 'attack',
             'element' => 'fire',
             'rarity' => 'SSR',
@@ -66,7 +66,7 @@ class MstUnitRepositoryTest extends TestCase
         // Arrange
         MstUnit::create([
             'id' => 'unit_001',
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'type' => 'attack',
             'element' => 'fire',
             'rarity' => 'SSR',
@@ -74,7 +74,7 @@ class MstUnitRepositoryTest extends TestCase
 
         MstUnit::create([
             'id' => 'unit_002',
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'type' => 'defense',
             'element' => 'water',
             'rarity' => 'SR',
@@ -82,7 +82,7 @@ class MstUnitRepositoryTest extends TestCase
 
         MstUnit::create([
             'id' => 'unit_003',
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'type' => 'support',
             'element' => 'wind',
             'rarity' => 'R',
@@ -117,7 +117,7 @@ class MstUnitRepositoryTest extends TestCase
         // Arrange
         MstUnit::create([
             'id' => 'unit_001',
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'type' => 'attack',
             'element' => 'fire',
             'rarity' => 'SSR',
@@ -129,7 +129,7 @@ class MstUnitRepositoryTest extends TestCase
         // Create a new unit after first query
         MstUnit::create([
             'id' => 'unit_002',
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'type' => 'defense',
             'element' => 'water',
             'rarity' => 'SR',
@@ -153,7 +153,7 @@ class MstUnitRepositoryTest extends TestCase
         // Arrange
         MstUnit::create([
             'id' => 'unit_001',
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'type' => 'attack',
             'element' => 'fire',
             'rarity' => 'SSR',
@@ -171,7 +171,7 @@ class MstUnitRepositoryTest extends TestCase
         // Create a new unit
         MstUnit::create([
             'id' => 'unit_002',
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'type' => 'defense',
             'element' => 'water',
             'rarity' => 'SR',
@@ -192,9 +192,9 @@ class MstUnitRepositoryTest extends TestCase
     public function test_select_list_by_ids_returns_all_matching_units(): void
     {
         // Arrange
-        MstUnit::create(['id' => 'unit_001', 'deploy_key' => 202601010, 'type' => 'attack', 'element' => 'fire', 'rarity' => 'SSR']);
-        MstUnit::create(['id' => 'unit_002', 'deploy_key' => 202601010, 'type' => 'defense', 'element' => 'water', 'rarity' => 'SR']);
-        MstUnit::create(['id' => 'unit_003', 'deploy_key' => 202601010, 'type' => 'support', 'element' => 'wind', 'rarity' => 'R']);
+        MstUnit::create(['id' => 'unit_001', 'deploy_key' => 2026010101, 'type' => 'attack', 'element' => 'fire', 'rarity' => 'SSR']);
+        MstUnit::create(['id' => 'unit_002', 'deploy_key' => 2026010101, 'type' => 'defense', 'element' => 'water', 'rarity' => 'SR']);
+        MstUnit::create(['id' => 'unit_003', 'deploy_key' => 2026010101, 'type' => 'support', 'element' => 'wind', 'rarity' => 'R']);
 
         // Act
         $result = $this->repository->selectListByIds(['unit_003', 'unit_001', 'unit_002']);
@@ -220,7 +220,7 @@ class MstUnitRepositoryTest extends TestCase
         foreach ($types as $index => $type) {
             MstUnit::create([
                 'id' => 'unit_00'.($index + 1),
-                'deploy_key' => 202601010,
+                'deploy_key' => 2026010101,
                 'type' => $type,
                 'element' => $elements[$index],
                 'rarity' => $rarities[$index],

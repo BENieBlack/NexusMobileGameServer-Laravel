@@ -21,7 +21,7 @@ return new class extends Migration
         // mst_billing_platform_product: プラットフォーム課金商品
         // ========================================
         Schema::create('mst_billing_platform_product', function (Blueprint $table) {
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('id')->primary()->comment('ID（{billing_platform}:{platform_product_id}）');
             $table->string('platform_product_id', 255)->comment('プラットフォーム商品ID');
             $table->enum('billing_platform', ['app_store', 'google_play', 'pay_pal', 'stripe'])->comment('決済プラットフォーム');
@@ -43,7 +43,7 @@ return new class extends Migration
         // mst_in_app_purchase: アプリ内課金商品
         // ========================================
         Schema::create('mst_in_app_purchase', function (Blueprint $table) {
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('id')->primary()->comment('アプリ内課金商品ID（人が決める安定した値。例: iap_diamond_100）');
             $table->enum('type', ['diamond', 'pack', 'pass'])->comment('課金商品タイプ');
             $table->unsignedInteger('paid_diamond_amount')->default(0)->comment('有償ダイヤ数');
@@ -72,7 +72,7 @@ return new class extends Migration
         // mst_in_app_purchase__l10n: アプリ内課金商品多言語
         // ========================================
         Schema::create('mst_in_app_purchase__l10n', function (Blueprint $table) {
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('mst_in_app_purchase_id')->comment('アプリ内課金商品ID');
             $table->enum('language', $this->supportedLanguages)->comment('言語コード');
             $table->string('name')->comment('商品名');
@@ -88,7 +88,7 @@ return new class extends Migration
         // mst_in_app_purchase_content: アプリ内課金商品コンテンツ
         // ========================================
         Schema::create('mst_in_app_purchase_content', function (Blueprint $table) {
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('id')->primary()->comment('ID（{mst_in_app_purchase_id}:{content_type}:{content_mst_id}）');
             $table->string('mst_in_app_purchase_id')->comment('アプリ内課金商品ID');
             $table->enum('content_type', ['item', 'unit'])->comment('コンテンツタイプ');
@@ -109,7 +109,7 @@ return new class extends Migration
         // mst_in_app_purchase_effect: アプリ内課金商品効果
         // ========================================
         Schema::create('mst_in_app_purchase_effect', function (Blueprint $table) {
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('id')->primary()->comment('ID（{mst_in_app_purchase_id}:{effect_type}）');
             $table->string('mst_in_app_purchase_id')->comment('アプリ内課金商品ID');
             $table->enum('effect_type', ['idle_reward_multiplier', 'ad_skip', 'exp_boost', 'gold_boost', 'daily_mission_bonus'])->comment('効果タイプ');

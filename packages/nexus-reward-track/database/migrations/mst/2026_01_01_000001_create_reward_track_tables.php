@@ -21,7 +21,7 @@ return new class extends Migration
         // mst_reward_track
         // ------------------------------------------------
         Schema::create('mst_reward_track', function (Blueprint $table) {
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('id')->primary()->comment('トラックID（例: track_season_1）');
             $table->string('progress_type')->comment('進捗タイプ (player_level / point / quest_count / login_days)');
             $table->dateTime('start_at')->comment('開始日時');
@@ -42,7 +42,7 @@ return new class extends Migration
         // 有料ラインは mst_in_app_purchase と紐づく
         // ------------------------------------------------
         Schema::create('mst_reward_track_line', function (Blueprint $table) {
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('id')->primary()->comment('ラインID（例: track_s1_free, track_s1_gold）');
             $table->string('mst_reward_track_id')->comment('mst_reward_trackテーブルのID');
             $table->boolean('is_free')->default(false)->comment('無料ラインフラグ（各トラックに必ず1つ）');
@@ -64,7 +64,7 @@ return new class extends Migration
         // required_progress に達したら報酬が解放される
         // ------------------------------------------------
         Schema::create('mst_reward_track_milestone', function (Blueprint $table) {
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('id')->primary()->comment('マイルストーンID（例: track_s1_lv5）');
             $table->string('mst_reward_track_id')->comment('mst_reward_trackテーブルのID');
             $table->unsignedInteger('required_progress')->comment('解放に必要な進捗値（レベル・ポイント等）');
@@ -87,7 +87,7 @@ return new class extends Migration
         // ------------------------------------------------
         Schema::create('mst_reward_track_content', function (Blueprint $table) {
             $table->string('id')->primary()->comment('ID（{mst_reward_track_milestone_id}:{mst_reward_track_line_id}:{content_type}:{content_mst_id}）');
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('mst_reward_track_milestone_id')->comment('mst_reward_track_milestoneテーブルのID');
             $table->string('mst_reward_track_line_id')->comment('mst_reward_track_lineテーブルのID');
             $table->string('content_type')->comment('コンテンツタイプ (item / unit / equipment / wallet / stamina。無償ダイヤは item + free_diamond)');

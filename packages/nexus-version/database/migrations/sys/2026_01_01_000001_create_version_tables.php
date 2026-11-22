@@ -17,10 +17,10 @@ return new class extends Migration
         // ========================================
         Schema::create('sys_deploy_master', function (Blueprint $table) {
             $table->id();
-            $table->integer('deploy_key')->unique()->comment('デプロイキー（YYYYMMDDN形式）');
+            $table->bigInteger('deploy_key')->comment('デプロイキー（YYYYMMDDNN 形式。予約キーは 7000000000 以上）');
             $table->string('hash', 64)->unique()->comment('マスターデータ全体のSHA-256ハッシュ（バージョン識別用）');
             $table->date('deploy_date')->comment('デプロイ日');
-            $table->unsignedTinyInteger('deploy_count')->comment('その日の何回目のデプロイか');
+            $table->unsignedBigInteger('deploy_count')->comment('その日の何回目のデプロイか');
             $table->enum('status', ['scheduled', 'in_progress', 'completed', 'failed', 'rolled_back'])
                 ->default('scheduled')
                 ->comment('デプロイステータス');
@@ -31,6 +31,7 @@ return new class extends Migration
             $table->dateTime('updated_at')->default(DB::raw('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'))->comment('更新日時');
 
             // インデックス
+            $table->index('deploy_key');
             $table->index('deploy_date');
             $table->index('hash');
             $table->index('status');
@@ -42,10 +43,10 @@ return new class extends Migration
         // ========================================
         Schema::create('sys_deploy_asset', function (Blueprint $table) {
             $table->id();
-            $table->integer('deploy_key')->unique()->comment('デプロイキー（YYYYMMDDN形式）');
+            $table->bigInteger('deploy_key')->comment('デプロイキー（YYYYMMDDNN 形式。予約キーは 7000000000 以上）');
             $table->string('hash', 64)->unique()->comment('ファイル全体のSHA-256ハッシュ（バージョン識別用）');
             $table->date('deploy_date')->comment('デプロイ日');
-            $table->unsignedTinyInteger('deploy_count')->comment('その日の何回目のデプロイか');
+            $table->unsignedBigInteger('deploy_count')->comment('その日の何回目のデプロイか');
             $table->enum('status', ['scheduled', 'in_progress', 'completed', 'failed', 'rolled_back'])
                 ->default('scheduled')
                 ->comment('デプロイステータス');
@@ -61,6 +62,7 @@ return new class extends Migration
             $table->dateTime('updated_at')->default(DB::raw('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'))->comment('更新日時');
 
             // インデックス
+            $table->index('deploy_key');
             $table->index('deploy_date');
             $table->index('hash');
             $table->index('status');
@@ -73,7 +75,7 @@ return new class extends Migration
         // ========================================
         Schema::create('sys_deploy', function (Blueprint $table) {
             $table->id()->comment('デプロイID');
-            $table->integer('deploy_key')->unique()->comment('デプロイキー（配信バージョン識別用）');
+            $table->bigInteger('deploy_key')->comment('デプロイキー（配信バージョン識別用。同じ値の行が複数ありうる。最新は id 最大）');
             $table->dateTime('start_at')->comment('DL可能となる日時');
             $table->unsignedBigInteger('sys_deploy_master_id')->comment('DLできるsys_deploy_masterのID');
             $table->unsignedBigInteger('sys_deploy_asset_id')->comment('DLできるsys_deploy_assetのID');

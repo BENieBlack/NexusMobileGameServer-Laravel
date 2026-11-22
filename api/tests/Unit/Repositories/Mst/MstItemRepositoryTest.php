@@ -31,7 +31,7 @@ class MstItemRepositoryTest extends TestCase
         // Arrange
         $item = MstItem::create([
             'id' => 'item_001',
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'type' => 'consumable',
             'effect' => 'heal_hp',
             'value' => 50.0,
@@ -68,7 +68,7 @@ class MstItemRepositoryTest extends TestCase
         // Arrange
         MstItem::create([
             'id' => 'item_001',
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'type' => 'consumable',
             'effect' => 'heal_hp',
             'value' => 50.0,
@@ -76,7 +76,7 @@ class MstItemRepositoryTest extends TestCase
 
         MstItem::create([
             'id' => 'item_002',
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'type' => 'consumable',
             'effect' => 'heal_mp',
             'value' => 30.0,
@@ -84,7 +84,7 @@ class MstItemRepositoryTest extends TestCase
 
         MstItem::create([
             'id' => 'item_003',
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'type' => 'equipment',
             'effect' => 'increase_attack',
             'value' => 10.0,
@@ -119,7 +119,7 @@ class MstItemRepositoryTest extends TestCase
         // Arrange
         MstItem::create([
             'id' => 'item_001',
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'type' => 'consumable',
             'effect' => 'heal_hp',
             'value' => 50.0,
@@ -131,7 +131,7 @@ class MstItemRepositoryTest extends TestCase
         // Create a new item after first query
         MstItem::create([
             'id' => 'item_002',
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'type' => 'consumable',
             'effect' => 'heal_mp',
             'value' => 30.0,
@@ -155,7 +155,7 @@ class MstItemRepositoryTest extends TestCase
         // Arrange
         MstItem::create([
             'id' => 'item_001',
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'type' => 'consumable',
             'effect' => 'heal_hp',
             'value' => 50.0,
@@ -173,7 +173,7 @@ class MstItemRepositoryTest extends TestCase
         // Create a new item
         MstItem::create([
             'id' => 'item_002',
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'type' => 'consumable',
             'effect' => 'heal_mp',
             'value' => 30.0,
@@ -194,9 +194,9 @@ class MstItemRepositoryTest extends TestCase
     public function test_select_list_by_ids_returns_items_in_found_order(): void
     {
         // Arrange
-        MstItem::create(['id' => 'item_001', 'deploy_key' => 202601010, 'type' => 'consumable', 'effect' => 'heal_hp', 'value' => 50.0]);
-        MstItem::create(['id' => 'item_002', 'deploy_key' => 202601010, 'type' => 'consumable', 'effect' => 'heal_mp', 'value' => 30.0]);
-        MstItem::create(['id' => 'item_003', 'deploy_key' => 202601010, 'type' => 'equipment', 'effect' => 'increase_attack', 'value' => 10.0]);
+        MstItem::create(['id' => 'item_001', 'deploy_key' => 2026010101, 'type' => 'consumable', 'effect' => 'heal_hp', 'value' => 50.0]);
+        MstItem::create(['id' => 'item_002', 'deploy_key' => 2026010101, 'type' => 'consumable', 'effect' => 'heal_mp', 'value' => 30.0]);
+        MstItem::create(['id' => 'item_003', 'deploy_key' => 2026010101, 'type' => 'equipment', 'effect' => 'increase_attack', 'value' => 10.0]);
 
         // Act
         $result = $this->repository->selectListByIds(['item_003', 'item_001', 'item_002']);

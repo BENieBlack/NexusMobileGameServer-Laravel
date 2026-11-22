@@ -38,7 +38,7 @@ class VersionMasterTablesTest extends TestCase
     public function test_master_tables_は登録した全テーブルをテーブル名のキーで返す(): void
     {
         $masterId = DB::connection('sys')->table('sys_deploy_master')->insertGetId([
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'hash' => hash('sha256', 'master'),
             'deploy_date' => '2026-01-01',
             'deploy_count' => 1,
@@ -47,7 +47,7 @@ class VersionMasterTablesTest extends TestCase
             'updated_at' => now(),
         ]);
         $assetId = DB::connection('sys')->table('sys_deploy_asset')->insertGetId([
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'hash' => hash('sha256', 'asset'),
             'deploy_date' => '2026-01-01',
             'deploy_count' => 1,
@@ -56,7 +56,7 @@ class VersionMasterTablesTest extends TestCase
             'updated_at' => now(),
         ]);
         DB::connection('sys')->table('sys_deploy')->insert([
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'start_at' => now()->subMinute(),
             'sys_deploy_master_id' => $masterId,
             'sys_deploy_asset_id' => $assetId,

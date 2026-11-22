@@ -238,7 +238,7 @@ class RecordingScenarioTest extends RecordingTestCase
     }
 
     #[Test]
-    public function 配信ファイルを持つ有効な本物のデプロイがあればデプロイを追加しない(): void
+    public function 配信ファイルを持つ本物の10桁のデプロイがあっても録画用を追加し本物の行は残る(): void
     {
         $this->ensureMasterRows();
         $sys = DB::connection('sys');
@@ -249,15 +249,15 @@ class RecordingScenarioTest extends RecordingTestCase
             'file_size' => 1, 'file_name' => 'mst_item_x.sqlite', 'public_url' => '/masterdata/x/mst_item_x.sqlite',
         ]);
         $sys->table('sys_deploy')->insert([
-            'deploy_key' => 190001011, 'start_at' => '2020-01-01 00:00:00',
+            'deploy_key' => 2026112201, 'start_at' => '2020-01-01 00:00:00',
             'sys_deploy_master_id' => 9999, 'sys_deploy_asset_id' => 1, 'is_active' => true,
         ]);
-        $before = $sys->table('sys_deploy')->count();
 
         $this->runSeeder(RecordingDeploySeeder::class);
 
-        $this->assertSame($before, $sys->table('sys_deploy')->count());
-        $this->assertSame([], glob($this->masterDataDir.'/*') ?: []);
+        $this->assertSame(1, $sys->table('sys_deploy')->where('deploy_key', RecordingDeploySeeder::DEPLOY_KEY)->count());
+        $this->assertTrue((bool) $sys->table('sys_deploy')->where('deploy_key', 2026112201)->value('is_active'));
+        $this->assertNotSame([], glob($this->masterDataDir.'/*') ?: []);
     }
 
     #[Test]
@@ -266,7 +266,7 @@ class RecordingScenarioTest extends RecordingTestCase
         $this->ensureMasterRows();
         $sys = DB::connection('sys');
         $sys->table('sys_deploy')->where('deploy_key', RecordingDeploySeeder::DEPLOY_KEY)->delete();
-        foreach ([999999999, 888888888] as $key) {
+        foreach ([9999999999, 8888888888] as $key) {
             $sys->table('sys_deploy')->insert([
                 'deploy_key' => $key, 'start_at' => '2020-01-01 00:00:00',
                 'sys_deploy_master_id' => 1, 'sys_deploy_asset_id' => 1, 'is_active' => true,
@@ -277,30 +277,30 @@ class RecordingScenarioTest extends RecordingTestCase
         $this->assertSame(0, $sys->table('sys_deploy')->where('deploy_key', RecordingDeploySeeder::DEPLOY_KEY)->count());
 
         $this->runSeeder(RecordingResetSeeder::class);
-        $this->assertSame(2, $sys->table('sys_deploy')->whereIn('deploy_key', [999999999, 888888888])->where('is_active', true)->count());
+        $this->assertSame(2, $sys->table('sys_deploy')->whereIn('deploy_key', [9999999999, 8888888888])->where('is_active', true)->count());
     }
 
     #[Test]
-    public function 運営ツールの10桁のdeploy_keyの有効なデプロイがあれば追加せずリセットでも消さない(): void
+    public function 運営ツールの10桁のdeploy_keyの有効なデプロイがあっても録画用を追加し本物はリセットでも消さない(): void
     {
         $this->ensureMasterRows();
         $sys = DB::connection('sys');
         $sys->table('sys_deploy')->where('deploy_key', RecordingDeploySeeder::DEPLOY_KEY)->delete();
-        // MasterDeployService::generateDeployKey が作る形（YYYYMMDD×100+連番）。配信ファイルは持たない
+        // MasterDeployService::generateDeployKey が作る形（YYYYMMDD×100+連番）。録画用（予約帯）より小さい
         $realKey = 2026112201;
-        $this->assertGreaterThan(RecordingDeploySeeder::DEPLOY_KEY, $realKey);
+        $this->assertLessThan(RecordingDeploySeeder::DEPLOY_KEY, $realKey);
         $sys->table('sys_deploy')->insert([
             'deploy_key' => $realKey, 'start_at' => '2020-01-01 00:00:00',
             'sys_deploy_master_id' => 1, 'sys_deploy_asset_id' => 1, 'is_active' => true,
         ]);
-        $before = $sys->table('sys_deploy')->count();
 
         $this->runSeeder(RecordingDeploySeeder::class);
 
-        $this->assertSame($before, $sys->table('sys_deploy')->count());
-        $this->assertSame([], glob($this->masterDataDir.'/*') ?: []);
+        $this->assertSame(1, $sys->table('sys_deploy')->where('deploy_key', RecordingDeploySeeder::DEPLOY_KEY)->count());
+        $this->assertTrue((bool) $sys->table('sys_deploy')->where('deploy_key', $realKey)->value('is_active'));
 
         $this->runSeeder(RecordingResetSeeder::class);
+        $this->assertSame(0, $sys->table('sys_deploy')->where('deploy_key', RecordingDeploySeeder::DEPLOY_KEY)->count());
         $this->assertTrue((bool) $sys->table('sys_deploy')->where('deploy_key', $realKey)->value('is_active'));
     }
 

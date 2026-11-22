@@ -42,7 +42,7 @@ class MstUnitLevelSeeder extends Seeder
         _BaseMst::allowWrites();
 
         $data = [];
-        $deployKey = 202601010;
+        $deployKey = 2026010101;
 
         foreach (RarityType::all() as $rarity) {
             $multiplier = self::RARITY_MULTIPLIERS[$rarity];

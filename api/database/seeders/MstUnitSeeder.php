@@ -112,7 +112,7 @@ class MstUnitSeeder extends Seeder
         foreach ($units as $unitData) {
             MstUnit::create([
                 'id' => $unitData['id'],
-                'deploy_key' => 202601010,
+                'deploy_key' => 2026010101,
                 'type' => $unitData['type'],
                 'element' => $unitData['element'],
                 'rarity' => $unitData['rarity'],

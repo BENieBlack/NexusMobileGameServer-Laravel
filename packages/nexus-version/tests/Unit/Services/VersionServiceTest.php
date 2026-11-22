@@ -45,7 +45,7 @@ class VersionServiceTest extends TestCase
 
         $latestDeploy = [
             'id' => 100,
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'start_at' => '2026-01-15 10:00:00',
             'is_active' => true,
         ];
@@ -76,7 +76,7 @@ class VersionServiceTest extends TestCase
 
         $latestDeploy = [
             'id' => 100,
-            'deploy_key' => 202601020,
+            'deploy_key' => 2026010201,
             'start_at' => '2026-01-15 10:00:00',
             'is_active' => true,
             'master_hash' => 'master_hash_002',
@@ -97,7 +97,7 @@ class VersionServiceTest extends TestCase
         // Assert
         $this->assertNotNull($result['deploy']);
         $this->assertEquals(100, $result['deploy']['id']);
-        $this->assertEquals(202601020, $result['deploy']['deploy_key']);
+        $this->assertEquals(2026010201, $result['deploy']['deploy_key']);
         $this->assertNull($result['maintenance']);
     }
 
@@ -109,7 +109,7 @@ class VersionServiceTest extends TestCase
         // Arrange
         $latestDeploy = [
             'id' => 100,
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'start_at' => '2026-01-15 10:00:00',
             'is_active' => true,
         ];
@@ -140,7 +140,7 @@ class VersionServiceTest extends TestCase
 
         $latestDeploy = [
             'id' => 100,
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'start_at' => '2026-01-15 10:00:00',
             'is_active' => true,
         ];
@@ -202,7 +202,7 @@ class VersionServiceTest extends TestCase
 
         $latestDeploy = [
             'id' => 100,
-            'deploy_key' => 202601020,
+            'deploy_key' => 2026010201,
             'start_at' => '2026-01-15 10:00:00',
             'is_active' => true,
         ];

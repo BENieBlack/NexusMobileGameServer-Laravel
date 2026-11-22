@@ -25,7 +25,7 @@ return new class extends Migration
         //   trigger_type = unit_max_limit_break, mst_tag_id = tag_series_v_gundam, target_value = 3
         // ------------------------------------------------
         Schema::create('mst_mission', function (Blueprint $table) {
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('id')->primary()->comment('ミッションID（例: mission_v_gundam_level_up_3）');
             $table->string('trigger_type')->comment('進捗を進める出来事 (unit_level_up / unit_max_limit_break など。ゲームごとに決める)');
             $table->string('mst_tag_id')->nullable()->comment('mst_tagテーブルのID。このタグを持つ対象の分だけ数える（NULLはタグを問わない）');
@@ -45,7 +45,7 @@ return new class extends Migration
         // mst_mission__l10n
         // ------------------------------------------------
         Schema::create('mst_mission__l10n', function (Blueprint $table) {
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('mst_mission_id')->comment('mst_missionテーブルのID');
             $table->enum('language', $this->supportedLanguages)->comment('言語コード');
             $table->string('name')->comment('ミッション名');
@@ -63,7 +63,7 @@ return new class extends Migration
         // ------------------------------------------------
         Schema::create('mst_mission_content', function (Blueprint $table) {
             $table->string('id')->primary()->comment('ID（{mst_mission_id}:{content_type}:{content_mst_id}）');
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('mst_mission_id')->comment('mst_missionテーブルのID');
             $table->string('content_type')->comment('報酬の種別 (item / unit / equipment / stamina など。無償ダイヤは item + free_diamond)');
             $table->string('content_mst_id')->comment('報酬のマスターID（staminaはダミー値。無償ダイヤは free_diamond）');

@@ -29,7 +29,7 @@ class MasterDataReadOnlyTest extends TestCase
     {
         return [
             'id' => $id,
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'type' => 'consumable',
             'effect' => 'heal_hp',
             'value' => 50.0,

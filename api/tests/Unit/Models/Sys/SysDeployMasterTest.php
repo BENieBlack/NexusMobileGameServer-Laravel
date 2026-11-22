@@ -74,14 +74,14 @@ class SysDeployMasterTest extends TestCase
     public function アクセサで値を出し入れできる(): void
     {
         $master = new SysDeployMaster;
-        $master->setDeployKey(202603151);
+        $master->setDeployKey(2026031501);
         $master->setHash(self::VALID_HASH);
         $master->setDeployCount(2);
         $master->setStatus(SysDeployMaster::STATUS_IN_PROGRESS);
         $master->setDeployedBy('deployer');
         $master->setDescription('マスタ更新');
 
-        $this->assertSame(202603151, $master->getDeployKey());
+        $this->assertSame(2026031501, $master->getDeployKey());
         $this->assertSame(self::VALID_HASH, $master->getHash());
         $this->assertSame(2, $master->getDeployCount());
         $this->assertSame(SysDeployMaster::STATUS_IN_PROGRESS, $master->getStatus());
@@ -95,7 +95,7 @@ class SysDeployMasterTest extends TestCase
     private function makeMaster(array $attributes = []): SysDeployMaster
     {
         return new SysDeployMaster(array_merge([
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'hash' => self::VALID_HASH,
             'deploy_count' => 1,
             'status' => SysDeployMaster::STATUS_COMPLETED,

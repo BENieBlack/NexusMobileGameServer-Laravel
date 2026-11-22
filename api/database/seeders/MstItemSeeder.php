@@ -10,7 +10,7 @@ use Nexus\Core\Models\Mst\_BaseMst;
 class MstItemSeeder extends Seeder
 {
     /** mst_item と mst_item__l10n で揃える deploy_key */
-    private const DEPLOY_KEY = 202601010;
+    private const DEPLOY_KEY = 2026010101;
 
     /**
      * Run the database seeds.

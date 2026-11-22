@@ -17,7 +17,7 @@ use Nexus\Core\Models\Mst\_BaseMst;
  */
 class MstConfigSeeder extends Seeder
 {
-    private const DEPLOY_KEY = 202601010;
+    private const DEPLOY_KEY = 2026010101;
 
     public function run(): void
     {

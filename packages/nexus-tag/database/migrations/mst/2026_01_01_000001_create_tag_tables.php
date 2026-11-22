@@ -25,7 +25,7 @@ return new class extends Migration
         // mst_tag
         // ------------------------------------------------
         Schema::create('mst_tag', function (Blueprint $table) {
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('id')->primary()->comment('タグID（例: tag_series_v_gundam）');
             $table->string('tag_category')->comment('タグの分類 (series / chara_type / element など。ゲームごとに決める)');
             $table->unsignedInteger('sort_order')->default(0)->comment('表示順序');
@@ -40,7 +40,7 @@ return new class extends Migration
         // mst_tag__l10n
         // ------------------------------------------------
         Schema::create('mst_tag__l10n', function (Blueprint $table) {
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('mst_tag_id')->comment('mst_tagテーブルのID');
             $table->enum('language', $this->supportedLanguages)->comment('言語コード');
             $table->string('name')->comment('タグの表示名（例: Vガンダム）');
@@ -57,7 +57,7 @@ return new class extends Migration
         // ------------------------------------------------
         Schema::create('mst_tag_content', function (Blueprint $table) {
             $table->string('id')->primary()->comment('ID（{mst_tag_id}:{content_type}:{content_mst_id}）');
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('mst_tag_id')->comment('mst_tagテーブルのID');
             $table->string('content_type')->comment('タグを付ける対象の種別 (unit / equipment / item)');
             $table->string('content_mst_id')->comment('種別に対応するマスターのID（mst_unit.id など）');

@@ -18,7 +18,7 @@ use Tests\TestCase;
  */
 class BuyEndpointTest extends TestCase
 {
-    private const DEPLOY_KEY = 202601010;
+    private const DEPLOY_KEY = 2026010101;
 
     private const PRICE_MICROS = 490_000_000;
 

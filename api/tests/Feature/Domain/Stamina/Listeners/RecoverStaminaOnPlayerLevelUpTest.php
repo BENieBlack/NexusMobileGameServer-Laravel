@@ -25,7 +25,7 @@ class RecoverStaminaOnPlayerLevelUpTest extends TestCase
 {
     use RefreshMultipleDatabases;
 
-    private const DEPLOY_KEY = 202601010;
+    private const DEPLOY_KEY = 2026010101;
 
     /** レベル2の最大スタミナ */
     private const NEW_MAX_STAMINA = 60;

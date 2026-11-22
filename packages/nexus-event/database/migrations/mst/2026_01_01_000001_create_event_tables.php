@@ -24,7 +24,7 @@ return new class extends Migration
         // 束ねたコンテンツの start_at / end_at は、このテーブルの期間で上書きされる
         // ------------------------------------------------
         Schema::create('mst_event', function (Blueprint $table) {
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('id')->primary()->comment('イベントID（例: event_202611_halloween）');
             $table->dateTime('start_at')->comment('開始日時');
             $table->dateTime('end_at')->comment('プレイ期間の終わり（ポイントの獲得・進捗の加算・ガチャなどの締め）');
@@ -38,7 +38,7 @@ return new class extends Migration
         });
 
         Schema::create('mst_event__l10n', function (Blueprint $table) {
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('mst_event_id')->comment('mst_eventテーブルのID');
             $table->enum('language', $this->supportedLanguages)->comment('言語コード');
             $table->string('name')->comment('イベント名');
@@ -57,7 +57,7 @@ return new class extends Migration
         // ------------------------------------------------
         Schema::create('mst_event_content', function (Blueprint $table) {
             $table->string('id')->primary()->comment('ID（{mst_event_id}:{content_type}:{content_mst_id}）');
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('mst_event_id')->comment('mst_eventテーブルのID');
             $table->string('content_type')->comment('コンテンツの種別 (gacha / login_bonus / reward_track / trade / mission / ranking)');
             $table->string('content_mst_id')->comment('コンテンツのマスターID（mst_gacha.id, mst_trade.id など）');

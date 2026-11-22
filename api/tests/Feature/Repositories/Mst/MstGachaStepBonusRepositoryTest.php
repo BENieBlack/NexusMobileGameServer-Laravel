@@ -185,7 +185,7 @@ class MstGachaStepBonusRepositoryTest extends TestCase
         bool $isActive = true,
     ): void {
         DB::connection('mst')->table('mst_gacha_step_bonus')->insert([
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'id' => $id,
             'mst_gacha_step_id' => $stepId,
             'position' => $position,
@@ -206,7 +206,7 @@ class MstGachaStepBonusRepositoryTest extends TestCase
         bool $isActive = true,
     ): void {
         DB::connection('mst')->table('mst_gacha_step_bonus_content')->insert([
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'id' => $id,
             'mst_gacha_step_bonus_id' => $bonusId,
             'content_type' => 'item',

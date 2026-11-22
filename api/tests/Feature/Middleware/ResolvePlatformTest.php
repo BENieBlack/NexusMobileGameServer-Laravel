@@ -107,7 +107,7 @@ class ResolvePlatformTest extends TestCase
     {
         $signedUp = $this->signUpPlayer();
         $headers = $this->authHeaders($signedUp['token']);
-        $body = ['deploy_version' => config('app.deploy_version', 202601010)];
+        $body = ['deploy_version' => config('app.deploy_version', 2026010101)];
 
         // POST（認証済み）は maintenance グループ内なので必須
         $this->withoutHeader('X-Platform');

@@ -23,35 +23,35 @@ class MstBillingPlatformProductSeeder extends Seeder
         $products = [
             // AppStore商品
             [
-                'deploy_key' => 202601010,
+                'deploy_key' => 2026010101,
                 'platform_product_id' => 'com.example.game.diamond100',
                 'billing_platform' => 'app_store',
                 'product_type' => 'consumable',
                 'is_active' => true,
             ],
             [
-                'deploy_key' => 202601010,
+                'deploy_key' => 2026010101,
                 'platform_product_id' => 'com.example.game.diamond500',
                 'billing_platform' => 'app_store',
                 'product_type' => 'consumable',
                 'is_active' => true,
             ],
             [
-                'deploy_key' => 202601010,
+                'deploy_key' => 2026010101,
                 'platform_product_id' => 'com.example.game.diamond1000',
                 'billing_platform' => 'app_store',
                 'product_type' => 'consumable',
                 'is_active' => true,
             ],
             [
-                'deploy_key' => 202601010,
+                'deploy_key' => 2026010101,
                 'platform_product_id' => 'com.example.game.starter_pack',
                 'billing_platform' => 'app_store',
                 'product_type' => 'consumable',
                 'is_active' => true,
             ],
             [
-                'deploy_key' => 202601010,
+                'deploy_key' => 2026010101,
                 'platform_product_id' => 'com.example.game.monthly_pass',
                 'billing_platform' => 'app_store',
                 'product_type' => 'subscription',
@@ -60,35 +60,35 @@ class MstBillingPlatformProductSeeder extends Seeder
 
             // GooglePlay商品
             [
-                'deploy_key' => 202601010,
+                'deploy_key' => 2026010101,
                 'platform_product_id' => 'com.example.game.diamond100',
                 'billing_platform' => 'google_play',
                 'product_type' => 'consumable',
                 'is_active' => true,
             ],
             [
-                'deploy_key' => 202601010,
+                'deploy_key' => 2026010101,
                 'platform_product_id' => 'com.example.game.diamond500',
                 'billing_platform' => 'google_play',
                 'product_type' => 'consumable',
                 'is_active' => true,
             ],
             [
-                'deploy_key' => 202601010,
+                'deploy_key' => 2026010101,
                 'platform_product_id' => 'com.example.game.diamond1000',
                 'billing_platform' => 'google_play',
                 'product_type' => 'consumable',
                 'is_active' => true,
             ],
             [
-                'deploy_key' => 202601010,
+                'deploy_key' => 2026010101,
                 'platform_product_id' => 'com.example.game.starter_pack',
                 'billing_platform' => 'google_play',
                 'product_type' => 'consumable',
                 'is_active' => true,
             ],
             [
-                'deploy_key' => 202601010,
+                'deploy_key' => 2026010101,
                 'platform_product_id' => 'com.example.game.monthly_pass',
                 'billing_platform' => 'google_play',
                 'product_type' => 'subscription',
