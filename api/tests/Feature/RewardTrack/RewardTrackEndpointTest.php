@@ -85,6 +85,20 @@ class RewardTrackEndpointTest extends TestCase
     }
 
     #[Test]
+    public function サマリーのラインの商品idは文字列で_無料ラインはnull(): void
+    {
+        $response = $this->postJson(
+            '/api/reward_track/summary', ['mst_reward_track_id' => self::TRACK_ID],
+            $this->authHeaders($this->token)
+        );
+
+        $response->assertOk();
+        $byId = collect($response->json('line_list'))->keyBy('id');
+        $this->assertNull($byId[self::FREE_LINE_ID]['mst_in_app_purchase_id']);
+        $this->assertSame('iap_test_501', $byId[self::PAID_LINE_ID]['mst_in_app_purchase_id']);
+    }
+
+    #[Test]
     public function サマリーに進捗とマイルストーンが入る(): void
     {
         $this->makeProgress(15);
@@ -291,7 +305,7 @@ class RewardTrackEndpointTest extends TestCase
         DB::connection($this->connection)->table('trx_reward_track_line')->insert([
             'sys_player_id' => $this->sysPlayerId,
             'mst_reward_track_line_id' => $lineId,
-            'mst_in_app_purchase_id' => 501,
+            'mst_in_app_purchase_id' => 'iap_test_501',
             'purchased_at' => now(),
             'is_delete' => false,
             'created_at' => now(),
@@ -327,7 +341,7 @@ class RewardTrackEndpointTest extends TestCase
                 'id' => self::PAID_LINE_ID,
                 'mst_reward_track_id' => self::TRACK_ID,
                 'is_free' => false,
-                'mst_in_app_purchase_id' => 501,
+                'mst_in_app_purchase_id' => 'iap_test_501',
                 'sort_order' => 2,
                 'is_active' => true,
                 'created_at' => now(),

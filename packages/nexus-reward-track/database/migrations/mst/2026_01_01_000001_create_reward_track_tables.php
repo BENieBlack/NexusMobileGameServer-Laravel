@@ -46,7 +46,7 @@ return new class extends Migration
             $table->string('id')->primary()->comment('ラインID（例: track_s1_free, track_s1_gold）');
             $table->string('mst_reward_track_id')->comment('mst_reward_trackテーブルのID');
             $table->boolean('is_free')->default(false)->comment('無料ラインフラグ（各トラックに必ず1つ）');
-            $table->unsignedBigInteger('mst_in_app_purchase_id')->nullable()->comment('有料ラインの購入商品ID（is_free=trueの場合はNULL）');
+            $table->string('mst_in_app_purchase_id')->nullable()->comment('有料ラインの購入商品ID（is_free=trueの場合はNULL）');
             $table->unsignedInteger('sort_order')->default(0)->comment('表示順序（無料ラインを先頭に）');
             $table->boolean('is_active')->default(true)->comment('有効フラグ');
             $table->dateTime('created_at')->default(DB::raw('CURRENT_TIMESTAMP'))->comment('作成日時');

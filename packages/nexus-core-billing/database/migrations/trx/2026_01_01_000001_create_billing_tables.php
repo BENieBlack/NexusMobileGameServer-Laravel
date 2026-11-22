@@ -43,7 +43,7 @@ return new class extends Migration
         Schema::create('trx_in_app_purchase_effect', function (Blueprint $table) {
             $table->id()->comment('レコードID');
             $table->unsignedBigInteger('sys_player_id')->comment('sys_playerテーブルのID');
-            $table->unsignedBigInteger('mst_in_app_purchase_id')->comment('課金商品マスターID');
+            $table->string('mst_in_app_purchase_id')->comment('課金商品マスターID');
             $table->string('effect_type')->comment('効果タイプ (idle_reward_multiplier, ad_skip, exp_boost, gold_boost, daily_mission_bonus)');
             $table->decimal('value', 10, 2)->comment('効果値');
             $table->dateTime('expires_at')->comment('効果の有効期限');

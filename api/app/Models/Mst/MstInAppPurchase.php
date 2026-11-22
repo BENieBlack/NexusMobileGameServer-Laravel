@@ -5,13 +5,24 @@ namespace App\Models\Mst;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * @property string $id
+ * @property ?string $app_store_product_id
+ * @property ?string $google_play_product_id
+ */
 class MstInAppPurchase extends _BaseMst
 {
     public $table = 'mst_in_app_purchase';
 
+    /** 主キーは string の id（人が決める安定した値。例: iap_diamond_100）。自然キーは無い */
+    public $incrementing = false;
+
+    protected $keyType = 'string';
+
     /** @var list<string> */
     protected $fillable = [
         'deploy_key',
+        'id',
         'type',
         'paid_diamond_amount',
         'vip_point',
@@ -87,7 +98,7 @@ class MstInAppPurchase extends _BaseMst
     /**
      * IDを取得
      */
-    public function getId(): int
+    public function getId(): string
     {
         return $this->getAttribute('id');
     }

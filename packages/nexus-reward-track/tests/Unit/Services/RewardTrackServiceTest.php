@@ -190,13 +190,13 @@ class RewardTrackServiceTest extends TestCase
         $this->masterRepository->shouldReceive('selectLinesByTrackId')->with('bp_001')->andReturn($this->lines());
         $this->lineRepository->shouldReceive('hasLine')->with(100, 'bp_001_paid', self::CONNECTION)->andReturn(false);
         $this->lineRepository->shouldReceive('insertLine')
-            ->withArgs(fn (int $playerId, string $lineId, int $purchaseId, string $purchasedAt, string $connection): bool => $playerId === 100
+            ->withArgs(fn (int $playerId, string $lineId, string $purchaseId, string $purchasedAt, string $connection): bool => $playerId === 100
                     && $lineId === 'bp_001_paid'
-                    && $purchaseId === 501
+                    && $purchaseId === 'iap_test_501'
                     && $connection === self::CONNECTION)
             ->andReturn($line);
 
-        $this->assertSame($line, $this->service->grantLine(100, 'bp_001_paid', 501, self::CONNECTION));
+        $this->assertSame($line, $this->service->grantLine(100, 'bp_001_paid', 'iap_test_501', self::CONNECTION));
     }
 
     #[Test]
@@ -208,7 +208,7 @@ class RewardTrackServiceTest extends TestCase
         $this->expectException(RewardTrackException::class);
         $this->expectExceptionMessage('無料ラインは購入できません');
 
-        $this->service->grantLine(100, 'bp_001_free', 501, self::CONNECTION);
+        $this->service->grantLine(100, 'bp_001_free', 'iap_test_501', self::CONNECTION);
     }
 
     #[Test]
@@ -221,7 +221,7 @@ class RewardTrackServiceTest extends TestCase
         $this->expectException(RewardTrackException::class);
         $this->expectExceptionMessage('既に購入済みのラインです');
 
-        $this->service->grantLine(100, 'bp_001_paid', 501, self::CONNECTION);
+        $this->service->grantLine(100, 'bp_001_paid', 'iap_test_501', self::CONNECTION);
     }
 
     #[Test]
@@ -234,7 +234,7 @@ class RewardTrackServiceTest extends TestCase
         // どのトラックにも属さないラインは「見つからない」に寄せている
         $this->expectExceptionMessage('RewardTrackLine が見つかりません: unknown_line');
 
-        $this->service->grantLine(100, 'unknown_line', 501, self::CONNECTION);
+        $this->service->grantLine(100, 'unknown_line', 'iap_test_501', self::CONNECTION);
     }
 
     // =========================================================
@@ -454,7 +454,7 @@ class RewardTrackServiceTest extends TestCase
             id: 1,
             sysPlayerId: 100,
             mstRewardTrackLineId: 'bp_001_paid',
-            mstInAppPurchaseId: 501,
+            mstInAppPurchaseId: 'iap_test_501',
             purchasedAt: '2026-09-05 00:00:00',
             isDelete: false,
             createdAt: '2026-09-05 00:00:00',

@@ -32,6 +32,11 @@ class MasterImportServiceTest extends TestCase
         'mst_login_bonus_content' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, mst_login_bonus_id VARCHAR(191) NOT NULL, day INT UNSIGNED NOT NULL DEFAULT 0, content_type VARCHAR(191) NOT NULL, content_mst_id VARCHAR(191) NOT NULL, sort_desc INT UNSIGNED NOT NULL DEFAULT 0, UNIQUE KEY uk_login_bonus_content (mst_login_bonus_id, day, content_type, content_mst_id)',
         'mst_vip_login_bonus_content' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, mst_vip_login_bonus_id VARCHAR(191) NOT NULL, day INT UNSIGNED NOT NULL, content_type VARCHAR(191) NOT NULL, content_mst_id VARCHAR(191) NOT NULL, sort_desc INT UNSIGNED NOT NULL DEFAULT 0, UNIQUE KEY uk_vip_login_bonus_content (mst_vip_login_bonus_id, day, content_type, content_mst_id)',
         'mst_vip_level_reward' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, vip_level SMALLINT NOT NULL, content_type VARCHAR(191) NOT NULL, content_mst_id VARCHAR(191) NOT NULL, UNIQUE KEY uk_vip_level_reward (vip_level, content_type, content_mst_id)',
+        'mst_billing_platform_product' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, billing_platform ENUM(\'app_store\',\'google_play\',\'pay_pal\',\'stripe\') NOT NULL, platform_product_id VARCHAR(255) NOT NULL, UNIQUE KEY uk_billing_platform_product (billing_platform, platform_product_id)',
+        'mst_in_app_purchase' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, type ENUM(\'diamond\',\'pack\',\'pass\') NOT NULL',
+        'mst_in_app_purchase__l10n' => 'mst_in_app_purchase_id VARCHAR(191) NOT NULL, language VARCHAR(10) NOT NULL, name VARCHAR(191) NOT NULL, PRIMARY KEY (mst_in_app_purchase_id, language)',
+        'mst_in_app_purchase_content' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, mst_in_app_purchase_id VARCHAR(191) NOT NULL, content_type VARCHAR(191) NOT NULL, content_mst_id VARCHAR(191) NOT NULL, UNIQUE KEY uk_purchase_content (mst_in_app_purchase_id, content_type, content_mst_id)',
+        'mst_in_app_purchase_effect' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, mst_in_app_purchase_id VARCHAR(191) NOT NULL, effect_type VARCHAR(191) NOT NULL, UNIQUE KEY uk_purchase_effect (mst_in_app_purchase_id, effect_type)',
         'mst_gacha_prize' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, rarity TINYINT UNSIGNED NOT NULL',
         'mst_equipment' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, rarity ENUM(\'UR\',\'SSR\',\'SR\',\'R\',\'UC\',\'C\') NOT NULL',
         'mst_item' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, name VARCHAR(191) NOT NULL',
@@ -388,6 +393,7 @@ class MasterImportServiceTest extends TestCase
             'mst_reward_track_content' => ['mst_reward_track_content', ['mst_reward_track_milestone_id', 'mst_reward_track_line_id']],
             'mst_tag_content' => ['mst_tag_content', ['mst_tag_id']],
             'mst_trade_product_content' => ['mst_trade_product_content', ['mst_trade_product_id']],
+            'mst_in_app_purchase_content' => ['mst_in_app_purchase_content', ['mst_in_app_purchase_id']],
         ];
     }
 
@@ -713,5 +719,80 @@ class MasterImportServiceTest extends TestCase
         $result = (new MasterImportService)->import($table, array_keys($rows[0]), $rows);
 
         $this->assertSame(2, $result['inserted']);
+    }
+
+    // ========================================
+    // billing の id（platform_product は {billing_platform}:{platform_product_id}、effect は {親}:{effect_type}、
+    // mst_in_app_purchase は人が決める値で規則なし）
+    // ========================================
+
+    #[Test]
+    public function プラットフォーム商品はidが規則どおりなら取り込め_platform_product_idのコロンも許す(): void
+    {
+        $rows = [
+            ['id' => 'app_store:com.example.game.diamond100', 'billing_platform' => 'app_store', 'platform_product_id' => 'com.example.game.diamond100'],
+            ['id' => 'stripe:price:abc', 'billing_platform' => 'stripe', 'platform_product_id' => 'price:abc'],
+        ];
+
+        $result = (new MasterImportService)->import('mst_billing_platform_product', array_keys($rows[0]), $rows);
+
+        $this->assertSame(2, $result['inserted']);
+    }
+
+    #[Test]
+    public function プラットフォーム商品はidが規則と違えば中止され既存の行が残る(): void
+    {
+        $seed = ['id' => 'app_store:old', 'billing_platform' => 'app_store', 'platform_product_id' => 'old'];
+        DB::connection('mst')->table('mst_billing_platform_product')->insert($seed);
+
+        $bad = ['id' => 'AppStore:new', 'billing_platform' => 'app_store', 'platform_product_id' => 'new'];
+
+        try {
+            (new MasterImportService)->import('mst_billing_platform_product', array_keys($bad), [$bad]);
+            $this->fail('RuntimeException が投げられるはず');
+        } catch (RuntimeException $e) {
+            $this->assertStringContainsString('規則', $e->getMessage());
+        }
+
+        $this->assertSame(['app_store:old'], DB::connection('mst')->table('mst_billing_platform_product')->pluck('id')->all());
+    }
+
+    #[Test]
+    public function アプリ内課金効果は規則どおりのidなら取り込め_違えば拒否する(): void
+    {
+        $ok = ['id' => 'iap_monthly_pass:ad_skip', 'mst_in_app_purchase_id' => 'iap_monthly_pass', 'effect_type' => 'ad_skip'];
+        $this->assertSame(1, (new MasterImportService)->import('mst_in_app_purchase_effect', array_keys($ok), [$ok])['inserted']);
+
+        $bad = ['id' => 'ad_skip'] + $ok;
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('規則');
+        (new MasterImportService)->import('mst_in_app_purchase_effect', array_keys($bad), [$bad]);
+    }
+
+    #[Test]
+    public function アプリ内課金商品は規則を持たず_idの空と重複だけ拒否する(): void
+    {
+        $ok = [['id' => 'iap_diamond_100', 'type' => 'diamond'], ['id' => 'iap_starter_pack', 'type' => 'pack']];
+        $this->assertSame(2, (new MasterImportService)->import('mst_in_app_purchase', ['id', 'type'], $ok)['inserted']);
+
+        $dup = [['id' => 'iap_diamond_100', 'type' => 'diamond'], ['id' => 'IAP_DIAMOND_100', 'type' => 'diamond']];
+        try {
+            (new MasterImportService)->import('mst_in_app_purchase', ['id', 'type'], $dup);
+            $this->fail('RuntimeException が投げられるはず');
+        } catch (RuntimeException $e) {
+            $this->assertStringContainsString('重複', $e->getMessage());
+        }
+        $this->assertSame(2, DB::connection('mst')->table('mst_in_app_purchase')->count());
+    }
+
+    #[Test]
+    public function アプリ内課金のl10nはid列を持たないのでid検証の対象外(): void
+    {
+        $rows = [['mst_in_app_purchase_id' => 'iap_diamond_100', 'language' => 'ja', 'name' => 'ダイヤ100']];
+
+        $result = (new MasterImportService)->import('mst_in_app_purchase__l10n', array_keys($rows[0]), $rows);
+
+        $this->assertSame(1, $result['inserted']);
+        $this->assertSame(['iap_diamond_100'], DB::connection('mst')->table('mst_in_app_purchase__l10n')->pluck('mst_in_app_purchase_id')->all());
     }
 }

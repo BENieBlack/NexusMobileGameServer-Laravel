@@ -100,9 +100,9 @@ class InAppPurchasePassService
     /**
      * Pass効果を無効化
      *
-     * @param  int  $mstInAppPurchaseId  商品ID
+     * @param  string  $mstInAppPurchaseId  商品ID
      */
-    public function deactivatePassEffects(int $mstInAppPurchaseId): void
+    public function deactivatePassEffects(string $mstInAppPurchaseId): void
     {
         $effects = $this->trxInAppPurchaseEffectRepository->selectAllEffectsByMstInAppPurchaseId($mstInAppPurchaseId);
 

@@ -22,7 +22,7 @@ class TrxInAppPurchaseEffectRepository extends _BaseTrxRepository
      *
      * @return CustomCollection<string, TrxInAppPurchaseEffect>
      */
-    public function selectAllEffectsByMstInAppPurchaseId(int $mstInAppPurchaseId): CustomCollection
+    public function selectAllEffectsByMstInAppPurchaseId(string $mstInAppPurchaseId): CustomCollection
     {
         $sysPlayerId = $this->getSysPlayerId();
         $effectCollection = $this->selectMapBySysPlayerId($sysPlayerId);

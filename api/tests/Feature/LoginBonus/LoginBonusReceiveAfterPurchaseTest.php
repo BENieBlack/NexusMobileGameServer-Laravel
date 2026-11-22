@@ -3,6 +3,7 @@
 namespace Tests\Feature\LoginBonus;
 
 use App\Exceptions\GameErrorCode;
+use App\Models\Mst\MstBillingPlatformProduct;
 use App\Models\Mst\MstVipLoginBonusContent;
 use App\Persistence\ApiSession;
 use App\Repositories\Sys\SysPlayerRepository;
@@ -164,7 +165,7 @@ class LoginBonusReceiveAfterPurchaseTest extends TestCase
         $this->freshRequest();
 
         return $this->postJson('/api/in_app_purchase/buy', [
-            'mst_in_app_purchase_id' => (int) DB::connection('mst')->table('mst_in_app_purchase')->value('id'),
+            'mst_in_app_purchase_id' => (string) DB::connection('mst')->table('mst_in_app_purchase')->value('id'),
             'platform' => 'Google',
             'billing_platform' => 'google_play',
             'receipt' => 'purchase-token-lb',
@@ -212,13 +213,14 @@ class LoginBonusReceiveAfterPurchaseTest extends TestCase
             }
         }
 
-        $platformProductId = DB::connection('mst')->table('mst_billing_platform_product')->insertGetId([
-            'deploy_key' => self::DEPLOY_KEY, 'platform_product_id' => 'diamond_lb', 'billing_platform' => 'google_play',
+        $platformProductId = MstBillingPlatformProduct::makeId('google_play', 'diamond_lb');
+        DB::connection('mst')->table('mst_billing_platform_product')->insert([
+            'id' => $platformProductId, 'deploy_key' => self::DEPLOY_KEY, 'platform_product_id' => 'diamond_lb', 'billing_platform' => 'google_play',
             'product_type' => 'consumable', 'price_amount_micros' => 490_000_000, 'price_currency_code' => 'JPY',
             'is_active' => true, 'created_at' => now(), 'updated_at' => now(),
         ]);
         DB::connection('mst')->table('mst_in_app_purchase')->insert([
-            'deploy_key' => self::DEPLOY_KEY, 'type' => 'diamond', 'paid_diamond_amount' => 500,
+            'id' => 'iap_lb_diamond', 'deploy_key' => self::DEPLOY_KEY, 'type' => 'diamond', 'paid_diamond_amount' => 500,
             'vip_point' => self::PURCHASE_VIP_POINT, 'purchase_limit_reset' => 'none',
             'app_store_product_id' => null, 'google_play_product_id' => $platformProductId,
             'sort_desc' => 1, 'is_active' => true, 'created_at' => now(), 'updated_at' => now(),

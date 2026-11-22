@@ -11,7 +11,7 @@ readonly class RewardTrackLine
         public int $id,
         public int $sysPlayerId,
         public string $mstRewardTrackLineId,
-        public int $mstInAppPurchaseId,
+        public string $mstInAppPurchaseId,
         public string $purchasedAt,
         public bool $isDelete,
         public ?string $createdAt,
@@ -33,7 +33,7 @@ readonly class RewardTrackLine
         return $this->mstRewardTrackLineId;
     }
 
-    public function getMstInAppPurchaseId(): int
+    public function getMstInAppPurchaseId(): string
     {
         return $this->mstInAppPurchaseId;
     }

@@ -8,14 +8,15 @@ class MstInAppPurchaseEffect extends _BaseMst
 {
     public $table = 'mst_in_app_purchase_effect';
 
-    /** テーブル定義どおりの複合主キー */
-    protected $primaryKey = ['mst_in_app_purchase_id', 'effect_type'];
-
+    /** 主キーは string の id（{mst_in_app_purchase_id}:{effect_type}）。自然キーは unique */
     public $incrementing = false;
+
+    protected $keyType = 'string';
 
     /** @var list<string> */
     protected $fillable = [
         'deploy_key',
+        'id',
         'mst_in_app_purchase_id',
         'effect_type',
         'value',
@@ -24,7 +25,7 @@ class MstInAppPurchaseEffect extends _BaseMst
     /** @var array<string, string> */
     protected $casts = [
         'deploy_key' => 'integer',
-        'mst_in_app_purchase_id' => 'integer',
+        'mst_in_app_purchase_id' => 'string',
         // effect_type は enum の文字列、value は decimal(10,2)。
         // integerにすると 'ExpBoost' → '0'、1.50 → 1 に潰れる
         'effect_type' => 'string',
@@ -34,16 +35,14 @@ class MstInAppPurchaseEffect extends _BaseMst
     public $timestamps = true;
 
     /**
-     * 複合主キーを使用するため、主キーの設定を無効化
-     * 実際の複合主キーは: [mst_in_app_purchase_id, effect_type]
+     * id を作る（シーダー・テスト・取り込みの検証が同じ規則を使う）
+     *
+     * 規則は {mst_in_app_purchase_id}:{effect_type}。mst_in_app_purchase_id に ':' を含めない（取り込みで拒否する）
+     * tool の MasterImportService::ID_RULES も同じ規則を持つ。変えるときは両方を直す
      */
-    protected function setKeysForSaveQuery($query)
+    public static function makeId(string $mstInAppPurchaseId, string $effectType): string
     {
-        $query
-            ->where('mst_in_app_purchase_id', '=', $this->getAttribute('mst_in_app_purchase_id'))
-            ->where('effect_type', '=', $this->getAttribute('effect_type'));
-
-        return $query;
+        return $mstInAppPurchaseId.':'.$effectType;
     }
 
     /**
@@ -76,7 +75,7 @@ class MstInAppPurchaseEffect extends _BaseMst
     /**
      * レスポンス用配列に変換
      *
-     * Note: 複合主キー(mst_in_app_purchase_id, effect_type)のため、idフィールドは存在しない
+     * Note: id（{mst_in_app_purchase_id}:{effect_type}）はそのまま含まれる
      */
     public function toResponseArray(): array
     {

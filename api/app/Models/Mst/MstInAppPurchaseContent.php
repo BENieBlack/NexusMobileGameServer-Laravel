@@ -8,14 +8,15 @@ class MstInAppPurchaseContent extends _BaseMst
 {
     public $table = 'mst_in_app_purchase_content';
 
-    /** テーブル定義どおりの複合主キー */
-    protected $primaryKey = ['mst_in_app_purchase_id', 'content_type', 'content_mst_id'];
-
+    /** 主キーは string の id（{mst_in_app_purchase_id}:{content_type}:{content_mst_id}）。自然キーは unique */
     public $incrementing = false;
+
+    protected $keyType = 'string';
 
     /** @var list<string> */
     protected $fillable = [
         'deploy_key',
+        'id',
         'mst_in_app_purchase_id',
         'content_type',
         'content_mst_id',
@@ -28,7 +29,7 @@ class MstInAppPurchaseContent extends _BaseMst
     /** @var array<string, string> */
     protected $casts = [
         'deploy_key' => 'integer',
-        'mst_in_app_purchase_id' => 'integer',
+        'mst_in_app_purchase_id' => 'string',
         'content_option' => 'array',
         'content_quantity' => 'integer',
         'amount' => 'integer',
@@ -38,17 +39,14 @@ class MstInAppPurchaseContent extends _BaseMst
     public $timestamps = true;
 
     /**
-     * 複合主キーを使用するため、主キーの設定を無効化
-     * 実際の複合主キーは: [mst_in_app_purchase_id, content_type, content_mst_id]
+     * id を作る（シーダー・テスト・取り込みの検証が同じ規則を使う）
+     *
+     * 規則は {mst_in_app_purchase_id}:{content_type}:{content_mst_id}。mst_in_app_purchase_id と content_type に ':' を含めない（取り込みで拒否する）
+     * tool の MasterImportService::ID_RULES も同じ規則を持つ。変えるときは両方を直す
      */
-    protected function setKeysForSaveQuery($query)
+    public static function makeId(string $mstInAppPurchaseId, string $contentType, string $contentMstId): string
     {
-        $query
-            ->where('mst_in_app_purchase_id', '=', $this->getAttribute('mst_in_app_purchase_id'))
-            ->where('content_type', '=', $this->getAttribute('content_type'))
-            ->where('content_mst_id', '=', $this->getAttribute('content_mst_id'));
-
-        return $query;
+        return $mstInAppPurchaseId.':'.$contentType.':'.$contentMstId;
     }
 
     /**
@@ -95,7 +93,7 @@ class MstInAppPurchaseContent extends _BaseMst
     /**
      * アプリ内課金IDを取得
      */
-    public function getMstInAppPurchaseId(): int
+    public function getMstInAppPurchaseId(): string
     {
         return $this->getAttribute('mst_in_app_purchase_id');
     }
@@ -161,7 +159,7 @@ class MstInAppPurchaseContent extends _BaseMst
     /**
      * レスポンス用配列に変換
      *
-     * Note: 複合主キー(mst_in_app_purchase_id, content_type, content_mst_id)のため、idフィールドは存在しない
+     * Note: id（{mst_in_app_purchase_id}:{content_type}:{content_mst_id}）はそのまま含まれる
      */
     public function toResponseArray(): array
     {

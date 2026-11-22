@@ -23,7 +23,7 @@ class BuyRequest extends _BaseRequest
     public function rules(): array
     {
         return [
-            'mst_in_app_purchase_id' => ['required', 'integer', 'min:1'],
+            'mst_in_app_purchase_id' => ['required', 'string', 'max:255'],
             'platform' => ['required', 'string', 'in:Apple,Google'],
             'billing_platform' => ['required', 'string', 'in:app_store,google_play,pay_pal,stripe'],
             'receipt' => ['required', 'string'],
@@ -35,9 +35,9 @@ class BuyRequest extends _BaseRequest
     /**
      * アプリ内課金商品IDを取得
      */
-    public function getMstInAppPurchaseId(): int
+    public function getMstInAppPurchaseId(): string
     {
-        return (int) $this->input('mst_in_app_purchase_id');
+        return (string) $this->input('mst_in_app_purchase_id');
     }
 
     /**
@@ -101,8 +101,8 @@ class BuyRequest extends _BaseRequest
     {
         return [
             'mst_in_app_purchase_id.required' => 'mst_in_app_purchase_id is required',
-            'mst_in_app_purchase_id.integer' => 'mst_in_app_purchase_id must be an integer',
-            'mst_in_app_purchase_id.min' => 'mst_in_app_purchase_id must be at least 1',
+            'mst_in_app_purchase_id.string' => 'mst_in_app_purchase_id must be a string',
+            'mst_in_app_purchase_id.max' => 'mst_in_app_purchase_id must not exceed 255 characters',
             'platform.required' => 'platform is required',
             'platform.string' => 'platform must be a string',
             'platform.in' => 'platform must be one of: Apple, Google',

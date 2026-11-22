@@ -47,7 +47,7 @@ class MstInAppPurchaseRepository extends _BaseMstRepository
     /**
      * IDで商品を取得（リレーション付き）
      */
-    public function selectByIdWithRelations(int $mstInAppPurchaseId): ?MstInAppPurchase
+    public function selectByIdWithRelations(string $mstInAppPurchaseId): ?MstInAppPurchase
     {
         $product = $this->selectById($mstInAppPurchaseId);
 
@@ -64,10 +64,11 @@ class MstInAppPurchaseRepository extends _BaseMstRepository
     /**
      * IDとアクティブ状態で商品を取得
      */
-    public function selectActiveById(int $mstInAppPurchaseId): ?MstInAppPurchase
+    public function selectActiveById(string $mstInAppPurchaseId): ?MstInAppPurchase
     {
         return $this->queryOrMemory()
             ->where('is_active', true)
-            ->firstWhere('id', $mstInAppPurchaseId);
+            // 厳密比較（firstWhere の緩い比較だと '1e3' と '1000' が同じ id になる）
+            ->first(fn (MstInAppPurchase $product): bool => $product->getId() === $mstInAppPurchaseId);
     }
 }

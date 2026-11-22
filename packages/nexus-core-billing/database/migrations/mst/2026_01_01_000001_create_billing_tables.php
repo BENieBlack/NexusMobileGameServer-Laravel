@@ -22,7 +22,7 @@ return new class extends Migration
         // ========================================
         Schema::create('mst_billing_platform_product', function (Blueprint $table) {
             $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
-            $table->id()->comment('商品ID');
+            $table->string('id')->primary()->comment('ID（{billing_platform}:{platform_product_id}）');
             $table->string('platform_product_id', 255)->comment('プラットフォーム商品ID');
             $table->enum('billing_platform', ['app_store', 'google_play', 'pay_pal', 'stripe'])->comment('決済プラットフォーム');
             $table->enum('product_type', ['consumable', 'non_consumable', 'subscription'])->comment('商品種別');
@@ -44,15 +44,15 @@ return new class extends Migration
         // ========================================
         Schema::create('mst_in_app_purchase', function (Blueprint $table) {
             $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
-            $table->id()->comment('アプリ内課金商品ID');
+            $table->string('id')->primary()->comment('アプリ内課金商品ID（人が決める安定した値。例: iap_diamond_100）');
             $table->enum('type', ['diamond', 'pack', 'pass'])->comment('課金商品タイプ');
             $table->unsignedInteger('paid_diamond_amount')->default(0)->comment('有償ダイヤ数');
             $table->unsignedInteger('vip_point')->default(0)->comment('付与VIPポイント');
             $table->unsignedInteger('effect_duration_days')->nullable()->comment('効果期間（日数）');
             $table->unsignedInteger('purchase_limit_count')->nullable()->comment('購入可能回数');
             $table->enum('purchase_limit_reset', ['none', 'daily', 'weekly', 'monthly'])->default('none')->comment('購入制限リセット');
-            $table->unsignedBigInteger('app_store_product_id')->nullable()->comment('AppStore商品ID');
-            $table->unsignedBigInteger('google_play_product_id')->nullable()->comment('GooglePlay商品ID');
+            $table->string('app_store_product_id')->nullable()->comment('AppStore商品ID（mst_billing_platform_product.id）');
+            $table->string('google_play_product_id')->nullable()->comment('GooglePlay商品ID（mst_billing_platform_product.id）');
             $table->unsignedInteger('sort_desc')->default(0)->comment('表示順序（降順）');
             $table->boolean('is_active')->default(true)->comment('有効フラグ');
             $table->dateTime('created_at')->default(DB::raw('CURRENT_TIMESTAMP'))->comment('作成日時');
@@ -73,7 +73,7 @@ return new class extends Migration
         // ========================================
         Schema::create('mst_in_app_purchase__l10n', function (Blueprint $table) {
             $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
-            $table->unsignedBigInteger('mst_in_app_purchase_id')->comment('アプリ内課金商品ID');
+            $table->string('mst_in_app_purchase_id')->comment('アプリ内課金商品ID');
             $table->enum('language', $this->supportedLanguages)->comment('言語コード');
             $table->string('name')->comment('商品名');
             $table->text('description')->nullable()->comment('説明');
@@ -89,7 +89,8 @@ return new class extends Migration
         // ========================================
         Schema::create('mst_in_app_purchase_content', function (Blueprint $table) {
             $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
-            $table->unsignedBigInteger('mst_in_app_purchase_id')->comment('アプリ内課金商品ID');
+            $table->string('id')->primary()->comment('ID（{mst_in_app_purchase_id}:{content_type}:{content_mst_id}）');
+            $table->string('mst_in_app_purchase_id')->comment('アプリ内課金商品ID');
             $table->enum('content_type', ['item', 'unit'])->comment('コンテンツタイプ');
             $table->string('content_mst_id')->comment('コンテンツID');
             $table->json('content_option')->nullable()->comment('コンテンツオプション (例: {"grade":1, "level":5})');
@@ -99,7 +100,7 @@ return new class extends Migration
             $table->dateTime('created_at')->default(DB::raw('CURRENT_TIMESTAMP'))->comment('作成日時');
             $table->dateTime('updated_at')->default(DB::raw('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'))->comment('更新日時');
 
-            $table->primary(['mst_in_app_purchase_id', 'content_type', 'content_mst_id'], 'pk_purchase_content');
+            $table->unique(['mst_in_app_purchase_id', 'content_type', 'content_mst_id'], 'uk_purchase_content');
             $table->index('deploy_key');
             $table->index('sort_desc');
         });
@@ -109,13 +110,14 @@ return new class extends Migration
         // ========================================
         Schema::create('mst_in_app_purchase_effect', function (Blueprint $table) {
             $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
-            $table->unsignedBigInteger('mst_in_app_purchase_id')->comment('アプリ内課金商品ID');
+            $table->string('id')->primary()->comment('ID（{mst_in_app_purchase_id}:{effect_type}）');
+            $table->string('mst_in_app_purchase_id')->comment('アプリ内課金商品ID');
             $table->enum('effect_type', ['idle_reward_multiplier', 'ad_skip', 'exp_boost', 'gold_boost', 'daily_mission_bonus'])->comment('効果タイプ');
             $table->decimal('value', 10, 2)->comment('効果値');
             $table->dateTime('created_at')->default(DB::raw('CURRENT_TIMESTAMP'))->comment('作成日時');
             $table->dateTime('updated_at')->default(DB::raw('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'))->comment('更新日時');
 
-            $table->primary(['mst_in_app_purchase_id', 'effect_type'], 'pk_purchase_effect');
+            $table->unique(['mst_in_app_purchase_id', 'effect_type'], 'uk_purchase_effect');
             $table->index('deploy_key');
         });
     }

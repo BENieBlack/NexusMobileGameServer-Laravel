@@ -47,7 +47,7 @@ return new class extends Migration
             $table->id()->comment('自動採番ID');
             $table->unsignedBigInteger('sys_player_id')->comment('sys_playerテーブルのID');
             $table->string('mst_reward_track_line_id')->comment('mst_reward_track_lineテーブルのID');
-            $table->unsignedBigInteger('mst_in_app_purchase_id')->comment('購入した課金商品ID（購入履歴トレース用）');
+            $table->string('mst_in_app_purchase_id')->comment('購入した課金商品ID（購入履歴トレース用）');
             $table->dateTime('purchased_at')->comment('パス購入日時');
             $table->boolean('is_delete')->default(false)->comment('論理削除フラグ');
             $table->dateTime('created_at')->default(DB::raw('CURRENT_TIMESTAMP'))->comment('作成日時');
