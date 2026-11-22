@@ -20,12 +20,15 @@ class SysDeployMasterTest extends TestCase
     #[Test]
     public function デプロイキーを年月日と連番に分解する(): void
     {
-        $master = $this->makeMaster(['deploy_key' => 202612319]);
+        $master = $this->makeMaster(['deploy_key' => 2026123109]);
 
         $this->assertSame(
             ['year' => 2026, 'month' => 12, 'day' => 31, 'count' => 9],
             $master->parseDeployKey()
         );
+
+        // 連番は 2 桁
+        $this->assertSame(12, $this->makeMaster(['deploy_key' => 2026123112])->parseDeployKey()['count']);
     }
 
     #[Test]

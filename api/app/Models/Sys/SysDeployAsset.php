@@ -305,7 +305,7 @@ class SysDeployAsset extends _BaseSys
             'year' => (int) substr($keyString, 0, 4),
             'month' => (int) substr($keyString, 4, 2),
             'day' => (int) substr($keyString, 6, 2),
-            'count' => (int) substr($keyString, 8, 1),
+            'count' => (int) substr($keyString, 8, 2),
         ];
     }
 

@@ -20,12 +20,15 @@ class SysDeployAssetTest extends TestCase
     #[Test]
     public function デプロイキーを年月日と連番に分解する(): void
     {
-        $asset = $this->makeAsset(['deploy_key' => 202603152]);
+        $asset = $this->makeAsset(['deploy_key' => 2026031502]);
 
         $this->assertSame(
             ['year' => 2026, 'month' => 3, 'day' => 15, 'count' => 2],
             $asset->parseDeployKey()
         );
+
+        // 連番は 2 桁
+        $this->assertSame(12, $this->makeAsset(['deploy_key' => 2026031512])->parseDeployKey()['count']);
     }
 
     #[Test]

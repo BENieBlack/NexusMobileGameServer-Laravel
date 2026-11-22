@@ -3,6 +3,7 @@
 namespace App\Repositories\Sys;
 
 use App\Models\Sys\SysDeploy;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Cache;
 use Nexus\Core\Support\CustomCollection;
 use Nexus\Core\Utilities\ClockUtility;
@@ -20,6 +21,22 @@ class SysDeployRepository extends _BaseSysRepository
     protected string $modelClass = SysDeploy::class;
 
     /**
+     * 「最新」を引くクエリを組み立てる
+     *
+     * deploy_key 降順 → id 降順。本番（APP_ENV=production）は予約帯を除く。
+     * 設計: Nexus docs/design/master-distribution/db.md 3.3
+     *
+     * @return Builder<SysDeploy>
+     */
+    public function buildLatestDownloadableQuery(): Builder
+    {
+        return $this->modelClass::with(['deployMaster', 'deployAsset'])
+            ->where('is_active', true)
+            ->where('start_at', '<=', ClockUtility::now())
+            ->latestOrder();
+    }
+
+    /**
      * 最新のダウンロード可能なデプロイを取得（Redis キャッシュ付き）
      */
     public function selectLatestDownloadable(): ?SysDeploy
@@ -30,11 +47,7 @@ class SysDeployRepository extends _BaseSysRepository
             $cacheKey,
             $this->cacheTtl,
             function () {
-                $sysDeploy = $this->modelClass::with(['deployMaster', 'deployAsset'])
-                    ->where('is_active', true)
-                    ->where('start_at', '<=', ClockUtility::now())
-                    ->orderBy('deploy_key', 'desc')
-                    ->first();
+                $sysDeploy = $this->buildLatestDownloadableQuery()->first();
 
                 // メモリキャッシュにも保存
                 if ($sysDeploy !== null) {
@@ -59,6 +72,7 @@ class SysDeployRepository extends _BaseSysRepository
             function () use ($deployKey) {
                 $sysDeploy = $this->modelClass::with(['deployMaster', 'deployAsset'])
                     ->where('deploy_key', $deployKey)
+                    ->orderByDesc('id')
                     ->first();
 
                 // メモリキャッシュにも保存
