@@ -39,6 +39,7 @@ use Illuminate\Database\Eloquent\Collection;
  * }
  * ```
  *
+ * @property string $id
  * @property int $max_stamina
  * @property int $required_exp
  */
@@ -47,23 +48,16 @@ class MstPlayerLevel extends _BaseMst
     protected $table = 'mst_player_level';
 
     /**
-     * 主キーはlevelカラム
-     */
-    protected $primaryKey = 'level';
-
-    /**
-     * auto incrementを無効化
+     * 主キーは string の id（level の文字列）。level は unique
      */
     public $incrementing = false;
 
-    /**
-     * 主キーの型
-     */
-    protected $keyType = 'int';
+    protected $keyType = 'string';
 
     /** @var list<string> */
     protected $fillable = [
         'deploy_key',
+        'id',
         'level',
         'required_exp',
         'max_stamina',
@@ -78,13 +72,24 @@ class MstPlayerLevel extends _BaseMst
     ];
 
     /**
+     * id を作る（シーダー・テスト・取り込みの検証が同じ規則を使う）
+     *
+     * 規則は level の文字列（例 1）
+     * tool の MasterImportService::ID_RULES も同じ規則を持つ。変えるときは両方を直す
+     */
+    public static function makeId(int $level): string
+    {
+        return (string) $level;
+    }
+
+    /**
      * 指定レベルのデータを取得
      *
      * @param  int  $level  レベル
      */
     public static function findByLevel(int $level): ?self
     {
-        return self::find($level);
+        return self::where('level', $level)->first();
     }
 
     /**
@@ -186,7 +191,7 @@ class MstPlayerLevel extends _BaseMst
     /**
      * レスポンス用配列に変換
      *
-     * Note: 主キーがlevelカラムであり、idフィールドは存在しない
+     * Note: id は level の文字列。level 列はそのまま残る
      */
     public function toResponseArray(): array
     {

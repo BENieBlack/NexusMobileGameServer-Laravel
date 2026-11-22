@@ -19,7 +19,9 @@ use Tests\TestCase;
 class MasterImportServiceTest extends TestCase
 {
     private const TABLES = [
-        'mst_unit_level' => 'rarity ENUM(\'UR\',\'SSR\',\'SR\',\'R\',\'UC\',\'C\') NOT NULL, level INT UNSIGNED NOT NULL, PRIMARY KEY (rarity, level)',
+        'mst_unit_level' => 'id VARCHAR(255) NOT NULL PRIMARY KEY, rarity ENUM(\'UR\',\'SSR\',\'SR\',\'R\',\'UC\',\'C\') NOT NULL, level INT UNSIGNED NOT NULL, UNIQUE KEY uk_unit_level (rarity, level)',
+        'mst_equipment_level' => 'id VARCHAR(255) NOT NULL PRIMARY KEY, rarity ENUM(\'UR\',\'SSR\',\'SR\',\'R\',\'UC\',\'C\') NOT NULL, level INT UNSIGNED NOT NULL, UNIQUE KEY uk_equipment_level (rarity, level)',
+        'mst_player_level' => 'id VARCHAR(255) NOT NULL PRIMARY KEY, level INT UNSIGNED NOT NULL, UNIQUE KEY uk_player_level (level)',
         'mst_unit' => 'id VARCHAR(255) NOT NULL PRIMARY KEY, rarity ENUM(\'UR\',\'SSR\',\'SR\',\'R\',\'UC\',\'C\') NOT NULL',
         'mst_mailbox_content' => 'id INT UNSIGNED NOT NULL PRIMARY KEY, rarity ENUM(\'C\',\'UC\',\'R\',\'SR\',\'SSR\',\'UR\') NULL',
         'mst_gacha_prize' => 'id VARCHAR(255) NOT NULL PRIMARY KEY, rarity TINYINT UNSIGNED NOT NULL',
@@ -59,10 +61,10 @@ class MasterImportServiceTest extends TestCase
     {
         $rows = [];
         foreach (self::ALL_RARITIES as $i => $rarity) {
-            $rows[] = ['rarity' => $rarity, 'level' => (string) ($i + 1)];
+            $rows[] = ['id' => $rarity.':'.($i + 1), 'rarity' => $rarity, 'level' => (string) ($i + 1)];
         }
 
-        $result = (new MasterImportService)->import('mst_unit_level', ['rarity', 'level'], $rows);
+        $result = (new MasterImportService)->import('mst_unit_level', ['id', 'rarity', 'level'], $rows);
 
         $this->assertSame(6, $result['inserted']);
         $saved = DB::connection('mst')->table('mst_unit_level')->pluck('rarity', 'level')->all();
@@ -233,5 +235,109 @@ class MasterImportServiceTest extends TestCase
 
         $this->assertSame(1, $result['inserted']);
         $this->assertSame('XX', DB::connection('mst')->table('mst_item')->where('id', 'a')->value('name'));
+    }
+
+    // ========================================
+    // id 列の事前チェック（TRUNCATE の前に中止して既存行を残す）
+    // ========================================
+
+    /**
+     * @return array<string, array{array<int, string>, array<int, array<string, mixed>>, string}>
+     */
+    public static function invalidIdSheets(): array
+    {
+        $ok = ['id' => 'UR:1', 'rarity' => 'UR', 'level' => '1'];
+
+        return [
+            'シートに id 列が無い' => [['rarity', 'level'], [['rarity' => 'UR', 'level' => '1']], 'id 列がありません'],
+            'id が空' => [['id', 'rarity', 'level'], [$ok, ['id' => '', 'rarity' => 'SR', 'level' => '2']], 'id が空'],
+            'id が重複' => [['id', 'rarity', 'level'], [$ok, $ok], '重複'],
+            'id が大文字小文字違いで重複' => [['id', 'rarity', 'level'], [$ok, ['id' => 'ur:1', 'rarity' => 'SR', 'level' => '1']], '重複'],
+            'id が 255 文字超' => [['id', 'rarity', 'level'], [['id' => str_repeat('a', 256), 'rarity' => 'UR', 'level' => '1']], '255 文字'],
+            'id が規則と違う' => [['id', 'rarity', 'level'], [['id' => 'UR:2', 'rarity' => 'UR', 'level' => '1']], '規則'],
+        ];
+    }
+
+    /**
+     * @param  array<int, string>  $headers
+     * @param  array<int, array<string, mixed>>  $rows
+     */
+    #[Test]
+    #[DataProvider('invalidIdSheets')]
+    public function idが不正なシートは取り込み前に中止され既存の行が残る(array $headers, array $rows, string $message): void
+    {
+        DB::connection('mst')->table('mst_unit_level')->insert(['id' => 'C:1', 'rarity' => 'C', 'level' => 1]);
+
+        try {
+            (new MasterImportService)->import('mst_unit_level', $headers, $rows);
+            $this->fail('RuntimeException が投げられるはず');
+        } catch (RuntimeException $e) {
+            $this->assertStringContainsString($message, $e->getMessage());
+            $this->assertStringContainsString('既存のデータは変更していません', $e->getMessage());
+        }
+
+        $this->assertSame(['C:1'], DB::connection('mst')->table('mst_unit_level')->pluck('id')->all());
+    }
+
+    #[Test]
+    public function 装備レベルはidが規則と違えば中止され既存の行が残る(): void
+    {
+        DB::connection('mst')->table('mst_equipment_level')->insert(['id' => 'C:1', 'rarity' => 'C', 'level' => 1]);
+
+        try {
+            (new MasterImportService)->import('mst_equipment_level', ['id', 'rarity', 'level'], [
+                ['id' => 'SR:1', 'rarity' => 'SR', 'level' => '1'],
+                ['id' => 'SR-2', 'rarity' => 'SR', 'level' => '2'],
+            ]);
+            $this->fail('RuntimeException が投げられるはず');
+        } catch (RuntimeException $e) {
+            $this->assertStringContainsString('行 3', $e->getMessage());
+        }
+
+        $this->assertSame(['C:1'], DB::connection('mst')->table('mst_equipment_level')->pluck('id')->all());
+    }
+
+    #[Test]
+    public function プレイヤーレベルはidがレベルの文字列でなければ中止され既存の行が残る(): void
+    {
+        DB::connection('mst')->table('mst_player_level')->insert(['id' => '1', 'level' => 1]);
+
+        try {
+            (new MasterImportService)->import('mst_player_level', ['id', 'level'], [
+                ['id' => '1', 'level' => '1'],
+                ['id' => 'lv2', 'level' => '2'],
+            ]);
+            $this->fail('RuntimeException が投げられるはず');
+        } catch (RuntimeException $e) {
+            $this->assertStringContainsString('行 3', $e->getMessage());
+        }
+
+        $this->assertSame(['1'], DB::connection('mst')->table('mst_player_level')->pluck('id')->all());
+    }
+
+    #[Test]
+    public function プレイヤーレベルはidが規則どおりなら取り込める(): void
+    {
+        $result = (new MasterImportService)->import('mst_player_level', ['id', 'level'], [
+            ['id' => '1', 'level' => '1'],
+            ['id' => '2', 'level' => 2],
+        ]);
+
+        $this->assertSame(2, $result['inserted']);
+        $this->assertSame(['1' => 1, '2' => 2], DB::connection('mst')->table('mst_player_level')->pluck('level', 'id')->all());
+    }
+
+    #[Test]
+    public function id列を持たないテーブルはid検証の対象外(): void
+    {
+        DB::connection('mst')->statement('DROP TABLE IF EXISTS `mst_no_id_table`');
+        DB::connection('mst')->statement('CREATE TABLE `mst_no_id_table` (code INT UNSIGNED NOT NULL PRIMARY KEY)');
+
+        try {
+            $result = (new MasterImportService)->import('mst_no_id_table', ['code'], [['code' => '1']]);
+            $this->assertSame(1, $result['inserted']);
+        } finally {
+            DB::connection('mst')->statement('DROP TABLE IF EXISTS `mst_no_id_table`');
+        }
     }
 }

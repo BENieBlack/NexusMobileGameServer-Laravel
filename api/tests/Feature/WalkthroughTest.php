@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Mst\MstEquipmentLevel;
 use App\Models\Mst\MstGacha;
 use App\Models\Mst\MstGachaCost;
 use App\Models\Mst\MstGachaPrize;
@@ -637,6 +638,7 @@ class WalkthroughTest extends TestCase
         $equipmentLevels = [];
         foreach ([1 => 0, 2 => 100, 3 => 250, 4 => 450, 5 => 700] as $level => $requiredExp) {
             $equipmentLevels[] = [
+                'id' => MstEquipmentLevel::makeId('R', $level),
                 'deploy_key' => 202601010,
                 'rarity' => 'R',
                 'level' => $level,

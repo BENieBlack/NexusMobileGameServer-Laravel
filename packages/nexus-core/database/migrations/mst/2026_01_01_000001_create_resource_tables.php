@@ -140,6 +140,7 @@ return new class extends Migration
         // mst_unit_level: ユニットレベルマスター
         // ========================================
         Schema::create('mst_unit_level', function (Blueprint $table) {
+            $table->string('id')->primary()->comment('ID（{rarity}:{level}。例 UR:1）');
             $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
             $table->enum('rarity', ['UR', 'SSR', 'SR', 'R', 'UC', 'C'])->comment('レアリティ');
             $table->unsignedInteger('level')->comment('レベル');
@@ -147,15 +148,15 @@ return new class extends Migration
             $table->dateTime('created_at')->default(DB::raw('CURRENT_TIMESTAMP'))->comment('作成日時');
             $table->dateTime('updated_at')->default(DB::raw('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'))->comment('更新日時');
 
-            $table->primary(['rarity', 'level'], 'pk_unit_level');
+            $table->unique(['rarity', 'level'], 'uk_unit_level');
             $table->index('deploy_key');
-            $table->index(['rarity', 'level']);
         });
 
         // ========================================
         // mst_equipment_level: 装備レベルマスター
         // ========================================
         Schema::create('mst_equipment_level', function (Blueprint $table) {
+            $table->string('id')->primary()->comment('ID（{rarity}:{level}。例 UR:1）');
             $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
             $table->enum('rarity', ['UR', 'SSR', 'SR', 'R', 'UC', 'C'])->comment('レアリティ');
             $table->unsignedInteger('level')->comment('レベル');
@@ -163,9 +164,8 @@ return new class extends Migration
             $table->dateTime('created_at')->default(DB::raw('CURRENT_TIMESTAMP'))->comment('作成日時');
             $table->dateTime('updated_at')->default(DB::raw('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'))->comment('更新日時');
 
-            $table->primary(['rarity', 'level'], 'pk_equipment_level');
+            $table->unique(['rarity', 'level'], 'uk_equipment_level');
             $table->index('deploy_key');
-            $table->index(['rarity', 'level']);
         });
     }
 

@@ -3,6 +3,7 @@
 namespace Tests\Feature\Mission;
 
 use App\Exceptions\GameErrorCode;
+use App\Models\Mst\MstUnitLevel;
 use App\Persistence\ApiSession;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\TestResponse;
@@ -313,10 +314,10 @@ class MissionEndpointTest extends TestCase
         ]);
 
         DB::connection('mst')->table('mst_unit_level')->insert([
-            ['rarity' => 'SSR', 'level' => 1, 'required_exp' => 0],
-            ['rarity' => 'SSR', 'level' => 2, 'required_exp' => 100],
-            ['rarity' => 'SSR', 'level' => 3, 'required_exp' => 250],
-            ['rarity' => 'SSR', 'level' => 4, 'required_exp' => 1000],
+            ['id' => MstUnitLevel::makeId('SSR', 1), 'rarity' => 'SSR', 'level' => 1, 'required_exp' => 0],
+            ['id' => MstUnitLevel::makeId('SSR', 2), 'rarity' => 'SSR', 'level' => 2, 'required_exp' => 100],
+            ['id' => MstUnitLevel::makeId('SSR', 3), 'rarity' => 'SSR', 'level' => 3, 'required_exp' => 250],
+            ['id' => MstUnitLevel::makeId('SSR', 4), 'rarity' => 'SSR', 'level' => 4, 'required_exp' => 1000],
         ]);
 
         DB::connection('mst')->table('mst_item')->insert([

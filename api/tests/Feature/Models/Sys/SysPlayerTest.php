@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Models\Sys;
 
+use App\Models\Mst\MstPlayerLevel;
 use App\Models\Sys\SysPlayer;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\Test;
@@ -190,6 +191,7 @@ class SysPlayerTest extends TestCase
         DB::connection('mst')->table('mst_player_level')->insert(
             array_map(
                 fn (int $level, array $spec) => [
+                    'id' => MstPlayerLevel::makeId($level),
                     'level' => $level,
                     'required_exp' => $spec[0],
                     'max_stamina' => $spec[1],

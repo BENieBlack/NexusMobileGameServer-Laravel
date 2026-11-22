@@ -2,6 +2,7 @@
 
 namespace Tests;
 
+use App\Models\Mst\MstPlayerLevel;
 use App\Models\Sys\SysPlayer;
 use App\Persistence\ApiSession;
 use App\Repositories\Mst\_BaseMstRepository;
@@ -170,6 +171,7 @@ abstract class TestCase extends BaseTestCase
 
         if (! $mst->table('mst_player_level')->where('level', 1)->exists()) {
             $mst->table('mst_player_level')->insert([
+                'id' => MstPlayerLevel::makeId(1),
                 'level' => 1,
                 'required_exp' => 0,
                 'max_stamina' => 50,

@@ -2,7 +2,6 @@
 
 namespace App\Models\Mst;
 
-use App\Traits\CompositePrimaryKeyTrait;
 use Illuminate\Database\Eloquent\Collection;
 
 /**
@@ -40,6 +39,7 @@ use Illuminate\Database\Eloquent\Collection;
  * }
  * ```
  *
+ * @property string $id
  * @property string $rarity
  * @property int $level
  * @property int $required_exp
@@ -47,28 +47,19 @@ use Illuminate\Database\Eloquent\Collection;
  */
 class MstEquipmentLevel extends _BaseMst
 {
-    use CompositePrimaryKeyTrait;
-
     protected $table = 'mst_equipment_level';
 
     /**
-     * 複合主キーのため、auto incrementを無効化
+     * 主キーは string の id（{rarity}:{level}）。自然キー (rarity, level) は unique
      */
     public $incrementing = false;
 
-    /**
-     * 複合主キーの指定
-     */
-    protected $primaryKey = ['rarity', 'level'];
-
-    /**
-     * 主キーの型
-     */
     protected $keyType = 'string';
 
     /** @var list<string> */
     protected $fillable = [
         'deploy_key',
+        'id',
         'rarity',
         'level',
         'required_exp',
@@ -116,11 +107,22 @@ class MstEquipmentLevel extends _BaseMst
     /**
      * レスポンス用配列に変換
      *
-     * Note: 複合主キー(rarity, level)のため、idフィールドは存在しない
+     * Note: id は {rarity}:{level} の文字列。mst_xxx_id への置き換えは起きない
      */
     public function toResponseArray(): array
     {
         return parent::toResponseArray();
+    }
+
+    /**
+     * id を作る（シーダー・テスト・取り込みの検証が同じ規則を使う）
+     *
+     * 規則は {rarity}:{level}（例 UR:1）。rarity は DB の ENUM の値（大文字）
+     * tool の MasterImportService::ID_RULES も同じ規則を持つ。変えるときは両方を直す
+     */
+    public static function makeId(string $rarity, int $level): string
+    {
+        return $rarity.':'.$level;
     }
 
     /**

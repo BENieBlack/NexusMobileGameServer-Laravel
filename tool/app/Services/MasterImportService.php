@@ -21,6 +21,9 @@ use RuntimeException;
  * - deploy_key は現在のUnixタイムスタンプを使用
  * - rarity / bonus_rarity は列の実際の型で扱いを変える（ENUM は文字列のまま、整数列は数値へ変換）。
  *   不正な値は TRUNCATE の前に検出してエラーにする
+ * - id 列（string）を持つテーブルは、TRUNCATE の前に id 列を検証する。
+ *   シートに id 列が無い・空・重複（大文字小文字を区別しない照合順序に合わせる）・255 文字超は取り込みを中止する。
+ *   level 系の3表は、id が自然キーの規則どおりかも検証する（ID_RULES。api の Model の makeId と同じ規則）
  * - トランザクション内で実行（失敗時はロールバック）
  */
 class MasterImportService
@@ -35,6 +38,25 @@ class MasterImportService
      * スプレッドシートに含まれていても無視し、サーバー側で上書きする
      */
     private const AUTO_SET_COLUMNS = ['created_at', 'updated_at'];
+
+    /**
+     * id 列の最大長（VARCHAR(255)）
+     */
+    private const MAX_ID_LENGTH = 255;
+
+    /**
+     * id が自然キーの規則どおりかを検証するテーブルと、id を作る列（':' でつなぐ）
+     *
+     * api の Model の makeId（MstUnitLevel・MstEquipmentLevel・MstPlayerLevel）と同じ規則を持つ。
+     * tool は api の Model を読み込めず、api の docker コンテナも tool のコードを読めないため、
+     * 突き合わせるテストが書けない。規則を変えるときは必ず両方を同時に直す。
+     * level 系以外の表は、対応する PR で足す（設計: mst-id-introduction/db.md 8.2）
+     */
+    private const ID_RULES = [
+        'mst_unit_level' => ['rarity', 'level'],
+        'mst_equipment_level' => ['rarity', 'level'],
+        'mst_player_level' => ['level'],
+    ];
 
     /**
      * エラーとして表示する不正行の最大件数
@@ -73,6 +95,9 @@ class MasterImportService
                 "テーブル {$tableName} に対応するカラムがスプレッドシートに見つかりません。"
             );
         }
+
+        // id 列の検証は TRUNCATE の前に済ませる（失敗しても既存の行を残す）
+        $this->validateIds($tableName, $headers, $rows);
 
         $insertData = [];
         $skipped = 0;
@@ -172,6 +197,99 @@ class MasterImportService
             'skipped' => $skipped,
             'errors' => $errors,
         ];
+    }
+
+    /**
+     * id 列を検証する。問題があれば TRUNCATE の前に例外で中止する
+     *
+     * 対象は id 列が文字列型のテーブルだけ（整数の id のテーブルは何もしない）。
+     * - シートに id 列が無い
+     * - id が空・重複・255 文字超の行
+     * - ID_RULES のテーブルは、id が自然キーの列を ':' でつないだ値と一致しない行
+     *
+     * @param  array<int, string>  $headers
+     * @param  array<int, array<string, mixed>>  $rows
+     *
+     * @throws RuntimeException
+     */
+    private function validateIds(string $tableName, array $headers, array $rows): void
+    {
+        if (! $this->hasStringIdColumn($tableName)) {
+            return;
+        }
+
+        if (! in_array('id', $headers, true)) {
+            throw new RuntimeException(
+                "テーブル {$tableName} は id 列が必要ですが、スプレッドシートに id 列がありません。"
+                .'取り込みを中止しました（既存のデータは変更していません）。'
+            );
+        }
+
+        $errors = [];
+        $seen = [];
+        $ruleColumns = self::ID_RULES[$tableName] ?? null;
+
+        foreach ($rows as $index => $row) {
+            $line = '行 '.($index + 2).': ';
+            $raw = $row['id'] ?? '';
+            $id = is_scalar($raw) ? (string) $raw : '';
+
+            if ($id === '') {
+                $errors[] = $line.'id が空です';
+
+                continue;
+            }
+            if (mb_strlen($id) > self::MAX_ID_LENGTH) {
+                $errors[] = $line.'id が '.self::MAX_ID_LENGTH.' 文字を超えています';
+
+                continue;
+            }
+
+            $key = mb_strtolower($id);
+            if (isset($seen[$key])) {
+                $errors[] = $line."id「{$id}」が行 {$seen[$key]} と重複しています";
+
+                continue;
+            }
+            $seen[$key] = $index + 2;
+
+            if ($ruleColumns !== null) {
+                $parts = [];
+                foreach ($ruleColumns as $column) {
+                    $value = $row[$column] ?? '';
+                    $parts[] = is_scalar($value) ? (string) $value : '';
+                }
+                $expected = implode(':', $parts);
+                if ($id !== $expected) {
+                    $errors[] = $line."id「{$id}」が規則（".implode(':', array_map(fn (string $c) => '{'.$c.'}', $ruleColumns))."）の「{$expected}」と一致しません";
+                }
+            }
+        }
+
+        if ($errors !== []) {
+            $shown = array_slice($errors, 0, self::MAX_REPORTED_ERRORS);
+            $more = count($errors) - count($shown);
+
+            throw new RuntimeException(
+                "テーブル {$tableName} の id が不正なため、取り込みを中止しました（既存のデータは変更していません）。\n"
+                .implode("\n", $shown)
+                .($more > 0 ? "\n…ほか {$more} 件" : '')
+            );
+        }
+    }
+
+    /**
+     * テーブルが文字列型の id 列を持つか
+     */
+    private function hasStringIdColumn(string $tableName): bool
+    {
+        foreach (DB::connection('mst')->select("SHOW COLUMNS FROM `{$tableName}`") as $row) {
+            if ($row->Field === 'id') {
+                return preg_match('/^(var)?char\b/', strtolower((string) $row->Type)) === 1;
+            }
+        }
+
+        return false;
     }
 
     /**

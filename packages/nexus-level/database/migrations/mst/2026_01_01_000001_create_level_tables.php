@@ -16,13 +16,15 @@ return new class extends Migration
         // mst_player_level: プレイヤーレベルマスター
         // ========================================
         Schema::create('mst_player_level', function (Blueprint $table) {
+            $table->string('id')->primary()->comment('ID（levelの文字列。例 1）');
             $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
-            $table->unsignedInteger('level')->primary()->comment('レベル');
+            $table->unsignedInteger('level')->comment('レベル');
             $table->unsignedBigInteger('required_exp')->comment('このレベルに到達するために必要な累積経験値');
             $table->unsignedInteger('max_stamina')->comment('このレベルでの最大スタミナ');
             $table->dateTime('created_at')->default(DB::raw('CURRENT_TIMESTAMP'))->comment('作成日時');
             $table->dateTime('updated_at')->default(DB::raw('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'))->comment('更新日時');
 
+            $table->unique('level', 'uk_player_level');
             $table->index('deploy_key');
         });
     }

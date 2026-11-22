@@ -3,6 +3,7 @@
 namespace Tests\Feature\Domain\Equipment;
 
 use App\Domain\Equipment\UseCases\LevelUpUseCase;
+use App\Models\Mst\MstEquipmentLevel;
 use App\Persistence\ApiSession;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\Test;
@@ -216,16 +217,16 @@ class EquipmentLevelUpTest extends TestCase
         ]);
 
         DB::connection('mst')->table('mst_equipment_level')->insert([
-            ['rarity' => 'SR', 'level' => 1, 'required_exp' => 0, 'created_at' => now(), 'updated_at' => now()],
-            ['rarity' => 'SR', 'level' => 2, 'required_exp' => 100, 'created_at' => now(), 'updated_at' => now()],
-            ['rarity' => 'SR', 'level' => 3, 'required_exp' => 250, 'created_at' => now(), 'updated_at' => now()],
-            ['rarity' => 'SR', 'level' => 4, 'required_exp' => 400, 'created_at' => now(), 'updated_at' => now()],
-            ['rarity' => 'SR', 'level' => 5, 'required_exp' => 600, 'created_at' => now(), 'updated_at' => now()],
-            ['rarity' => 'SR', 'level' => 6, 'required_exp' => 800, 'created_at' => now(), 'updated_at' => now()],
-            ['rarity' => 'SR', 'level' => 7, 'required_exp' => 1050, 'created_at' => now(), 'updated_at' => now()],
-            ['rarity' => 'SR', 'level' => 8, 'required_exp' => 1300, 'created_at' => now(), 'updated_at' => now()],
-            ['rarity' => 'SR', 'level' => 9, 'required_exp' => 1600, 'created_at' => now(), 'updated_at' => now()],
-            ['rarity' => 'SR', 'level' => 10, 'required_exp' => 2000, 'created_at' => now(), 'updated_at' => now()],
+            ['id' => MstEquipmentLevel::makeId('SR', 1), 'rarity' => 'SR', 'level' => 1, 'required_exp' => 0, 'created_at' => now(), 'updated_at' => now()],
+            ['id' => MstEquipmentLevel::makeId('SR', 2), 'rarity' => 'SR', 'level' => 2, 'required_exp' => 100, 'created_at' => now(), 'updated_at' => now()],
+            ['id' => MstEquipmentLevel::makeId('SR', 3), 'rarity' => 'SR', 'level' => 3, 'required_exp' => 250, 'created_at' => now(), 'updated_at' => now()],
+            ['id' => MstEquipmentLevel::makeId('SR', 4), 'rarity' => 'SR', 'level' => 4, 'required_exp' => 400, 'created_at' => now(), 'updated_at' => now()],
+            ['id' => MstEquipmentLevel::makeId('SR', 5), 'rarity' => 'SR', 'level' => 5, 'required_exp' => 600, 'created_at' => now(), 'updated_at' => now()],
+            ['id' => MstEquipmentLevel::makeId('SR', 6), 'rarity' => 'SR', 'level' => 6, 'required_exp' => 800, 'created_at' => now(), 'updated_at' => now()],
+            ['id' => MstEquipmentLevel::makeId('SR', 7), 'rarity' => 'SR', 'level' => 7, 'required_exp' => 1050, 'created_at' => now(), 'updated_at' => now()],
+            ['id' => MstEquipmentLevel::makeId('SR', 8), 'rarity' => 'SR', 'level' => 8, 'required_exp' => 1300, 'created_at' => now(), 'updated_at' => now()],
+            ['id' => MstEquipmentLevel::makeId('SR', 9), 'rarity' => 'SR', 'level' => 9, 'required_exp' => 1600, 'created_at' => now(), 'updated_at' => now()],
+            ['id' => MstEquipmentLevel::makeId('SR', 10), 'rarity' => 'SR', 'level' => 10, 'required_exp' => 2000, 'created_at' => now(), 'updated_at' => now()],
         ]);
 
         DB::connection('mst')->table('mst_item')->insert([

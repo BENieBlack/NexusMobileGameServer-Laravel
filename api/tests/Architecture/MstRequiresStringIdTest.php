@@ -34,15 +34,8 @@ class MstRequiresStringIdTest extends TestCase
             'mst_in_app_purchase_content',
             'mst_in_app_purchase_effect',
         ],
-        'packages/nexus-core/database/migrations/mst/2026_01_01_000001_create_resource_tables.php' => [
-            'mst_unit_level',
-            'mst_equipment_level',
-        ],
         'packages/nexus-event/database/migrations/mst/2026_01_01_000001_create_event_tables.php' => [
             'mst_event_content',
-        ],
-        'packages/nexus-level/database/migrations/mst/2026_01_01_000001_create_level_tables.php' => [
-            'mst_player_level',
         ],
         'packages/nexus-login/database/migrations/mst/2026_01_01_000001_create_login_tables.php' => [
             'mst_login_bonus_content',
