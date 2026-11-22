@@ -4,6 +4,7 @@ namespace Tests\Feature\Domain\InAppPurchase\Services;
 
 use App\Domain\InAppPurchase\Services\InAppPurchasePassService;
 use App\Models\Mst\MstInAppPurchase;
+use App\Models\Mst\MstInAppPurchaseEffect;
 use App\Persistence\ApiSession;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -208,10 +209,10 @@ class InAppPurchasePassServiceTest extends TestCase
     #[Test]
     public function 商品を指定して効果を無効にできる(): void
     {
-        $targetId = $this->insertEffect('exp_boost', 1.50, expiresAt: '2026-04-01 00:00:00', mstInAppPurchaseId: 10);
-        $otherId = $this->insertEffect('gold_boost', 2.00, expiresAt: '2026-04-01 00:00:00', mstInAppPurchaseId: 20);
+        $targetId = $this->insertEffect('exp_boost', 1.50, expiresAt: '2026-04-01 00:00:00', mstInAppPurchaseId: 'iap_test_10');
+        $otherId = $this->insertEffect('gold_boost', 2.00, expiresAt: '2026-04-01 00:00:00', mstInAppPurchaseId: 'iap_test_20');
 
-        $this->service->deactivatePassEffects(10);
+        $this->service->deactivatePassEffects('iap_test_10');
         $this->flush();
 
         $this->assertSame(0, (int) $this->findEffect($targetId)->is_active);
@@ -221,9 +222,9 @@ class InAppPurchasePassServiceTest extends TestCase
     #[Test]
     public function 無効にした効果はもう返らない(): void
     {
-        $this->insertEffect('exp_boost', 1.50, expiresAt: '2026-04-01 00:00:00', mstInAppPurchaseId: 10);
+        $this->insertEffect('exp_boost', 1.50, expiresAt: '2026-04-01 00:00:00', mstInAppPurchaseId: 'iap_test_10');
 
-        $this->service->deactivatePassEffects(10);
+        $this->service->deactivatePassEffects('iap_test_10');
 
         $this->assertCount(0, $this->service->findActiveEffects($this->sysPlayerId));
     }
@@ -231,7 +232,7 @@ class InAppPurchasePassServiceTest extends TestCase
     #[Test]
     public function 対象の効果が無ければ何も起きない(): void
     {
-        $this->insertEffect('exp_boost', 1.50, expiresAt: '2026-04-01 00:00:00', mstInAppPurchaseId: 10);
+        $this->insertEffect('exp_boost', 1.50, expiresAt: '2026-04-01 00:00:00', mstInAppPurchaseId: 'iap_test_10');
 
         $this->service->deactivatePassEffects($this->nonExistentSysPlayerId());
         $this->flush();
@@ -270,7 +271,7 @@ class InAppPurchasePassServiceTest extends TestCase
         float $value,
         string $expiresAt,
         bool $isActive = true,
-        int $mstInAppPurchaseId = 1,
+        string $mstInAppPurchaseId = 'iap_test_1',
     ): int {
         return DB::connection('trx1')->table('trx_in_app_purchase_effect')->insertGetId([
             'sys_player_id' => $this->sysPlayerId,
@@ -287,7 +288,9 @@ class InAppPurchasePassServiceTest extends TestCase
 
     private function createPassProduct(?int $effectDurationDays = 30, bool $withEffect = true): MstInAppPurchase
     {
-        $id = DB::connection('mst')->table('mst_in_app_purchase')->insertGetId([
+        $id = 'iap_test_pass';
+        DB::connection('mst')->table('mst_in_app_purchase')->insert([
+            'id' => $id,
             'deploy_key' => self::DEPLOY_KEY,
             'type' => 'pass',
             'paid_diamond_amount' => 100,
@@ -303,6 +306,7 @@ class InAppPurchasePassServiceTest extends TestCase
         if ($withEffect) {
             DB::connection('mst')->table('mst_in_app_purchase_effect')->insert([
                 'deploy_key' => self::DEPLOY_KEY,
+                'id' => MstInAppPurchaseEffect::makeId($id, 'exp_boost'),
                 'mst_in_app_purchase_id' => $id,
                 'effect_type' => 'exp_boost',
                 'value' => 1.50,

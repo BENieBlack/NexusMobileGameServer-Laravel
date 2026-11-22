@@ -42,7 +42,7 @@ class InAppPurchaseModelTest extends TestCase
     {
         $content = $this->makeContent(['content_option' => ['grade' => 1]]);
 
-        $this->assertSame(1, $content->getMstInAppPurchaseId());
+        $this->assertSame('iap_test_1', $content->getMstInAppPurchaseId());
         $this->assertSame(InAppPurchaseConst::CONTENT_TYPE_ITEM, $content->getContentType());
         $this->assertSame('item_potion', $content->getContentMstId());
         $this->assertSame(['grade' => 1], $content->getContentOption());
@@ -69,7 +69,7 @@ class InAppPurchaseModelTest extends TestCase
     public function 効果の値を読み出せる(): void
     {
         $effect = new MstInAppPurchaseEffect([
-            'mst_in_app_purchase_id' => 1,
+            'mst_in_app_purchase_id' => 'iap_test_1',
             'effect_type' => InAppPurchaseConst::EFFECT_TYPE_EXP_BOOST,
             'value' => 1.5,
         ]);
@@ -90,7 +90,7 @@ class InAppPurchaseModelTest extends TestCase
         $history = new TrxInAppPurchase;
         $history->setSysPlayerId(1);
         $history->setBillingPlatform('google_play');
-        $history->setMstInAppPurchaseId(10);
+        $history->setMstInAppPurchaseId('iap_test_10');
         $history->setTotalPurchaseCount(7);
         $history->setPurchaseCount(2);
         $history->setPurchaseCountResetAt('2026-03-15 00:00:00');
@@ -146,7 +146,7 @@ class InAppPurchaseModelTest extends TestCase
     {
         $effect = new TrxInAppPurchaseEffect;
         $effect->setSysPlayerId(1);
-        $effect->setMstInAppPurchaseId(10);
+        $effect->setMstInAppPurchaseId('iap_test_10');
         $effect->setEffectType(InAppPurchaseConst::EFFECT_TYPE_GOLD_BOOST);
         $effect->setValue(2.0);
         $effect->setExpiresAt(ClockUtility::now()->addDays(30));
@@ -164,7 +164,7 @@ class InAppPurchaseModelTest extends TestCase
     private function makeContent(array $attributes = []): MstInAppPurchaseContent
     {
         return new MstInAppPurchaseContent(array_merge([
-            'mst_in_app_purchase_id' => 1,
+            'mst_in_app_purchase_id' => 'iap_test_1',
             'content_type' => InAppPurchaseConst::CONTENT_TYPE_ITEM,
             'content_mst_id' => 'item_potion',
             'content_quantity' => 10,
@@ -177,7 +177,7 @@ class InAppPurchaseModelTest extends TestCase
     {
         $effect = new TrxInAppPurchaseEffect;
         $effect->setSysPlayerId(1);
-        $effect->setMstInAppPurchaseId(10);
+        $effect->setMstInAppPurchaseId('iap_test_10');
         $effect->setEffectType(InAppPurchaseConst::EFFECT_TYPE_EXP_BOOST);
         $effect->setValue(1.5);
         $effect->setExpiresAt(ClockUtility::parse($expiresAt));

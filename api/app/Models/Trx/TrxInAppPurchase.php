@@ -116,7 +116,7 @@ class TrxInAppPurchase extends _BaseTrx
     /**
      * マスター課金商品IDを設定
      */
-    public function setMstInAppPurchaseId(int $mstInAppPurchaseId): void
+    public function setMstInAppPurchaseId(string $mstInAppPurchaseId): void
     {
         $this->setAttribute('mst_in_app_purchase_id', $mstInAppPurchaseId);
     }

@@ -13,7 +13,7 @@ class RewardTrackLineMaster
         private readonly string $id,
         private readonly string $mstRewardTrackId,
         private readonly bool $isFree,
-        private readonly ?int $mstInAppPurchaseId,
+        private readonly ?string $mstInAppPurchaseId,
         private readonly int $sortOrder,
     ) {}
 
@@ -32,7 +32,7 @@ class RewardTrackLineMaster
         return $this->isFree;
     }
 
-    public function getMstInAppPurchaseId(): ?int
+    public function getMstInAppPurchaseId(): ?string
     {
         return $this->mstInAppPurchaseId;
     }

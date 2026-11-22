@@ -97,6 +97,7 @@ class MstBillingPlatformProductSeeder extends Seeder
         ];
 
         foreach ($products as $product) {
+            $product['id'] = MstBillingPlatformProduct::makeId($product['billing_platform'], $product['platform_product_id']);
             MstBillingPlatformProduct::create($product);
         }
     }

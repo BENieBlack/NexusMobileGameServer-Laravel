@@ -175,7 +175,7 @@ class ToResponseArrayTest extends TestCase
     public function test_mst_in_app_purchase_converts_id_to_mst_in_app_purchase_id()
     {
         $purchase = new MstInAppPurchase;
-        $purchase->id = 444;
+        $purchase->id = 'iap_diamond_100';
         $purchase->deploy_key = 202501011;
         $purchase->type = 'diamond';
         $purchase->paid_diamond_amount = 100;
@@ -184,7 +184,7 @@ class ToResponseArrayTest extends TestCase
         $response = $purchase->toResponseArray();
 
         $this->assertArrayHasKey('mst_in_app_purchase_id', $response);
-        $this->assertEquals(444, $response['mst_in_app_purchase_id']);
+        $this->assertSame('iap_diamond_100', $response['mst_in_app_purchase_id']);
         $this->assertArrayNotHasKey('id', $response);
     }
 }

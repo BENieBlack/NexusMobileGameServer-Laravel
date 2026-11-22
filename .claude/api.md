@@ -55,7 +55,7 @@
 - キーはスネークケース。Request クラスは `api/app/Http/Requests/{リソース}/` に置き、`rules()` と型付きの getter を持つ
 - `*_id` のキーは参照先のテーブルが分かる名前にする（`mst_item_id`, `trx_mailbox_id`）。多相参照でマスターを指すものは `*_mst_id`。`tests/Architecture/ResponseKeyNamingTest.php` が Requests と Responses を検査し、例外は同テストの `ALLOWED` に列挙している
 - 列挙値はスネークケースの文字列（`billing_platform` の `app_store`, `google_play` など）
-- 例: 課金 `POST /api/in_app_purchase/buy`（`BuyRequest`）は `mst_in_app_purchase_id`, `platform`, `billing_platform`, `receipt`, `transaction_id`（任意）, `product_id`
+- 例: 課金 `POST /api/in_app_purchase/buy`（`BuyRequest`）は `mst_in_app_purchase_id`（**文字列**。`required`・`string`・`max:255`。`iap_diamond_100` など。数値は 422。以前は整数だった破壊的変更）, `platform`, `billing_platform`, `receipt`, `transaction_id`（任意）, `product_id`
 
 ## レスポンスの規約
 

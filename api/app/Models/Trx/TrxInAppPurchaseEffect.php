@@ -62,7 +62,7 @@ class TrxInAppPurchaseEffect extends _BaseTrx
     protected $casts = [
         'id' => 'integer',
         'sys_player_id' => 'integer',
-        'mst_in_app_purchase_id' => 'integer',
+        'mst_in_app_purchase_id' => 'string',
         'value' => 'decimal:2',
         'is_active' => 'boolean',
     ];
@@ -129,7 +129,7 @@ class TrxInAppPurchaseEffect extends _BaseTrx
     /**
      * マスター課金商品IDを設定
      */
-    public function setMstInAppPurchaseId(int $mstInAppPurchaseId): void
+    public function setMstInAppPurchaseId(string $mstInAppPurchaseId): void
     {
         $this->setAttribute('mst_in_app_purchase_id', $mstInAppPurchaseId);
     }

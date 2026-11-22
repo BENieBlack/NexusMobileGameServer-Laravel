@@ -23,7 +23,7 @@ use RuntimeException;
  *   不正な値は TRUNCATE の前に検出してエラーにする
  * - id 列（string）を持つテーブルは、TRUNCATE の前に id 列を検証する。
  *   シートに id 列が無い・空・重複（大文字小文字を区別しない照合順序に合わせる）・191 文字超は取り込みを中止する。
- *   level 系の3表と *_content 系の9表（login・vip 含む）は、id が自然キーの規則どおりかも検証する（ID_RULES。api の Model の makeId と同じ規則）。
+ *   level 系の3表と *_content 系の9表（login・vip 含む）と billing 系の3表（mst_billing_platform_product・mst_in_app_purchase_content・mst_in_app_purchase_effect）は、id が自然キーの規則どおりかも検証する（ID_RULES。api の Model の makeId と同じ規則）。
  *   *_content 系は、親 ID と content_type に ':' を含む行も拒否する（別の組が同じ id になりうるため。設計 3.1）
  * - mst_vip_login_bonus_content は (mst_vip_login_bonus_id, day, sort_desc) の重複も拒否する（UNIQUE_COLUMN_GROUPS）
  * - トランザクション内で実行（失敗時はロールバック）
@@ -51,11 +51,13 @@ class MasterImportService
      *
      * api の Model の makeId（MstUnitLevel・MstEquipmentLevel・MstPlayerLevel と、
      * MstEventContent・MstMailboxContent・MstMissionContent・MstTagContent・MstTradeProductContent・
-     * MstLoginBonusContent・MstVipLoginBonusContent・NexusVip の MstVipLevelReward）と同じ規則を持つ。
+     * MstLoginBonusContent・MstVipLoginBonusContent・NexusVip の MstVipLevelReward、
+     * MstBillingPlatformProduct・MstInAppPurchaseContent・MstInAppPurchaseEffect）と同じ規則を持つ。
+     * mst_in_app_purchase は自然キーが無く（人が決める安定した値。例 iap_diamond_100）、規則の対象外（id の空・重複・191 文字超だけ検証する）。
+     * mst_billing_platform_product は billing_platform が先頭固定なので、platform_product_id が ':' を含んでも曖昧にならない（設計 3.1）。
      * mst_reward_track_content は api に Model が無く（アダプターが DB::table で読む）、この規則が唯一の定義になる。
      * tool は api の Model を読み込めず、api の docker コンテナも tool のコードを読めないため、
      * 突き合わせるテストが書けない。規則を変えるときは必ず両方を同時に直す。
-     * 残りの表（billing 系）は、対応する PR で足す（設計: mst-id-introduction/db.md 8.2）
      *
      * 列が 3 つ以上の規則は、最後の列（content_mst_id）以外が ':' を含んではならない（validateIds）
      */
@@ -72,6 +74,9 @@ class MasterImportService
         'mst_login_bonus_content' => ['mst_login_bonus_id', 'day', 'content_type', 'content_mst_id'],
         'mst_vip_login_bonus_content' => ['mst_vip_login_bonus_id', 'day', 'content_type', 'content_mst_id'],
         'mst_vip_level_reward' => ['vip_level', 'content_type', 'content_mst_id'],
+        'mst_billing_platform_product' => ['billing_platform', 'platform_product_id'],
+        'mst_in_app_purchase_content' => ['mst_in_app_purchase_id', 'content_type', 'content_mst_id'],
+        'mst_in_app_purchase_effect' => ['mst_in_app_purchase_id', 'effect_type'],
     ];
 
     /**

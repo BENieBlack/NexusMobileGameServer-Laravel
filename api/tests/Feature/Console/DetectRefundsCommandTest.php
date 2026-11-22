@@ -149,7 +149,7 @@ class DetectRefundsCommandTest extends TestCase
             'receipt_id' => $receiptId,
             'receipt' => json_encode([]),
             'status' => $status,
-            'mst_in_app_purchase_id' => '1',
+            'mst_in_app_purchase_id' => 'iap_test_1',
             'currency_code' => 'JPY',
             'pay_amount' => 490.00,
             'pay_string' => '¥490',

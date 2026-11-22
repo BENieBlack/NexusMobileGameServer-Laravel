@@ -24,7 +24,7 @@ class RewardTrackLineAdapter
             id: (int) $row['id'],
             sysPlayerId: (int) $row['sys_player_id'],
             mstRewardTrackLineId: $row['mst_reward_track_line_id'],
-            mstInAppPurchaseId: (int) $row['mst_in_app_purchase_id'],
+            mstInAppPurchaseId: (string) $row['mst_in_app_purchase_id'],
             purchasedAt: $row['purchased_at'],
             isDelete: (bool) $row['is_delete'],
             createdAt: $row['created_at'] ?? null,

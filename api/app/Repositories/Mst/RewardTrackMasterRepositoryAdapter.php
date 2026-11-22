@@ -148,7 +148,7 @@ class RewardTrackMasterRepositoryAdapter implements RewardTrackMasterRepositoryI
             id: (string) $row['id'],
             mstRewardTrackId: (string) $row['mst_reward_track_id'],
             isFree: (bool) $row['is_free'],
-            mstInAppPurchaseId: $row['mst_in_app_purchase_id'] === null ? null : (int) $row['mst_in_app_purchase_id'],
+            mstInAppPurchaseId: $row['mst_in_app_purchase_id'] === null ? null : (string) $row['mst_in_app_purchase_id'],
             sortOrder: (int) $row['sort_order'],
         );
     }

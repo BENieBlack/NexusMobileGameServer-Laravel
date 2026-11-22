@@ -88,7 +88,7 @@ class RewardTrackService
      *
      * @throws RewardTrackException 既に所持している場合・無料ラインは購入不可
      */
-    public function grantLine(int $sysPlayerId, string $lineId, int $mstInAppPurchaseId, string $connectionName): RewardTrackLine
+    public function grantLine(int $sysPlayerId, string $lineId, string $mstInAppPurchaseId, string $connectionName): RewardTrackLine
     {
         // ライン定義を取得
         $lines = $this->masterRepository->selectLinesByTrackId($this->resolveTrackIdFromLineId($lineId));

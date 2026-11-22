@@ -27,14 +27,7 @@ class MstRequiresStringIdTest extends TestCase
      *
      * @var array<string, list<string>>
      */
-    private const PENDING_VIOLATIONS = [
-        'packages/nexus-core-billing/database/migrations/mst/2026_01_01_000001_create_billing_tables.php' => [
-            'mst_billing_platform_product',
-            'mst_in_app_purchase',
-            'mst_in_app_purchase_content',
-            'mst_in_app_purchase_effect',
-        ],
-    ];
+    private const PENDING_VIOLATIONS = [];
 
     /**
      * 検査の対象外にする Laravel 標準テーブル（キュー・キャッシュ用で、マスタではない）

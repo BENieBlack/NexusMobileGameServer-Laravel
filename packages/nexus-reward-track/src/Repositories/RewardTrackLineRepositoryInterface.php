@@ -32,5 +32,5 @@ interface RewardTrackLineRepositoryInterface
     /**
      * ラインを購入済みとして登録する
      */
-    public function insertLine(int $sysPlayerId, string $mstRewardTrackLineId, int $mstInAppPurchaseId, string $purchasedAt, string $connectionName): RewardTrackLine;
+    public function insertLine(int $sysPlayerId, string $mstRewardTrackLineId, string $mstInAppPurchaseId, string $purchasedAt, string $connectionName): RewardTrackLine;
 }

@@ -6,6 +6,7 @@ use App\Domain\InAppPurchase\UseCases\BuyPackUseCase;
 use App\Exceptions\GameErrorCode;
 use App\Exceptions\GameException;
 use App\Models\Mst\MstInAppPurchase;
+use App\Models\Mst\MstInAppPurchaseContent;
 use App\Persistence\ApiSession;
 use Illuminate\Support\Facades\DB;
 use Nexus\Core\UnitOfWork\Persistence\QueryManager;
@@ -300,10 +301,11 @@ class BuyPackUseCaseTest extends TestCase
     /**
      * パックにユニットのコンテンツを足す
      */
-    private function createUnitContent(int $mstInAppPurchaseId, int $amount = 1): void
+    private function createUnitContent(string $mstInAppPurchaseId, int $amount = 1): void
     {
         DB::connection('mst')->table('mst_in_app_purchase_content')->insert([
             'deploy_key' => self::DEPLOY_KEY,
+            'id' => MstInAppPurchaseContent::makeId($mstInAppPurchaseId, 'unit', 'unit_001'),
             'mst_in_app_purchase_id' => $mstInAppPurchaseId,
             'content_type' => 'unit',
             'content_mst_id' => 'unit_001',

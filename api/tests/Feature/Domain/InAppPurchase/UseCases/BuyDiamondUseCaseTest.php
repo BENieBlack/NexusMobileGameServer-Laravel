@@ -6,6 +6,7 @@ use App\Domain\InAppPurchase\UseCases\BuyDiamondUseCase;
 use App\Exceptions\ClientImplementationError;
 use App\Exceptions\GameErrorCode;
 use App\Exceptions\PlatformMismatchException;
+use App\Models\Mst\MstBillingPlatformProduct;
 use App\Models\Mst\MstInAppPurchase;
 use App\Persistence\ApiSession;
 use Illuminate\Support\Facades\DB;
@@ -372,7 +373,9 @@ class BuyDiamondUseCaseTest extends TestCase
      */
     private function createProduct(string $billingPlatform): MstInAppPurchase
     {
-        $platformProductId = DB::connection('mst')->table('mst_billing_platform_product')->insertGetId([
+        $platformProductId = MstBillingPlatformProduct::makeId($billingPlatform, 'diamond_500');
+        DB::connection('mst')->table('mst_billing_platform_product')->insert([
+            'id' => $platformProductId,
             'deploy_key' => self::DEPLOY_KEY,
             'platform_product_id' => 'diamond_500',
             'billing_platform' => $billingPlatform,
@@ -384,7 +387,9 @@ class BuyDiamondUseCaseTest extends TestCase
             'updated_at' => now(),
         ]);
 
-        $id = DB::connection('mst')->table('mst_in_app_purchase')->insertGetId([
+        $id = 'iap_test_diamond';
+        DB::connection('mst')->table('mst_in_app_purchase')->insert([
+            'id' => $id,
             'deploy_key' => self::DEPLOY_KEY,
             'type' => 'diamond',
             'paid_diamond_amount' => self::PAID_DIAMOND_AMOUNT,

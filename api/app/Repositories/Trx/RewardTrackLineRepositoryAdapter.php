@@ -53,7 +53,7 @@ class RewardTrackLineRepositoryAdapter implements RewardTrackLineRepositoryInter
             ->all();
     }
 
-    public function insertLine(int $sysPlayerId, string $mstRewardTrackLineId, int $mstInAppPurchaseId, string $purchasedAt, string $connectionName): RewardTrackLine
+    public function insertLine(int $sysPlayerId, string $mstRewardTrackLineId, string $mstInAppPurchaseId, string $purchasedAt, string $connectionName): RewardTrackLine
     {
         $now = ClockUtility::nowToString();
 

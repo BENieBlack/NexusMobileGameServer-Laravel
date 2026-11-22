@@ -45,7 +45,7 @@ class RewardTrackDtoTest extends TestCase
             id: 2,
             sysPlayerId: 100,
             mstRewardTrackLineId: 'bp_001_paid',
-            mstInAppPurchaseId: 501,
+            mstInAppPurchaseId: 'iap_test_501',
             purchasedAt: '2026-09-05 00:00:00',
             isDelete: false,
             createdAt: '2026-09-05 00:00:00',
@@ -55,7 +55,7 @@ class RewardTrackDtoTest extends TestCase
         $this->assertSame(2, $line->getId());
         $this->assertSame(100, $line->getSysPlayerId());
         $this->assertSame('bp_001_paid', $line->getMstRewardTrackLineId());
-        $this->assertSame(501, $line->getMstInAppPurchaseId());
+        $this->assertSame('iap_test_501', $line->getMstInAppPurchaseId());
         $this->assertSame('2026-09-05 00:00:00', $line->getPurchasedAt());
         $this->assertFalse($line->isDelete());
         $this->assertNull($line->updatedAt);

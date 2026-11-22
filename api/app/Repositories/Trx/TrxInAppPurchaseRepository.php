@@ -20,9 +20,9 @@ class TrxInAppPurchaseRepository extends _BaseTrxRepository
      * プレイヤーID、決済プラットフォーム、商品IDで購入履歴を取得
      *
      * @param  string  $billingPlatform  決済プラットフォーム
-     * @param  int  $mstInAppPurchaseId  商品ID
+     * @param  string  $mstInAppPurchaseId  商品ID
      */
-    public function selectByBillingPlatformAndMstInAppPurchaseId(string $billingPlatform, int $mstInAppPurchaseId): ?TrxInAppPurchase
+    public function selectByBillingPlatformAndMstInAppPurchaseId(string $billingPlatform, string $mstInAppPurchaseId): ?TrxInAppPurchase
     {
         $sysPlayerId = $this->getSysPlayerId();
 

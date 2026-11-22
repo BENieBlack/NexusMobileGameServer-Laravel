@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\InAppPurchase;
 
+use App\Models\Mst\MstBillingPlatformProduct;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
@@ -160,7 +161,7 @@ class BuyEndpointTest extends TestCase
     {
         $response = $this->withHeaders(['Authorization' => 'Bearer '.$this->accessToken])
             ->postJson('/api/in_app_purchase/buy', [
-                'mst_in_app_purchase_id' => 999999,
+                'mst_in_app_purchase_id' => 'iap_not_exist',
                 'platform' => 'Google',
                 'billing_platform' => 'google_play',
                 'receipt' => 'purchase-token-endpoint',
@@ -169,6 +170,41 @@ class BuyEndpointTest extends TestCase
             ]);
 
         $response->assertJsonPath('error_code', 16001); // PRODUCT_NOT_FOUND
+    }
+
+    #[Test]
+    public function 商品idに数値を送ると検証エラーになる(): void
+    {
+        // mst_in_app_purchase_id は文字列。数値の受け入れ（互換）はしない
+        $response = $this->withHeaders(['Authorization' => 'Bearer '.$this->accessToken])
+            ->postJson('/api/in_app_purchase/buy', [
+                'mst_in_app_purchase_id' => 1,
+                'platform' => 'Google',
+                'billing_platform' => 'google_play',
+                'receipt' => 'purchase-token-endpoint',
+                'transaction_id' => 'GPA.ENDPOINT-0003',
+                'product_id' => 'diamond_500',
+            ]);
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors(['mst_in_app_purchase_id']);
+    }
+
+    #[Test]
+    public function 商品idが255文字を超えると検証エラーになる(): void
+    {
+        $response = $this->withHeaders(['Authorization' => 'Bearer '.$this->accessToken])
+            ->postJson('/api/in_app_purchase/buy', [
+                'mst_in_app_purchase_id' => str_repeat('a', 256),
+                'platform' => 'Google',
+                'billing_platform' => 'google_play',
+                'receipt' => 'purchase-token-endpoint',
+                'transaction_id' => 'GPA.ENDPOINT-0004',
+                'product_id' => 'diamond_500',
+            ]);
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors(['mst_in_app_purchase_id']);
     }
 
     #[Test]
@@ -215,7 +251,7 @@ class BuyEndpointTest extends TestCase
     public function 認証なしでは購入できない(): void
     {
         $response = $this->postJson('/api/in_app_purchase/buy', [
-            'mst_in_app_purchase_id' => 1,
+            'mst_in_app_purchase_id' => 'iap_diamond_500',
             'platform' => 'Google',
             'billing_platform' => 'google_play',
             'receipt' => 'purchase-token-endpoint',
@@ -230,7 +266,7 @@ class BuyEndpointTest extends TestCase
     {
         $response = $this->withHeaders(['Authorization' => 'Bearer '.$this->accessToken])
             ->postJson('/api/in_app_purchase/buy', [
-                'mst_in_app_purchase_id' => 1,
+                'mst_in_app_purchase_id' => 'iap_diamond_500',
                 // platform / billing_platform / receipt / product_id を送らない
             ]);
 
@@ -280,9 +316,11 @@ class BuyEndpointTest extends TestCase
         ]);
     }
 
-    private function createDiamondProduct(string $billingPlatform = 'google_play'): int
+    private function createDiamondProduct(string $billingPlatform = 'google_play'): string
     {
-        $platformProductId = DB::connection('mst')->table('mst_billing_platform_product')->insertGetId([
+        $platformProductId = MstBillingPlatformProduct::makeId($billingPlatform, 'diamond_500');
+        DB::connection('mst')->table('mst_billing_platform_product')->insert([
+            'id' => $platformProductId,
             'deploy_key' => self::DEPLOY_KEY,
             'platform_product_id' => 'diamond_500',
             'billing_platform' => $billingPlatform,
@@ -294,7 +332,9 @@ class BuyEndpointTest extends TestCase
             'updated_at' => now(),
         ]);
 
-        $id = (int) DB::connection('mst')->table('mst_in_app_purchase')->insertGetId([
+        $id = 'iap_diamond_500';
+        DB::connection('mst')->table('mst_in_app_purchase')->insert([
+            'id' => $id,
             'deploy_key' => self::DEPLOY_KEY,
             'type' => 'diamond',
             'paid_diamond_amount' => self::PAID_DIAMOND_AMOUNT,

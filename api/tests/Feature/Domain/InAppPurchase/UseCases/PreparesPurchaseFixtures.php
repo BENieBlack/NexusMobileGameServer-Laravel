@@ -2,7 +2,10 @@
 
 namespace Tests\Feature\Domain\InAppPurchase\UseCases;
 
+use App\Models\Mst\MstBillingPlatformProduct;
 use App\Models\Mst\MstInAppPurchase;
+use App\Models\Mst\MstInAppPurchaseContent;
+use App\Models\Mst\MstInAppPurchaseEffect;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 
@@ -52,7 +55,9 @@ trait PreparesPurchaseFixtures
         ?int $purchaseLimitCount = null,
         string $purchaseLimitReset = 'none',
     ): MstInAppPurchase {
-        $platformProductId = DB::connection('mst')->table('mst_billing_platform_product')->insertGetId([
+        $platformProductId = MstBillingPlatformProduct::makeId('google_play', strtolower($type));
+        DB::connection('mst')->table('mst_billing_platform_product')->insert([
+            'id' => $platformProductId,
             'deploy_key' => self::DEPLOY_KEY,
             'platform_product_id' => strtolower($type),
             'billing_platform' => 'google_play',
@@ -64,7 +69,9 @@ trait PreparesPurchaseFixtures
             'updated_at' => now(),
         ]);
 
-        $id = DB::connection('mst')->table('mst_in_app_purchase')->insertGetId([
+        $id = 'iap_test_'.strtolower($type);
+        DB::connection('mst')->table('mst_in_app_purchase')->insert([
+            'id' => $id,
             'deploy_key' => self::DEPLOY_KEY,
             'type' => $type,
             'paid_diamond_amount' => $paidDiamondAmount,
@@ -82,11 +89,12 @@ trait PreparesPurchaseFixtures
         return MstInAppPurchase::on('mst')->findOrFail($id);
     }
 
-    private function createPackContents(int $mstInAppPurchaseId): void
+    private function createPackContents(string $mstInAppPurchaseId): void
     {
         DB::connection('mst')->table('mst_in_app_purchase_content')->insert([
             [
                 'deploy_key' => self::DEPLOY_KEY,
+                'id' => MstInAppPurchaseContent::makeId($mstInAppPurchaseId, 'item', 'free_diamond'),
                 'mst_in_app_purchase_id' => $mstInAppPurchaseId,
                 // 無償ダイヤは item + free_diamond で表す（content_type の free_diamond は廃止）
                 'content_type' => 'item',
@@ -99,6 +107,7 @@ trait PreparesPurchaseFixtures
             ],
             [
                 'deploy_key' => self::DEPLOY_KEY,
+                'id' => MstInAppPurchaseContent::makeId($mstInAppPurchaseId, 'Item', 'item_potion_001'),
                 'mst_in_app_purchase_id' => $mstInAppPurchaseId,
                 'content_type' => 'Item',
                 'content_mst_id' => 'item_potion_001',
@@ -111,10 +120,11 @@ trait PreparesPurchaseFixtures
         ]);
     }
 
-    private function createPassEffect(int $mstInAppPurchaseId): void
+    private function createPassEffect(string $mstInAppPurchaseId): void
     {
         DB::connection('mst')->table('mst_in_app_purchase_effect')->insert([
             'deploy_key' => self::DEPLOY_KEY,
+            'id' => MstInAppPurchaseEffect::makeId($mstInAppPurchaseId, 'exp_boost'),
             'mst_in_app_purchase_id' => $mstInAppPurchaseId,
             'effect_type' => 'exp_boost',
             'value' => 1.50,

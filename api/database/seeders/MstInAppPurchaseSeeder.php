@@ -63,6 +63,7 @@ class MstInAppPurchaseSeeder extends Seeder
 
         // 1. Diamond商品（有償ダイアモンドのみ）
         MstInAppPurchase::create([
+            'id' => 'iap_diamond_100',
             'deploy_key' => 202601010,
             'type' => 'diamond',
             'paid_diamond_amount' => 100,
@@ -76,6 +77,7 @@ class MstInAppPurchaseSeeder extends Seeder
         ]);
 
         MstInAppPurchase::create([
+            'id' => 'iap_diamond_500',
             'deploy_key' => 202601010,
             'type' => 'diamond',
             'paid_diamond_amount' => 500,
@@ -89,6 +91,7 @@ class MstInAppPurchaseSeeder extends Seeder
         ]);
 
         MstInAppPurchase::create([
+            'id' => 'iap_diamond_1000',
             'deploy_key' => 202601010,
             'type' => 'diamond',
             'paid_diamond_amount' => 1000,
@@ -103,6 +106,7 @@ class MstInAppPurchaseSeeder extends Seeder
 
         // 2. Pack商品（有償ダイアモンド + 無償ダイアモンド + アイテム）
         $starterPack = MstInAppPurchase::create([
+            'id' => 'iap_starter_pack',
             'deploy_key' => 202601010,
             'type' => 'pack',
             'paid_diamond_amount' => 300,
@@ -117,6 +121,7 @@ class MstInAppPurchaseSeeder extends Seeder
 
         // Pack商品のコンテンツ（無償ダイアモンド）
         MstInAppPurchaseContent::create([
+            'id' => MstInAppPurchaseContent::makeId($starterPack->id, 'item', 'free_diamond'),
             'deploy_key' => 202601010,
             'mst_in_app_purchase_id' => $starterPack->id,
             // 無償ダイヤは item + free_diamond（mst_item の行）で表す
@@ -138,6 +143,7 @@ class MstInAppPurchaseSeeder extends Seeder
 
         // 3. Pass商品（有償ダイアモンド + 継続効果）
         $monthlyPass = MstInAppPurchase::create([
+            'id' => 'iap_monthly_pass',
             'deploy_key' => 202601010,
             'type' => 'pass',
             'paid_diamond_amount' => 500,
@@ -152,6 +158,7 @@ class MstInAppPurchaseSeeder extends Seeder
 
         // Pass商品のコンテンツ（継続的に付与される無償ダイアモンド）
         MstInAppPurchaseContent::create([
+            'id' => MstInAppPurchaseContent::makeId($monthlyPass->id, 'item', 'free_diamond'),
             'deploy_key' => 202601010,
             'mst_in_app_purchase_id' => $monthlyPass->id,
             'content_type' => 'item',
@@ -162,6 +169,7 @@ class MstInAppPurchaseSeeder extends Seeder
 
         // Pass商品の効果
         MstInAppPurchaseEffect::create([
+            'id' => MstInAppPurchaseEffect::makeId($monthlyPass->id, 'idle_reward_multiplier'),
             'deploy_key' => 202601010,
             'mst_in_app_purchase_id' => $monthlyPass->id,
             'effect_type' => 'idle_reward_multiplier',
@@ -169,6 +177,7 @@ class MstInAppPurchaseSeeder extends Seeder
         ]);
 
         MstInAppPurchaseEffect::create([
+            'id' => MstInAppPurchaseEffect::makeId($monthlyPass->id, 'ad_skip'),
             'deploy_key' => 202601010,
             'mst_in_app_purchase_id' => $monthlyPass->id,
             'effect_type' => 'ad_skip',
@@ -176,6 +185,7 @@ class MstInAppPurchaseSeeder extends Seeder
         ]);
 
         MstInAppPurchaseEffect::create([
+            'id' => MstInAppPurchaseEffect::makeId($monthlyPass->id, 'exp_boost'),
             'deploy_key' => 202601010,
             'mst_in_app_purchase_id' => $monthlyPass->id,
             'effect_type' => 'exp_boost',

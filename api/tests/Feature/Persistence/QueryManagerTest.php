@@ -281,7 +281,7 @@ class QueryManagerTest extends TestCase
             receiptId: 'receipt-'.uniqid(),
             receipt: [],
             status: 'completed',
-            mstInAppPurchaseId: '1',
+            mstInAppPurchaseId: 'iap_test_1',
             currencyCode: 'JPY',
             payAmount: 480.0,
             payString: '480',
