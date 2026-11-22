@@ -152,6 +152,7 @@ class VipLoginBonusServiceTest extends TestCase
                 $goldAmount = (int) floor(1000 * $day * $multiplier);
 
                 MstVipLoginBonusContent::create([
+                    'id' => MstVipLoginBonusContent::makeId($bonusId, $day, 'gold', 'gold'),
                     'mst_vip_login_bonus_id' => $bonusId,
                     'day' => $day,
                     'content_type' => 'gold',

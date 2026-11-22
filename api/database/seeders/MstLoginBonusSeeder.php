@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\Mst\MstLoginBonusContent;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Nexus\Core\Models\Mst\_BaseMst;
@@ -23,10 +24,8 @@ class MstLoginBonusSeeder extends Seeder
     {
         _BaseMst::allowWrites();
 
-        DB::connection('mst')->statement('SET FOREIGN_KEY_CHECKS=0;');
         DB::connection('mst')->table('mst_login_bonus_content')->truncate();
         DB::connection('mst')->table('mst_login_bonus')->truncate();
-        DB::connection('mst')->statement('SET FOREIGN_KEY_CHECKS=1;');
 
         $now = now();
 
@@ -66,6 +65,7 @@ class MstLoginBonusSeeder extends Seeder
         for ($day = 1; $day <= self::LOOP_DAYS; $day++) {
             foreach ($dayRewards[$day] as $i => $reward) {
                 DB::connection('mst')->table('mst_login_bonus_content')->insert([
+                    'id' => MstLoginBonusContent::makeId($bonusId, $day, $reward['content_type'], $reward['content_mst_id']),
                     'mst_login_bonus_id' => $bonusId,
                     'day' => $day,
                     'content_type' => $reward['content_type'],

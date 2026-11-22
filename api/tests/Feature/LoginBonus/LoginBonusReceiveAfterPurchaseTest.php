@@ -3,6 +3,7 @@
 namespace Tests\Feature\LoginBonus;
 
 use App\Exceptions\GameErrorCode;
+use App\Models\Mst\MstVipLoginBonusContent;
 use App\Persistence\ApiSession;
 use App\Repositories\Sys\SysPlayerRepository;
 use Illuminate\Support\Facades\DB;
@@ -203,6 +204,7 @@ class LoginBonusReceiveAfterPurchaseTest extends TestCase
             ]);
             for ($day = 1; $day <= 3; $day++) {
                 DB::connection('mst')->table('mst_vip_login_bonus_content')->insert([
+                    'id' => MstVipLoginBonusContent::makeId("lbp_vip_lv{$level}", $day, 'item', 'vip_item'),
                     'mst_vip_login_bonus_id' => "lbp_vip_lv{$level}", 'day' => $day,
                     'content_type' => 'item', 'content_mst_id' => 'vip_item',
                     'content_quantity' => $level * 100 + $day, 'amount' => 1,

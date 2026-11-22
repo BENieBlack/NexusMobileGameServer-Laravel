@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\Mst\MstVipLoginBonusContent;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Nexus\Core\Models\Mst\_BaseMst;
@@ -63,15 +64,9 @@ class MstVipLoginBonusSeeder extends Seeder
         // マスターデータの投入なので書き込みを許可する
         _BaseMst::allowWrites();
 
-        // 外部キー制約を一時的に無効化（content が bonus を参照するため、truncate の順序によらず通す）
-        DB::connection('mst')->statement('SET FOREIGN_KEY_CHECKS=0;');
-
         // 既存データをクリア
         DB::connection('mst')->table('mst_vip_login_bonus_content')->truncate();
         DB::connection('mst')->table('mst_vip_login_bonus')->truncate();
-
-        // 外部キー制約を再度有効化
-        DB::connection('mst')->statement('SET FOREIGN_KEY_CHECKS=1;');
 
         $now = ClockUtility::nowToString();
 
@@ -97,6 +92,7 @@ class MstVipLoginBonusSeeder extends Seeder
             $countInDay = array_count_values(array_column($contents, 'day'));
             foreach ($contents as &$content) {
                 $content['sort_desc'] = $countInDay[$content['day']]--;
+                $content['id'] = MstVipLoginBonusContent::makeId($bonusId, $content['day'], $content['content_type'], $content['content_mst_id']);
             }
             unset($content);
             DB::connection('mst')->table('mst_vip_login_bonus_content')->insert($contents);
@@ -113,7 +109,7 @@ class MstVipLoginBonusSeeder extends Seeder
      * @param  string  $bonusId  VIPログインボーナスID
      * @param  int  $vipLevel  VIPレベル
      * @param  string  $now  現在日時（'Y-m-d H:i:s'）
-     * @return array 報酬内容の配列
+     * @return array<int, array<string, mixed>> 報酬内容の配列（id・sort_desc は呼び出し側で足す）
      */
     private function generateContentsForVipLevel(string $bonusId, int $vipLevel, string $now): array
     {

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Repositories\Mst;
 
+use App\Models\Mst\MstVipLoginBonusContent;
 use App\Repositories\Mst\MstVipLoginBonusRepository;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\Test;
@@ -71,6 +72,7 @@ class MstVipLoginBonusRepositoryTest extends TestCase
     private function makeContent(string $bonusId, int $day, string $contentMstId, int $sortDesc = 0): void
     {
         DB::connection('mst')->table('mst_vip_login_bonus_content')->insert([
+            'id' => MstVipLoginBonusContent::makeId($bonusId, $day, 'item', $contentMstId),
             'mst_vip_login_bonus_id' => $bonusId, 'day' => $day,
             'content_type' => 'item', 'content_mst_id' => $contentMstId,
             'content_quantity' => 1, 'amount' => 1, 'sort_desc' => $sortDesc,

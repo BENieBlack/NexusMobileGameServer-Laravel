@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Recording;
 
+use App\Models\Mst\MstVipLoginBonusContent;
 use App\Persistence\ApiSession;
 use App\Repositories\Sys\SysPlayerRepository;
 use Database\Seeders\Recording\Scenarios\RecordingLoginBonusProgressSeeder;
@@ -56,6 +57,7 @@ class RecordingLoginBonusProgressTest extends RecordingTestCase
             ]);
             for ($day = 1; $day <= 7; $day++) {
                 DB::connection('mst')->table('mst_vip_login_bonus_content')->insert([
+                    'id' => MstVipLoginBonusContent::makeId("rec_vip_lv{$level}", $day, 'item', 'free_diamond'),
                     'mst_vip_login_bonus_id' => "rec_vip_lv{$level}", 'day' => $day,
                     'content_type' => 'item', 'content_mst_id' => 'free_diamond',
                     'content_quantity' => $level * 10 + $day, 'amount' => 1,

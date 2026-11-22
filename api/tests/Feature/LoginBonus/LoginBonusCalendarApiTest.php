@@ -3,6 +3,8 @@
 namespace Tests\Feature\LoginBonus;
 
 use App\Exceptions\GameErrorCode;
+use App\Models\Mst\MstLoginBonusContent;
+use App\Models\Mst\MstVipLoginBonusContent;
 use App\Persistence\ApiSession;
 use App\Repositories\Sys\SysPlayerRepository;
 use Illuminate\Support\Facades\DB;
@@ -676,7 +678,7 @@ class LoginBonusCalendarApiTest extends TestCase
             ['day' => 2, 'content_type' => 'item', 'content_mst_id' => 'free_diamond', 'content_quantity' => 3, 'amount' => 2, 'is_paid' => true, 'sort_desc' => 0],
         ];
         foreach ($rows as $row) {
-            DB::connection('mst')->table('mst_login_bonus_content')->insert([...['mst_login_bonus_id' => self::NORMAL_ID, 'is_paid' => false], ...$row]);
+            DB::connection('mst')->table('mst_login_bonus_content')->insert([...['id' => MstLoginBonusContent::makeId(self::NORMAL_ID, $row['day'], $row['content_type'], $row['content_mst_id']), 'mst_login_bonus_id' => self::NORMAL_ID, 'is_paid' => false], ...$row]);
         }
 
         for ($level = 0; $level <= 20; $level++) {
@@ -686,6 +688,7 @@ class LoginBonusCalendarApiTest extends TestCase
             ]);
             for ($day = 1; $day <= 3; $day++) {
                 DB::connection('mst')->table('mst_vip_login_bonus_content')->insert([
+                    'id' => MstVipLoginBonusContent::makeId($id, $day, 'item', 'vip_item'),
                     'mst_vip_login_bonus_id' => $id, 'day' => $day,
                     'content_type' => 'item', 'content_mst_id' => 'vip_item',
                     'content_quantity' => $level * 100 + $day, 'amount' => 1,

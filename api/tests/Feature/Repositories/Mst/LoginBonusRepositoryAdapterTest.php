@@ -3,6 +3,7 @@
 namespace Tests\Feature\Repositories\Mst;
 
 use App\Models\Mst\MstLoginBonus;
+use App\Models\Mst\MstLoginBonusContent;
 use App\Persistence\ApiSession;
 use App\Repositories\Mst\LoginBonusRepositoryAdapter;
 use Illuminate\Support\Facades\DB;
@@ -332,6 +333,7 @@ class LoginBonusRepositoryAdapterTest extends TestCase
     private function makeContent(string $bonusId, string $contentMstId, int $sortDesc): void
     {
         DB::connection('mst')->table('mst_login_bonus_content')->insert([
+            'id' => MstLoginBonusContent::makeId($bonusId, 1, 'item', $contentMstId),
             'mst_login_bonus_id' => $bonusId,
             'day' => 1,
             'content_type' => 'item',
@@ -350,6 +352,7 @@ class LoginBonusRepositoryAdapterTest extends TestCase
     private function makeContentOnDay(string $bonusId, int $day, string $type, string $contentMstId, int $sortDesc): void
     {
         DB::connection('mst')->table('mst_login_bonus_content')->insert([
+            'id' => MstLoginBonusContent::makeId($bonusId, $day, $type, $contentMstId),
             'mst_login_bonus_id' => $bonusId,
             'day' => $day,
             'content_type' => $type,

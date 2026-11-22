@@ -42,9 +42,9 @@ class MstVipLoginBonusRepository extends _BaseMstRepository implements VipLoginB
         $contents = MstVipLoginBonusContent::where('mst_vip_login_bonus_id', $vipLoginBonusId)
             ->where('day', $day)
             // 並びは sort_desc 降順（大きい値が先。配る順 = クライアントの表示順）。同値は id 昇順で固定する。
-            // id（連番）は mst_vip_login_bonus_content.id を string にする解消（MstRequiresStringIdTest の
-            // PENDING_VIOLATIONS）で辞書順になっても、sort_desc が鍵なので配る順は変わらない
-            // （設計 docs/design/login-bonus-calendar/api.md の U-S2-2）
+            // id は string（{親ID}:{day}:{content_type}:{content_mst_id}）で、同値の並びは MySQL の文字列順になり、
+            // クライアントの SQLite（BINARY）の並びと食い違いうる。そのため同値は取り込みで拒否する
+            // （tool の MasterImportService。設計 docs/design/mst-id-introduction/db.md 12 節 6）
             ->orderByDesc('sort_desc')
             ->orderBy('id')
             ->get();

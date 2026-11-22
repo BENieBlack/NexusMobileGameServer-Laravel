@@ -254,6 +254,7 @@ class VipMasterRepositoryTest extends TestCase
         bool $isActive = true,
     ): void {
         DB::connection('mst')->table('mst_vip_level_reward')->insert([
+            'id' => MstVipLevelReward::makeId($vipLevel, 'item', $contentMstId),
             'vip_level' => $vipLevel,
             'content_type' => 'item',
             'content_mst_id' => $contentMstId,

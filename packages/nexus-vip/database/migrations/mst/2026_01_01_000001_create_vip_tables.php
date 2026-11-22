@@ -61,6 +61,7 @@ return new class extends Migration
         // mst_vip_level_reward: VIPレベルアップ報酬マスター
         // ========================================
         Schema::create('mst_vip_level_reward', function (Blueprint $table) {
+            $table->string('id')->primary()->comment('ID（{vip_level}:{content_type}:{content_mst_id}）');
             $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
             $table->smallInteger('vip_level')->comment('VIPレベル');
             $table->enum('content_type', ['item', 'unit', 'equipment', 'wallet', 'stamina'])->comment('コンテンツタイプ');
@@ -74,7 +75,7 @@ return new class extends Migration
             $table->dateTime('created_at')->default(DB::raw('CURRENT_TIMESTAMP'))->comment('作成日時');
             $table->dateTime('updated_at')->default(DB::raw('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'))->comment('更新日時');
 
-            $table->primary(['vip_level', 'content_type', 'content_mst_id'], 'pk_vip_level_reward');
+            $table->unique(['vip_level', 'content_type', 'content_mst_id'], 'uk_vip_level_reward');
             $table->index('deploy_key');
             $table->index(['vip_level', 'sort_order']);
             $table->index('is_active');
@@ -120,6 +121,8 @@ return new class extends Migration
 
         foreach ($vipRewards as $reward) {
             DB::table('mst_vip_level_reward')->insert(array_merge($reward, [
+                // MstVipLevelReward::makeId と同じ規則（マイグレーションからモデルは使わないので直接つなぐ）
+                'id' => $reward['vip_level'].':'.$reward['content_type'].':'.$reward['content_mst_id'],
                 'created_at' => now(),
                 'updated_at' => now(),
             ]));
@@ -138,7 +141,7 @@ return new class extends Migration
         });
 
         Schema::create('mst_vip_login_bonus_content', function (Blueprint $table) {
-            $table->id();
+            $table->string('id')->primary()->comment('ID（{mst_vip_login_bonus_id}:{day}:{content_type}:{content_mst_id}）');
             $table->string('mst_vip_login_bonus_id', 64)->comment('VIPログインボーナスID');
             $table->unsignedInteger('day')->comment('ログイン日数（1日目、2日目...）');
             $table->string('content_type', 32)->comment('報酬タイプ（item, unit, wallet等。無償ダイヤは item + free_diamond）');
@@ -146,13 +149,9 @@ return new class extends Migration
             $table->json('content_option')->nullable()->comment('報酬オプション（JSON）');
             $table->unsignedInteger('content_quantity')->default(1)->comment('報酬の基本個数');
             $table->unsignedInteger('amount')->default(1)->comment('報酬の倍率（実際の配布量 = content_quantity × amount）');
-            $table->unsignedInteger('sort_desc')->default(0)->comment('同じ日の中の並び順（降順。大きい値が先。同値は id 昇順。配る順・クライアントの表示順）');
+            $table->unsignedInteger('sort_desc')->default(0)->comment('同じ日の中の並び順（降順。大きい値が先。同値は id 昇順だが、同値は取り込みで拒否する。配る順・クライアントの表示順）');
             $table->timestamps();
-            $table->foreign('mst_vip_login_bonus_id', 'fk_vip_login_bonus_content_bonus_id')
-                ->references('id')
-                ->on('mst_vip_login_bonus')
-                ->onDelete('cascade');
-            $table->index(['mst_vip_login_bonus_id', 'day'], 'idx_vip_login_bonus_day');
+            $table->unique(['mst_vip_login_bonus_id', 'day', 'content_type', 'content_mst_id'], 'uk_vip_login_bonus_content');
         });
     }
 
