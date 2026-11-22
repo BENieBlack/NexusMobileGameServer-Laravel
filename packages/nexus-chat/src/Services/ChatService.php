@@ -330,7 +330,14 @@ class ChatService
         int $targetPlayerId,
         ChatRoomRole $newRole,
     ): void {
-        $ownerMember = $this->memberRepository->selectByRoomAndPlayer($chatRoomId, $ownerPlayerId);
+        // ルーム行のロックを先に取る（invite・kick・leave と同じ順）。実行者の権限確認は
+        // ロック下の current read で行い、kick・leave と競合しても「外された・降格された者」が
+        // 操作できないようにする。部屋が無ければメンバーでもないので、権限なしと同じエラーにする
+        if ($this->roomRepository->selectByIdForUpdate($chatRoomId) === null) {
+            throw ChatException::noRoleManagePermission();
+        }
+
+        $ownerMember = $this->memberRepository->selectByRoomAndPlayerForUpdate($chatRoomId, $ownerPlayerId);
         if ($ownerMember === null || ! $ownerMember->getRole()->canManageRoles()) {
             throw ChatException::noRoleManagePermission();
         }

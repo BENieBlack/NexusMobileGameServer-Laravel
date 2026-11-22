@@ -61,6 +61,25 @@ class SysGuildMemberRepository extends _BaseSysRepository
     }
 
     /**
+     * ギルドIDとプレイヤーIDでメンバーを FOR UPDATE で読む（承認者の権限確認用）
+     *
+     * 役職は他人（マスター）が書きうる行なので、非ロックの読み（古いスナップショットや
+     * セッションのキャッシュ）で権限を判定しない。行が無いときはギャップロックになるが、
+     * 呼び出し側（承認）は先にギルド行をロックしており、メンバーの増減はギルド行で直列になる。
+     *
+     * @param  int  $guildId  ギルドID
+     * @param  int  $playerId  プレイヤーID
+     */
+    public function selectByGuildAndPlayerForUpdate(int $guildId, int $playerId): ?SysGuildMember
+    {
+        /** @var SysGuildMember|null */
+        return $this->selectForUpdate()
+            ->where('sys_guild_id', $guildId)
+            ->where('sys_player_id', $playerId)
+            ->first();
+    }
+
+    /**
      * プレイヤーIDで所属ギルドメンバー情報を検索（Model返却）
      *
      * @param  int  $playerId  プレイヤーID

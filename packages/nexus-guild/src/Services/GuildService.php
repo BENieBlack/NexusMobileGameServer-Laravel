@@ -234,8 +234,12 @@ class GuildService
      * 同時に触りうるので、次の順にロックを取り、ロックを取った後の最新の値で判定する。
      *   1. 申請行（承認と却下が同時に来ても、先に取った側だけが進める）
      *   2. ギルド行（満員判定 → メンバー追加を直列にする mutex）
-     *   3. 申請者のプレイヤー行（別ギルドが同じ人を同時に入れるのを直列にする）
+     *   2'. 承認者のメンバー行（権限の確認。降格・脱退と競合しても最新の役職で判定する）
+     *   2''. ギルドのメンバー行（人数。主キー昇順）
+     *   3. 申請者のプレイヤー行 → 申請者の所属（別ギルドが同じ人を同時に入れるのを直列にする）
      * 承認・却下はどちらも「申請行を最初に」取る。順序を固定してデッドロックを避ける。
+     * 脱退（leaveGuild）も同じ順（申請行 → ギルド行 → プレイヤー行 → メンバー行）で取るので、
+     * 承認と逆順にならない。
      *
      * @param  int  $applyId  申請ID
      * @param  int  $currentPlayerId  現在のプレイヤーID（承認者）
@@ -254,8 +258,10 @@ class GuildService
             throw GuildException::guildNotFound($apply->getSysGuildId());
         }
 
-        // 承認者がギルドメンバーであることを確認
-        $approverMember = $this->memberRepository->selectByGuildAndPlayer(
+        // 承認者がギルドメンバーであることを確認。ギルド行のロックを取った後に、承認者のメンバー行を
+        // FOR UPDATE の current read で読む（脱退・降格と競合しても、外れた・降格した者が承認できない）。
+        // メンバーの増減はギルド行で直列なので、この後の人数のロックと順序が食い違わない
+        $approverMember = $this->memberRepository->selectByGuildAndPlayerForUpdate(
             $apply->getSysGuildId(),
             $currentPlayerId
         );
@@ -330,13 +336,35 @@ class GuildService
     /**
      * ギルドから脱退
      *
+     * トランザクション内で呼ぶこと。脱退は申請とメンバーを削除するが、これらの行は承認者（他人）も
+     * 書くので、承認（申請行 → ギルド行 → … → 申請者のプレイヤー行）と同じ順でロックを取る。
+     *   1. 本人の全申請行（主キー昇順）
+     *   2. ギルド行
+     *   3. 本人のプレイヤー行 → 本人のメンバー行（ロック後に読み直して再判定する）
+     * 「プレイヤー行を最初に」取ると、承認（ギルド行 → プレイヤー行）と逆順になりデッドロックしうる。
+     * ギルドIDは、ロックの前に非ロックで引いた所属から知る（本人の API は player.lock で直列なので、
+     * 本人の所属はこの間に変わらない。変わっていたらロック後の再判定で止める）。
+     *
      * @param  int  $playerId  プレイヤーID
      *
      * @throws GuildException マスターは脱退できない
      */
     public function leaveGuild(int $playerId): void
     {
-        $member = $this->validatePlayerInGuild($playerId);
+        // ロックの対象（ギルド）を決めるためだけの非ロック読み。判定には使わない
+        $guildId = $this->validatePlayerInGuild($playerId)->getSysGuildId();
+
+        // 1. 本人の申請行（承認・却下は申請行を最初に取る。同じ順にする）
+        $this->applyRepository->selectAllByPlayerIdForUpdate($playerId);
+
+        // 2. ギルド行（承認の「ギルド行 → メンバー行」と同じ順）
+        $this->guildRepository->selectByIdForUpdate($guildId);
+
+        // 3. 本人のプレイヤー行 → メンバー行。ロック後の最新の所属で再判定する
+        $member = $this->memberRepository->selectByPlayerIdForUpdate($playerId);
+        if ($member === null || $member->getSysGuildId() !== $guildId) {
+            throw GuildException::notInGuild($playerId);
+        }
 
         // マスターは脱退できない
         if ($member->getRole() === GuildRole::MASTER) {

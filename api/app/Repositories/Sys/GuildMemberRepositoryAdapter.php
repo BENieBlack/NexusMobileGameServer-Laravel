@@ -45,6 +45,16 @@ class GuildMemberRepositoryAdapter implements GuildMemberRepositoryInterface
     /**
      * {@inheritDoc}
      */
+    public function selectByGuildAndPlayerForUpdate(int $guildId, int $playerId): ?GuildMember
+    {
+        $sysGuildMember = $this->sysGuildMemberRepository->selectByGuildAndPlayerForUpdate($guildId, $playerId);
+
+        return $sysGuildMember ? GuildMemberAdapter::toDto($sysGuildMember) : null;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
     public function selectByPlayerId(int $playerId): ?GuildMember
     {
         $sysGuildMember = $this->sysGuildMemberRepository->selectByPlayerId($playerId);

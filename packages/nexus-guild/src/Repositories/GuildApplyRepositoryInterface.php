@@ -29,6 +29,18 @@ interface GuildApplyRepositoryInterface
     public function selectByIdForUpdate(int $applyId): ?GuildApply;
 
     /**
+     * プレイヤーの全申請（状態を問わない）を、申請ID昇順で行ロック付きで読む
+     *
+     * 脱退が申請を消す前に、その人の申請行を押さえるために使う。
+     * 承認（申請行 → ギルド行 → …）と同じく「申請行を最初に」取って、ロック順を揃える。
+     * トランザクション内で呼ぶこと。
+     *
+     * @param  int  $playerId  プレイヤーID
+     * @return array<GuildApply>
+     */
+    public function selectAllByPlayerIdForUpdate(int $playerId): array;
+
+    /**
      * ギルドIDとプレイヤーIDで既存の申請を検索
      *
      * Applied または Accepted のステータスのみを検索対象とする

@@ -27,6 +27,18 @@ interface GuildMemberRepositoryInterface
     public function selectByGuildAndPlayer(int $guildId, int $playerId): ?GuildMember;
 
     /**
+     * ギルドIDとプレイヤーIDでメンバーを行ロック（SELECT ... FOR UPDATE）付きで検索
+     *
+     * 承認者の権限（役職）確認用。ロック後の最新の役職・所属を返す。
+     * ギルド行のロックを取った後に呼ぶこと（承認のロック順に組み込まれている）。
+     * トランザクション内で呼ぶこと。
+     *
+     * @param  int  $guildId  ギルドID
+     * @param  int  $playerId  プレイヤーID
+     */
+    public function selectByGuildAndPlayerForUpdate(int $guildId, int $playerId): ?GuildMember;
+
+    /**
      * プレイヤーIDで所属ギルドメンバー情報を検索
      *
      * @param  int  $playerId  プレイヤーID

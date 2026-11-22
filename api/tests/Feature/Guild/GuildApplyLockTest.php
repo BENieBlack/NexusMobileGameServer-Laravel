@@ -4,6 +4,7 @@ namespace Tests\Feature\Guild;
 
 use App\Exceptions\GameErrorCode;
 use App\Models\Sys\SysGuildApply;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
@@ -34,12 +35,95 @@ class GuildApplyLockTest extends TestCase
             $this->acceptApply($masterToken, $apply->id)->assertOk();
         });
 
-        // 申請 → ギルド → メンバー数 → 申請者のプレイヤー行 → 申請者の所属、の順
+        // 申請 → ギルド → 承認者のメンバー行 → メンバー数 → 申請者のプレイヤー行 → 申請者の所属、の順
         // （順序を固定してデッドロックを避ける。architecture.md 7節）
         $this->assertSame(
-            ['sys_guild_apply', 'sys_guild', 'sys_guild_member', 'sys_player', 'sys_guild_member'],
+            ['sys_guild_apply', 'sys_guild', 'sys_guild_member', 'sys_guild_member', 'sys_player', 'sys_guild_member'],
             $locks
         );
+    }
+
+    #[Test]
+    public function test_leave_locks_applies_guild_then_player_in_the_same_direction_as_accept(): void
+    {
+        ['token' => $masterToken] = $this->signUpPlayer();
+        ['player' => $member, 'token' => $memberToken] = $this->signUpPlayer();
+        $guildId = $this->createGuild($masterToken);
+        $this->sendApply($memberToken, $guildId);
+        $apply = SysGuildApply::where('sys_player_id', $member->id)->firstOrFail();
+        $this->acceptApply($masterToken, $apply->id)->assertOk();
+
+        $locks = $this->collectLockTables(function () use ($memberToken): void {
+            $this->withHeaders($this->authHeaders($memberToken))->postJson('/api/guild/leave')->assertOk();
+        });
+
+        // 申請（本人の全申請）→ ギルド → 本人のプレイヤー行 → 本人のメンバー行。
+        // 承認の「申請 → ギルド → … → 申請者のプレイヤー行」と逆順にならない
+        $this->assertSame(
+            ['sys_guild_apply', 'sys_guild', 'sys_player', 'sys_guild_member'],
+            $locks
+        );
+        $this->assertDatabaseMissing('sys_guild_member', ['sys_player_id' => $member->id], 'sys');
+        $this->assertDatabaseMissing('sys_guild_apply', ['sys_player_id' => $member->id], 'sys');
+    }
+
+    #[Test]
+    public function test_leave_by_a_non_member_and_by_the_master_are_business_errors(): void
+    {
+        ['token' => $masterToken] = $this->signUpPlayer();
+        ['token' => $outsiderToken] = $this->signUpPlayer();
+        $this->createGuild($masterToken);
+
+        $outsider = $this->withHeaders($this->authHeaders($outsiderToken))->postJson('/api/guild/leave');
+        $this->assertSame(GameErrorCode::PLAYER_NOT_IN_GUILD, $outsider->json('error_code'));
+
+        $master = $this->withHeaders($this->authHeaders($masterToken))->postJson('/api/guild/leave');
+        $this->assertSame(GameErrorCode::GUILD_MASTER_CANNOT_LEAVE, $master->json('error_code'));
+    }
+
+    #[Test]
+    public function test_accept_by_a_demoted_or_departed_approver_fails(): void
+    {
+        // 承認者の役職はロック付きの読み（current read）で判定する。
+        // 降格済み・脱退済みの承認者では、承認が失敗して申請者は加入しない
+        ['player' => $master, 'token' => $masterToken] = $this->signUpPlayer();
+        ['player' => $applicant, 'token' => $applicantToken] = $this->signUpPlayer();
+        $guildId = $this->createGuild($masterToken);
+        $this->sendApply($applicantToken, $guildId);
+        $apply = SysGuildApply::where('sys_player_id', $applicant->id)->firstOrFail();
+
+        $members = DB::connection('sys')->table('sys_guild_member')->where('sys_player_id', $master->id);
+        $members->update(['role' => 'member']);
+        $demoted = $this->acceptApply($masterToken, $apply->id);
+        $this->assertSame(GameErrorCode::GUILD_PERMISSION_DENIED, $demoted->json('error_code'));
+
+        DB::connection('sys')->table('sys_guild_member')->where('sys_player_id', $master->id)->delete();
+        $departed = $this->acceptApply($masterToken, $apply->id);
+        $this->assertSame(GameErrorCode::GUILD_MEMBER_NOT_FOUND, $departed->json('error_code'));
+
+        $this->assertDatabaseMissing('sys_guild_member', ['sys_player_id' => $applicant->id], 'sys');
+        $this->assertDatabaseHas('sys_guild_apply', ['id' => $apply->id, 'status' => 'applied'], 'sys');
+    }
+
+    #[Test]
+    public function test_database_rejects_a_player_belonging_to_two_guilds(): void
+    {
+        // 一人一ギルドを DB の unique(sys_player_id) が最後に守る
+        ['player' => $master, 'token' => $masterToken] = $this->signUpPlayer();
+        $this->createGuild($masterToken);
+        $otherGuildId = (int) DB::connection('sys')->table('sys_guild')->insertGetId([
+            'name' => 'Other '.uniqid(),
+            'description' => 'x',
+        ]);
+
+        $this->expectException(QueryException::class);
+
+        DB::connection('sys')->table('sys_guild_member')->insert([
+            'sys_guild_id' => $otherGuildId,
+            'sys_player_id' => $master->id,
+            'role' => 'member',
+            'joined_at' => date('Y-m-d H:i:s'),
+        ]);
     }
 
     #[Test]

@@ -44,8 +44,10 @@ return new class extends Migration
 
             // インデックス
             $table->unique(['sys_guild_id', 'sys_player_id']);
+            // 一人一ギルド（仕様）を DB で守る最後の防波堤。アプリの確認（プレイヤー行のロック）をすり抜けても
+            // 二重所属の挿入は一意制約違反で止まる。player 単独の検索のインデックスも兼ねる
+            $table->unique('sys_player_id');
             $table->index('sys_guild_id');
-            $table->index('sys_player_id');
             $table->index('role');
         });
 

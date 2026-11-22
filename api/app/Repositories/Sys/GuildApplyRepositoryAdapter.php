@@ -44,6 +44,18 @@ class GuildApplyRepositoryAdapter implements GuildApplyRepositoryInterface
 
     /**
      * {@inheritDoc}
+     *
+     * @return array<GuildApply>
+     */
+    public function selectAllByPlayerIdForUpdate(int $playerId): array
+    {
+        return GuildApplyAdapter::toDtoArray(
+            $this->sysGuildApplyRepository->selectAllByPlayerIdForUpdate($playerId)
+        );
+    }
+
+    /**
+     * {@inheritDoc}
      */
     public function selectByGuildAndPlayer(int $guildId, int $playerId): ?GuildApply
     {
