@@ -3,6 +3,8 @@
 namespace Tests\Feature\Mission;
 
 use App\Exceptions\GameErrorCode;
+use App\Models\Mst\MstMissionContent;
+use App\Models\Mst\MstTagContent;
 use App\Models\Mst\MstUnitLevel;
 use App\Persistence\ApiSession;
 use Illuminate\Support\Facades\DB;
@@ -332,8 +334,8 @@ class MissionEndpointTest extends TestCase
         ]);
 
         DB::connection('mst')->table('mst_tag_content')->insert([
-            ['mst_tag_id' => 'tag_series_v_gundam', 'content_type' => 'unit', 'content_mst_id' => self::UNIT_ID],
-            ['mst_tag_id' => 'tag_type_gundam', 'content_type' => 'unit', 'content_mst_id' => self::UNIT_ID],
+            ['id' => MstTagContent::makeId('tag_series_v_gundam', 'unit', self::UNIT_ID), 'mst_tag_id' => 'tag_series_v_gundam', 'content_type' => 'unit', 'content_mst_id' => self::UNIT_ID],
+            ['id' => MstTagContent::makeId('tag_type_gundam', 'unit', self::UNIT_ID), 'mst_tag_id' => 'tag_type_gundam', 'content_type' => 'unit', 'content_mst_id' => self::UNIT_ID],
         ]);
 
         $mission = fn (string $id, ?string $mstTagId, int $targetValue, int $sortOrder, ?string $endAt = null) => [
@@ -354,6 +356,7 @@ class MissionEndpointTest extends TestCase
         ]);
 
         DB::connection('mst')->table('mst_mission_content')->insert([
+            'id' => MstMissionContent::makeId('mission_v_gundam_lv', 'item', self::REWARD_ITEM_ID),
             'mst_mission_id' => 'mission_v_gundam_lv',
             'content_type' => 'item',
             'content_mst_id' => self::REWARD_ITEM_ID,

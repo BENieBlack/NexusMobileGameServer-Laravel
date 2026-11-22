@@ -22,8 +22,9 @@ use RuntimeException;
  * - rarity / bonus_rarity は列の実際の型で扱いを変える（ENUM は文字列のまま、整数列は数値へ変換）。
  *   不正な値は TRUNCATE の前に検出してエラーにする
  * - id 列（string）を持つテーブルは、TRUNCATE の前に id 列を検証する。
- *   シートに id 列が無い・空・重複（大文字小文字を区別しない照合順序に合わせる）・255 文字超は取り込みを中止する。
- *   level 系の3表は、id が自然キーの規則どおりかも検証する（ID_RULES。api の Model の makeId と同じ規則）
+ *   シートに id 列が無い・空・重複（大文字小文字を区別しない照合順序に合わせる）・191 文字超は取り込みを中止する。
+ *   level 系の3表と *_content 系の6表は、id が自然キーの規則どおりかも検証する（ID_RULES。api の Model の makeId と同じ規則）。
+ *   *_content 系は、親 ID と content_type に ':' を含む行も拒否する（別の組が同じ id になりうるため。設計 3.1）
  * - トランザクション内で実行（失敗時はロールバック）
  */
 class MasterImportService
@@ -40,22 +41,32 @@ class MasterImportService
     private const AUTO_SET_COLUMNS = ['created_at', 'updated_at'];
 
     /**
-     * id 列の最大長（VARCHAR(255)）
+     * id 列の最大長（実 DB の string は Schema::defaultStringLength(191) で varchar(191)）
      */
-    private const MAX_ID_LENGTH = 255;
+    private const MAX_ID_LENGTH = 191;
 
     /**
      * id が自然キーの規則どおりかを検証するテーブルと、id を作る列（':' でつなぐ）
      *
-     * api の Model の makeId（MstUnitLevel・MstEquipmentLevel・MstPlayerLevel）と同じ規則を持つ。
+     * api の Model の makeId（MstUnitLevel・MstEquipmentLevel・MstPlayerLevel と、
+     * MstEventContent・MstMailboxContent・MstMissionContent・MstTagContent・MstTradeProductContent）と同じ規則を持つ。
+     * mst_reward_track_content は api に Model が無く（アダプターが DB::table で読む）、この規則が唯一の定義になる。
      * tool は api の Model を読み込めず、api の docker コンテナも tool のコードを読めないため、
      * 突き合わせるテストが書けない。規則を変えるときは必ず両方を同時に直す。
-     * level 系以外の表は、対応する PR で足す（設計: mst-id-introduction/db.md 8.2）
+     * 残りの表（mst_login_bonus_content・mst_vip_*・billing 系）は、対応する PR で足す（設計: mst-id-introduction/db.md 8.2）
+     *
+     * 列が 3 つ以上の規則は、最後の列（content_mst_id）以外が ':' を含んではならない（validateIds）
      */
     private const ID_RULES = [
         'mst_unit_level' => ['rarity', 'level'],
         'mst_equipment_level' => ['rarity', 'level'],
         'mst_player_level' => ['level'],
+        'mst_event_content' => ['mst_event_id', 'content_type', 'content_mst_id'],
+        'mst_mailbox_content' => ['mst_mailbox_id', 'content_type', 'content_mst_id'],
+        'mst_mission_content' => ['mst_mission_id', 'content_type', 'content_mst_id'],
+        'mst_reward_track_content' => ['mst_reward_track_milestone_id', 'mst_reward_track_line_id', 'content_type', 'content_mst_id'],
+        'mst_tag_content' => ['mst_tag_id', 'content_type', 'content_mst_id'],
+        'mst_trade_product_content' => ['mst_trade_product_id', 'content_type', 'content_mst_id'],
     ];
 
     /**
@@ -204,7 +215,7 @@ class MasterImportService
      *
      * 対象は id 列が文字列型のテーブルだけ（整数の id のテーブルは何もしない）。
      * - シートに id 列が無い
-     * - id が空・重複・255 文字超の行
+     * - id が空・重複・191 文字超の行
      * - ID_RULES のテーブルは、id が自然キーの列を ':' でつないだ値と一致しない行
      *
      * @param  array<int, string>  $headers
@@ -258,6 +269,20 @@ class MasterImportService
                 foreach ($ruleColumns as $column) {
                     $value = $row[$column] ?? '';
                     $parts[] = is_scalar($value) ? (string) $value : '';
+                }
+                // 最後の列以外（親 ID・content_type）に ':' があると、別の組が同じ id になりうる（設計 3.1）
+                if (count($ruleColumns) >= 3) {
+                    $colonErrors = [];
+                    foreach (array_slice($ruleColumns, 0, -1) as $position => $column) {
+                        if (str_contains($parts[$position], ':')) {
+                            $colonErrors[] = $column;
+                        }
+                    }
+                    if ($colonErrors !== []) {
+                        $errors[] = $line.implode('・', $colonErrors).' に \':\' を含められません（id の区切りと衝突します）';
+
+                        continue;
+                    }
                 }
                 $expected = implode(':', $parts);
                 if ($id !== $expected) {

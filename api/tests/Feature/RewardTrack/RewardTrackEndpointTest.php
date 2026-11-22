@@ -358,6 +358,7 @@ class RewardTrackEndpointTest extends TestCase
 
         DB::connection('mst')->table('mst_reward_track_content')->insert([
             [
+                'id' => implode(':', [self::MILESTONE_10, self::FREE_LINE_ID, 'gold', 'gold']),
                 'mst_reward_track_milestone_id' => self::MILESTONE_10,
                 'mst_reward_track_line_id' => self::FREE_LINE_ID,
                 'content_type' => 'gold',
@@ -371,6 +372,7 @@ class RewardTrackEndpointTest extends TestCase
                 'updated_at' => now(),
             ],
             [
+                'id' => implode(':', [self::MILESTONE_10, self::PAID_LINE_ID, 'gold', 'gold']),
                 'mst_reward_track_milestone_id' => self::MILESTONE_10,
                 'mst_reward_track_line_id' => self::PAID_LINE_ID,
                 'content_type' => 'gold',

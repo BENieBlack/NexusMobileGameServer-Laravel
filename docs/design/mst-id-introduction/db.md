@@ -44,7 +44,7 @@
 | 15 | `mst_vip_level_reward`（vip） | `(vip_level, content_type, content_mst_id)`（`pk_vip_level_reward`） | 同左 | なし | シーダー無し | `{vip_level}:{content_type}:{content_mst_id}` **仮置き**（Nexus 5 節の案どおり） | PK `id`。`uk_vip_level_reward` |
 | 16 | `mst_vip_login_bonus_content`（vip） | `id`（AUTO_INCREMENT）。`deploy_key` 列が無い。`timestamps()` | **無い**（unique が無いので同じ `(bonus, day, type, content)` を 2 行置ける） | なし（`MstVipLoginBonusRepository` が読む） | あり（`MstVipLoginBonusSeeder`。11 レベル × 数行） | `string('id')`。`{mst_vip_login_bonus_id}:{day}:{content_type}:{content_mst_id}`（例 `vip_login_lv5:4:item:item_exp_002`）**仮置き**（Nexus 案「親 ID + 中身」どおり） | PK `id`。`uk_vip_login_bonus_content`（元の 4 列。**新しく足す unique**）。`idx_vip_login_bonus_day` は unique の先頭 2 列と重複するので外す。`foreign()` は外す（6.2） |
 
-- 「元の PK を unique にする」ので、行を一意にする条件は今と変わらない。キー長の条件も今の PK と同じ（今動いているなら動く）。新しい `id` 列（`varchar(255)`）の主キーが加わるだけ。
+- 「元の PK を unique にする」ので、行を一意にする条件は今と変わらない。キー長の条件も今の PK と同じ（今動いているなら動く）。新しい `id` 列（`varchar(191)`。実 DB は `Schema::defaultStringLength(191)`）の主キーが加わるだけ。
 - `deploy_key` 列は触らない（型の BIGINT 化・既定値は deploy_key 上乗せの S3 の範囲）。`mst_vip_login_bonus_content` に `deploy_key` が無いのも、この S0 では直さない（Nexus db.md 3.3・7 節が「列が無いまま畳む」と決めている）。
 - `created_at`・`updated_at` は触らない（#16 の `timestamps()` は規約から外れる（`dateTime` 明示）が、この S0 の範囲外。12 節 8。S3 で直す）。
 
@@ -53,7 +53,7 @@
 ### 3.1 区切りと形
 
 - 区切りは `:`（Nexus 案）。**親の ID と `content_type` に `:` を含めない**（含むと別の組が同じ `id` になりうる。例: `a:b` + `c` と `a` + `b:c`）。最後の `content_mst_id` は `:` を含んでよい（切り分けは常に先頭から。ただし `id` を分解して使うコードは作らない）。**仮置き**: 取り込みで、`:` を含む親 ID・`content_type` を拒否する。ただし `mst_billing_platform_product.platform_product_id`（外部の識別子）が `:` を含む場合は `billing_platform` が先頭固定で曖昧にならないので許す。
-- 長さは `string('id')` = `VARCHAR(255)` を主キーにする前提（utf8mb4 で 1020 バイト。InnoDB の索引キー長の上限 3072 バイトに収まる。MySQL 実機では未確認）。規則どおりに作ると、複数列をつなぐ表（特に `mst_billing_platform_product`〔`platform_product_id` が最大 255〕と `mst_reward_track_content`〔4 列〕）は 255 を超えうる。**仮置き**: **全 16 表**の取り込み（と、シーダー・`makeId`）で、`id` が 255 文字を超える行を拒否する（切り詰めない）。照合順序は `utf8mb4_unicode_ci`（大文字小文字を区別しない）なので、`UR:1` と `ur:1` は同じ `id` と見なされる。ID は小文字・スネークケースを基本にし、`rarity` だけ慣習どおり大文字（`.claude/database.md` 5 節の例外）。
+- 長さは `string('id')` = `VARCHAR(191)` を主キーにする前提（実 DB は `AppServiceProvider` の `Schema::defaultStringLength(191)` で `string` が varchar(191)。実測済み: 191 文字 × 4 バイトの列を 4 本並べた `mst_reward_track_content` の unique は 3056 バイトで、InnoDB の索引キー長の上限 3072 バイトにぎりぎり収まる。255 だと 4080 バイトで失敗する）。規則どおりに作ると、複数列をつなぐ表（特に `mst_billing_platform_product`〔`platform_product_id`〕と `mst_reward_track_content`〔4 列〕）は 191 を超えうる。**仮置き**: **全 16 表**の取り込み（と、シーダー・`makeId`）で、`id` が 191 文字を超える行を拒否する（切り詰めない）。照合順序は `utf8mb4_unicode_ci`（大文字小文字を区別しない）なので、`UR:1` と `ur:1` は同じ `id` と見なされる。ID は小文字・スネークケースを基本にし、`rarity` だけ慣習どおり大文字（`.claude/database.md` 5 節の例外）。
 - `id` は**自然キーと必ず一致させる**（unique が一致を保証する。`id` が規則からずれても主キー・unique の両方が通ってしまう点は、取り込みの検証で守る。8.2）。
 
 ### 3.2 rarity の表記（Nexus が「S0 で決める」とした点）
@@ -353,7 +353,7 @@ mst への書き込みは**シーダーとテストだけ**（`_BaseMst::allowWr
 ### 12.1 仮置きとして残るもの（人の確認が要る）
 人が答えたのは上の 8 点だけ。次は引き続き**仮置き**（変えるなら人が指示する）。
 - 個別のテーブルの id 規則（2 節。Nexus db.md 5 節の案を広げたもの。`mst_unit_level` の rarity 表記を英字にする点を含む。3.2）。
-- `:` を含む親 ID の拒否、`id` 255 文字超の拒否（3.1）。
+- `:` を含む親 ID の拒否、`id` 191 文字超の拒否（3.1）。
 - 各 Model の `makeId` に生成規則を寄せる（7.3）。
 - PR の分け方と順序（11 節）。
 
@@ -363,6 +363,6 @@ mst への書き込みは**シーダーとテストだけ**（`_BaseMst::allowWr
 - 他のクライアント（Godot 以外）が課金 API・報酬トラックの API を呼んでいるか（12 節 2）。
 - `_BaseBuyUseCase::generateUniqueRequestId` の文字列の使い道と長さの制限（4.1）。
 - `RARITY_MAP` と ENUM（3.2。12 節 7）。`mst_unit`・`mst_equipment` を含む。入れ替わり・INSERT 失敗・unique 衝突のどれが起きるかは MySQL 実機で未確認。
-- VARCHAR(255) の `id` を主キーにしたときの索引キー長（MySQL 実機）。
+- （解消済み）varchar(191) の `id` と、`mst_reward_track_content` の 4 列 unique の索引キー長は実測で収まる（3056/3072 バイト。3.1）。
 - `mst_in_app_purchase__l10n` の運営シートの列の並び（親の `id` 列と同じシートにあるか）。
 - 実行（マイグレーション・シーダー・テスト・`make check`）はしていない。

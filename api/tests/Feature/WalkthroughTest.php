@@ -8,6 +8,7 @@ use App\Models\Mst\MstGachaCost;
 use App\Models\Mst\MstGachaPrize;
 use App\Models\Mst\MstGachaRarityRate;
 use App\Models\Mst\MstGachaStep;
+use App\Models\Mst\MstMailboxContent;
 use App\Models\Sys\SysPlayer;
 use App\Repositories\Mst\MstEquipmentRepository;
 use App\Repositories\Mst\MstGachaCostRepository;
@@ -675,6 +676,7 @@ class WalkthroughTest extends TestCase
 
         // メールボックスコンテンツ（報酬）
         DB::connection('mst')->table('mst_mailbox_content')->insert([
+            'id' => MstMailboxContent::makeId('mail_welcome_001', 'Item', 'item_potion_001'),
             'mst_mailbox_id' => 'mail_welcome_001',
             'content_type' => 'Item',
             'content_mst_id' => 'item_potion_001',

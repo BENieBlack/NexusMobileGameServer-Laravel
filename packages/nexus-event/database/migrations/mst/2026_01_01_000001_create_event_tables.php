@@ -56,6 +56,7 @@ return new class extends Migration
         // 現在時刻に対して採用するイベントは EventPeriodResolver が決める
         // ------------------------------------------------
         Schema::create('mst_event_content', function (Blueprint $table) {
+            $table->string('id')->primary()->comment('ID（{mst_event_id}:{content_type}:{content_mst_id}）');
             $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
             $table->string('mst_event_id')->comment('mst_eventテーブルのID');
             $table->string('content_type')->comment('コンテンツの種別 (gacha / login_bonus / reward_track / trade / mission / ranking)');
@@ -64,7 +65,7 @@ return new class extends Migration
             $table->dateTime('created_at')->default(DB::raw('CURRENT_TIMESTAMP'))->comment('作成日時');
             $table->dateTime('updated_at')->default(DB::raw('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'))->comment('更新日時');
 
-            $table->primary(['mst_event_id', 'content_type', 'content_mst_id'], 'pk_event_content');
+            $table->unique(['mst_event_id', 'content_type', 'content_mst_id'], 'uk_event_content');
             $table->index('deploy_key');
             $table->index(['content_type', 'content_mst_id']);
         });

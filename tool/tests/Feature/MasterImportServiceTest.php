@@ -19,15 +19,20 @@ use Tests\TestCase;
 class MasterImportServiceTest extends TestCase
 {
     private const TABLES = [
-        'mst_unit_level' => 'id VARCHAR(255) NOT NULL PRIMARY KEY, rarity ENUM(\'UR\',\'SSR\',\'SR\',\'R\',\'UC\',\'C\') NOT NULL, level INT UNSIGNED NOT NULL, UNIQUE KEY uk_unit_level (rarity, level)',
-        'mst_equipment_level' => 'id VARCHAR(255) NOT NULL PRIMARY KEY, rarity ENUM(\'UR\',\'SSR\',\'SR\',\'R\',\'UC\',\'C\') NOT NULL, level INT UNSIGNED NOT NULL, UNIQUE KEY uk_equipment_level (rarity, level)',
-        'mst_player_level' => 'id VARCHAR(255) NOT NULL PRIMARY KEY, level INT UNSIGNED NOT NULL, UNIQUE KEY uk_player_level (level)',
-        'mst_unit' => 'id VARCHAR(255) NOT NULL PRIMARY KEY, rarity ENUM(\'UR\',\'SSR\',\'SR\',\'R\',\'UC\',\'C\') NOT NULL',
-        'mst_mailbox_content' => 'id INT UNSIGNED NOT NULL PRIMARY KEY, rarity ENUM(\'C\',\'UC\',\'R\',\'SR\',\'SSR\',\'UR\') NULL',
-        'mst_gacha_prize' => 'id VARCHAR(255) NOT NULL PRIMARY KEY, rarity TINYINT UNSIGNED NOT NULL',
-        'mst_equipment' => 'id VARCHAR(255) NOT NULL PRIMARY KEY, rarity ENUM(\'UR\',\'SSR\',\'SR\',\'R\',\'UC\',\'C\') NOT NULL',
-        'mst_item' => 'id VARCHAR(255) NOT NULL PRIMARY KEY, name VARCHAR(255) NOT NULL',
-        'mst_gacha_step_bonus' => 'id VARCHAR(255) NOT NULL PRIMARY KEY, bonus_rarity TINYINT UNSIGNED NULL',
+        'mst_unit_level' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, rarity ENUM(\'UR\',\'SSR\',\'SR\',\'R\',\'UC\',\'C\') NOT NULL, level INT UNSIGNED NOT NULL, UNIQUE KEY uk_unit_level (rarity, level)',
+        'mst_equipment_level' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, rarity ENUM(\'UR\',\'SSR\',\'SR\',\'R\',\'UC\',\'C\') NOT NULL, level INT UNSIGNED NOT NULL, UNIQUE KEY uk_equipment_level (rarity, level)',
+        'mst_player_level' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, level INT UNSIGNED NOT NULL, UNIQUE KEY uk_player_level (level)',
+        'mst_unit' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, rarity ENUM(\'UR\',\'SSR\',\'SR\',\'R\',\'UC\',\'C\') NOT NULL',
+        'mst_mailbox_content' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, mst_mailbox_id VARCHAR(191) NOT NULL, content_type VARCHAR(191) NOT NULL, content_mst_id VARCHAR(191) NOT NULL, rarity ENUM(\'C\',\'UC\',\'R\',\'SR\',\'SSR\',\'UR\') NULL, UNIQUE KEY uk_mailbox_content (mst_mailbox_id, content_type, content_mst_id)',
+        'mst_event_content' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, mst_event_id VARCHAR(191) NOT NULL, content_type VARCHAR(191) NOT NULL, content_mst_id VARCHAR(191) NOT NULL, UNIQUE KEY uk_event_content (mst_event_id, content_type, content_mst_id)',
+        'mst_mission_content' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, mst_mission_id VARCHAR(191) NOT NULL, content_type VARCHAR(191) NOT NULL, content_mst_id VARCHAR(191) NOT NULL, UNIQUE KEY uk_mission_content (mst_mission_id, content_type, content_mst_id)',
+        'mst_reward_track_content' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, mst_reward_track_milestone_id VARCHAR(191) NOT NULL, mst_reward_track_line_id VARCHAR(191) NOT NULL, content_type VARCHAR(191) NOT NULL, content_mst_id VARCHAR(191) NOT NULL, UNIQUE KEY uk_reward_track_content (mst_reward_track_milestone_id, mst_reward_track_line_id, content_type, content_mst_id)',
+        'mst_tag_content' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, mst_tag_id VARCHAR(191) NOT NULL, content_type VARCHAR(191) NOT NULL, content_mst_id VARCHAR(191) NOT NULL, UNIQUE KEY uk_tag_content (mst_tag_id, content_type, content_mst_id)',
+        'mst_trade_product_content' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, mst_trade_product_id VARCHAR(191) NOT NULL, content_type VARCHAR(191) NOT NULL, content_mst_id VARCHAR(191) NOT NULL, UNIQUE KEY uk_trade_product_content (mst_trade_product_id, content_type, content_mst_id)',
+        'mst_gacha_prize' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, rarity TINYINT UNSIGNED NOT NULL',
+        'mst_equipment' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, rarity ENUM(\'UR\',\'SSR\',\'SR\',\'R\',\'UC\',\'C\') NOT NULL',
+        'mst_item' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, name VARCHAR(191) NOT NULL',
+        'mst_gacha_step_bonus' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, bonus_rarity TINYINT UNSIGNED NULL',
     ];
 
     private const ALL_RARITIES = ['UR', 'SSR', 'SR', 'R', 'UC', 'C'];
@@ -93,17 +98,31 @@ class MasterImportServiceTest extends TestCase
     {
         $rows = [];
         foreach (self::ALL_RARITIES as $i => $rarity) {
-            $rows[] = ['id' => (string) ($i + 1), 'rarity' => $rarity];
+            $rows[] = $this->mailboxRow('item_'.($i + 1), $rarity);
         }
-        $rows[] = ['id' => '7', 'rarity' => ''];
+        $rows[] = $this->mailboxRow('item_7', '');
 
-        (new MasterImportService)->import('mst_mailbox_content', ['id', 'rarity'], $rows);
+        (new MasterImportService)->import('mst_mailbox_content', ['id', 'mst_mailbox_id', 'content_type', 'content_mst_id', 'rarity'], $rows);
 
-        $saved = DB::connection('mst')->table('mst_mailbox_content')->pluck('rarity', 'id')->all();
+        $saved = DB::connection('mst')->table('mst_mailbox_content')->pluck('rarity', 'content_mst_id')->all();
         foreach (self::ALL_RARITIES as $i => $rarity) {
-            $this->assertSame($rarity, $saved[$i + 1]);
+            $this->assertSame($rarity, $saved['item_'.($i + 1)]);
         }
-        $this->assertNull($saved[7]);
+        $this->assertNull($saved['item_7']);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function mailboxRow(string $contentMstId, string $rarity): array
+    {
+        return [
+            'id' => 'mail_001:item:'.$contentMstId,
+            'mst_mailbox_id' => 'mail_001',
+            'content_type' => 'item',
+            'content_mst_id' => $contentMstId,
+            'rarity' => $rarity,
+        ];
     }
 
     #[Test]
@@ -253,7 +272,7 @@ class MasterImportServiceTest extends TestCase
             'id が空' => [['id', 'rarity', 'level'], [$ok, ['id' => '', 'rarity' => 'SR', 'level' => '2']], 'id が空'],
             'id が重複' => [['id', 'rarity', 'level'], [$ok, $ok], '重複'],
             'id が大文字小文字違いで重複' => [['id', 'rarity', 'level'], [$ok, ['id' => 'ur:1', 'rarity' => 'SR', 'level' => '1']], '重複'],
-            'id が 255 文字超' => [['id', 'rarity', 'level'], [['id' => str_repeat('a', 256), 'rarity' => 'UR', 'level' => '1']], '255 文字'],
+            'id が 191 文字超' => [['id', 'rarity', 'level'], [['id' => str_repeat('a', 192), 'rarity' => 'UR', 'level' => '1']], '191 文字'],
             'id が規則と違う' => [['id', 'rarity', 'level'], [['id' => 'UR:2', 'rarity' => 'UR', 'level' => '1']], '規則'],
         ];
     }
@@ -277,6 +296,15 @@ class MasterImportServiceTest extends TestCase
         }
 
         $this->assertSame(['C:1'], DB::connection('mst')->table('mst_unit_level')->pluck('id')->all());
+    }
+
+    #[Test]
+    public function idがちょうど191文字なら取り込める(): void
+    {
+        $id = str_repeat('a', 191);
+        $result = (new MasterImportService)->import('mst_item', ['id', 'name'], [['id' => $id, 'name' => 'x']]);
+
+        $this->assertSame(1, $result['inserted']);
     }
 
     #[Test]
@@ -339,5 +367,146 @@ class MasterImportServiceTest extends TestCase
         } finally {
             DB::connection('mst')->statement('DROP TABLE IF EXISTS `mst_no_id_table`');
         }
+    }
+
+    // ========================================
+    // *_content 系の id（親 ID・content_type・content_mst_id を ':' でつなぐ）
+    // ========================================
+
+    /**
+     * @return array<string, array{string, list<string>}>
+     */
+    public static function contentTables(): array
+    {
+        return [
+            'mst_event_content' => ['mst_event_content', ['mst_event_id']],
+            'mst_mailbox_content' => ['mst_mailbox_content', ['mst_mailbox_id']],
+            'mst_mission_content' => ['mst_mission_content', ['mst_mission_id']],
+            'mst_reward_track_content' => ['mst_reward_track_content', ['mst_reward_track_milestone_id', 'mst_reward_track_line_id']],
+            'mst_tag_content' => ['mst_tag_content', ['mst_tag_id']],
+            'mst_trade_product_content' => ['mst_trade_product_content', ['mst_trade_product_id']],
+        ];
+    }
+
+    /**
+     * @param  list<string>  $parentColumns
+     * @return array<string, string>
+     */
+    private function contentRow(array $parentColumns, string $parentValue, string $contentType, string $contentMstId): array
+    {
+        $row = [];
+        $parts = [];
+        foreach ($parentColumns as $column) {
+            $row[$column] = $parentValue;
+            $parts[] = $parentValue;
+        }
+        $row['content_type'] = $contentType;
+        $row['content_mst_id'] = $contentMstId;
+        $parts[] = $contentType;
+        $parts[] = $contentMstId;
+
+        return ['id' => implode(':', $parts)] + $row;
+    }
+
+    /**
+     * @param  list<string>  $parentColumns
+     */
+    #[Test]
+    #[DataProvider('contentTables')]
+    public function content系は規則どおりのidなら取り込める(string $table, array $parentColumns): void
+    {
+        $rows = [
+            $this->contentRow($parentColumns, 'parent_a', 'item', 'item_potion'),
+            // 最後の列（content_mst_id）は ':' を含んでよい
+            $this->contentRow($parentColumns, 'parent_a', 'item', 'item:with:colon'),
+        ];
+
+        $result = (new MasterImportService)->import($table, array_keys($rows[0]), $rows);
+
+        $this->assertSame(2, $result['inserted']);
+        $this->assertSame(2, DB::connection('mst')->table($table)->count());
+    }
+
+    /**
+     * @param  list<string>  $parentColumns
+     */
+    #[Test]
+    #[DataProvider('contentTables')]
+    public function content系はidが規則と違えば中止され既存の行が残る(string $table, array $parentColumns): void
+    {
+        $seed = $this->contentRow($parentColumns, 'parent_a', 'item', 'old');
+        DB::connection('mst')->table($table)->insert($seed);
+
+        $bad = $this->contentRow($parentColumns, 'parent_a', 'item', 'new');
+        $bad['id'] = 'something_else';
+
+        try {
+            (new MasterImportService)->import($table, array_keys($bad), [$bad]);
+            $this->fail('RuntimeException が投げられるはず');
+        } catch (RuntimeException $e) {
+            $this->assertStringContainsString('規則', $e->getMessage());
+            $this->assertStringContainsString('既存のデータは変更していません', $e->getMessage());
+        }
+
+        $this->assertSame([$seed['id']], DB::connection('mst')->table($table)->pluck('id')->all());
+    }
+
+    /**
+     * @param  list<string>  $parentColumns
+     */
+    #[Test]
+    #[DataProvider('contentTables')]
+    public function content系は親_i_dにコロンを含む行を拒否し既存の行が残る(string $table, array $parentColumns): void
+    {
+        $seed = $this->contentRow($parentColumns, 'parent_a', 'item', 'old');
+        DB::connection('mst')->table($table)->insert($seed);
+
+        // 規則どおりの id でも、親 ID に ':' があれば拒否する（a:b + c と a + b:c が同じ id になりうる）
+        $bad = $this->contentRow($parentColumns, 'parent:a', 'item', 'new');
+
+        try {
+            (new MasterImportService)->import($table, array_keys($bad), [$bad]);
+            $this->fail('RuntimeException が投げられるはず');
+        } catch (RuntimeException $e) {
+            $this->assertStringContainsString($parentColumns[0], $e->getMessage());
+            $this->assertStringContainsString('行 2', $e->getMessage());
+            $this->assertStringContainsString('既存のデータは変更していません', $e->getMessage());
+        }
+
+        $this->assertSame([$seed['id']], DB::connection('mst')->table($table)->pluck('id')->all());
+    }
+
+    /**
+     * @param  list<string>  $parentColumns
+     */
+    #[Test]
+    #[DataProvider('contentTables')]
+    public function content系はcontent_typeにコロンを含む行を拒否する(string $table, array $parentColumns): void
+    {
+        $bad = $this->contentRow($parentColumns, 'parent_a', 'item:x', 'new');
+
+        try {
+            (new MasterImportService)->import($table, array_keys($bad), [$bad]);
+            $this->fail('RuntimeException が投げられるはず');
+        } catch (RuntimeException $e) {
+            $this->assertStringContainsString('content_type', $e->getMessage());
+        }
+
+        $this->assertSame(0, DB::connection('mst')->table($table)->count());
+    }
+
+    /**
+     * @param  list<string>  $parentColumns
+     */
+    #[Test]
+    #[DataProvider('contentTables')]
+    public function content系はid列が無いシートを中止する(string $table, array $parentColumns): void
+    {
+        $row = $this->contentRow($parentColumns, 'parent_a', 'item', 'x');
+        unset($row['id']);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('id 列がありません');
+        (new MasterImportService)->import($table, array_keys($row), [$row]);
     }
 }

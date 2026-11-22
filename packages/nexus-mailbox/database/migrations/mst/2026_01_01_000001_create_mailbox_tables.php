@@ -100,6 +100,7 @@ return new class extends Migration
         // mst_mailbox_content: メールボックスコンテンツ
         // ========================================
         Schema::create('mst_mailbox_content', function (Blueprint $table) {
+            $table->string('id')->primary()->comment('ID（{mst_mailbox_id}:{content_type}:{content_mst_id}）');
             $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
             $table->string('mst_mailbox_id')->comment('メールボックスID');
             $table->enum('content_type', [
@@ -124,9 +125,8 @@ return new class extends Migration
             $table->dateTime('created_at')->default(DB::raw('CURRENT_TIMESTAMP'))->comment('作成日時');
             $table->dateTime('updated_at')->default(DB::raw('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'))->comment('更新日時');
 
-            $table->primary(['mst_mailbox_id', 'content_type', 'content_mst_id'], 'pk_mailbox_content');
+            $table->unique(['mst_mailbox_id', 'content_type', 'content_mst_id'], 'uk_mailbox_content');
             $table->index('deploy_key');
-            $table->index('mst_mailbox_id');
         });
     }
 

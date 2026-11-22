@@ -69,7 +69,7 @@ class UpdateQueryBuilder
      */
     public function buildWhereCondition(Model $model): array
     {
-        // 複合主キーのモデル（MstMailboxContent など）は getKeyName() が配列を返す
+        // 複合主キーのモデル（MstLoginBonusContent など）は getKeyName() が配列を返す
         /** @var string|array<int, string> $primaryKey */
         $primaryKey = $model->getKeyName();
 

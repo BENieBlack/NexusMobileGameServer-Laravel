@@ -56,6 +56,7 @@ return new class extends Migration
         // タグとマスターの中間テーブル（多対多）
         // ------------------------------------------------
         Schema::create('mst_tag_content', function (Blueprint $table) {
+            $table->string('id')->primary()->comment('ID（{mst_tag_id}:{content_type}:{content_mst_id}）');
             $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
             $table->string('mst_tag_id')->comment('mst_tagテーブルのID');
             $table->string('content_type')->comment('タグを付ける対象の種別 (unit / equipment / item)');
@@ -64,7 +65,7 @@ return new class extends Migration
             $table->dateTime('updated_at')->default(DB::raw('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'))->comment('更新日時');
 
             // 同じ対象に同じタグを二重に付けない
-            $table->primary(['mst_tag_id', 'content_type', 'content_mst_id'], 'pk_tag_content');
+            $table->unique(['mst_tag_id', 'content_type', 'content_mst_id'], 'uk_tag_content');
             $table->index('deploy_key');
             // 「この対象のタグ一覧」を引くための索引（主キーは mst_tag_id が先頭で使えない）
             $table->index(['content_type', 'content_mst_id'], 'idx_tag_content_target');

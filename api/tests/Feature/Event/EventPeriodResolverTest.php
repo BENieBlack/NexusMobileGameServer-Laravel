@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Event;
 
+use App\Models\Mst\MstEventContent;
 use Illuminate\Support\Facades\DB;
 use Nexus\Core\Utilities\ClockUtility;
 use NexusEvent\Constants\EventContentType;
@@ -35,9 +36,9 @@ class EventPeriodResolverTest extends TestCase
             ['id' => 'event_test_b', 'start_at' => '2026-12-01 10:00:00', 'end_at' => '2026-12-08 10:00:00', 'exchange_end_at' => '2026-12-10 10:00:00', 'sort_order' => 2],
         ]);
         DB::connection('mst')->table('mst_event_content')->insert([
-            ['mst_event_id' => 'event_test_a', 'content_type' => EventContentType::GACHA, 'content_mst_id' => 'gacha_test_reuse', 'sort_order' => 2],
-            ['mst_event_id' => 'event_test_b', 'content_type' => EventContentType::GACHA, 'content_mst_id' => 'gacha_test_reuse', 'sort_order' => 1],
-            ['mst_event_id' => 'event_test_a', 'content_type' => EventContentType::TRADE, 'content_mst_id' => 'trade_test_only_a', 'sort_order' => 1],
+            ['id' => MstEventContent::makeId('event_test_a', EventContentType::GACHA, 'gacha_test_reuse'), 'mst_event_id' => 'event_test_a', 'content_type' => EventContentType::GACHA, 'content_mst_id' => 'gacha_test_reuse', 'sort_order' => 2],
+            ['id' => MstEventContent::makeId('event_test_b', EventContentType::GACHA, 'gacha_test_reuse'), 'mst_event_id' => 'event_test_b', 'content_type' => EventContentType::GACHA, 'content_mst_id' => 'gacha_test_reuse', 'sort_order' => 1],
+            ['id' => MstEventContent::makeId('event_test_a', EventContentType::TRADE, 'trade_test_only_a'), 'mst_event_id' => 'event_test_a', 'content_type' => EventContentType::TRADE, 'content_mst_id' => 'trade_test_only_a', 'sort_order' => 1],
         ]);
 
         $this->refreshMstCache();
