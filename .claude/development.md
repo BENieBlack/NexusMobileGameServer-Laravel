@@ -18,7 +18,7 @@ DB 接続・マイグレーションの置き場所は [database.md](./database.
 | db-admin | 63060 | `{APP_NAME}-{APP_ENV}-admin` と `nexus-testing-admin`（tool のテスト用） |
 | db-tool | 63061 | `{APP_NAME}-{APP_ENV}-tool` |
 | db-system | 63062 | `-system` と `nexus-testing-system`、`nexus-testing-tool-system`（tool のテスト用） |
-| db-master | 63063 | `-master` と `nexus-testing-master` |
+| db-master | 63063 | `-master` と `nexus-testing-master`、`nexus-testing-tool-master`（tool のテスト用） |
 | db-shard1〜3 | 63161〜63163 | `-shard` と `nexus-testing-shard`（DB名は全シャード共通）。shard1・2 には `nexus-testing-tool-shard`（tool のテスト用）も |
 | redis | 63790 | キャッシュ（`CACHE_STORE=redis`）。冪等キーやシャード割当のキャッシュもここに入る |
 

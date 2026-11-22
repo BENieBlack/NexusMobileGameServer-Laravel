@@ -50,7 +50,7 @@ docker compose exec -T tool-php php artisan migrate --path=database/migrations/t
 `MasterImportController`。
 
 1. Google スプレッドシートの一覧・シート・プレビューを取る（`GoogleSpreadsheetService`。`TOL_GOOGLE_SPREADSHEET_DIR` と `TOL_GOOGLE_SERVICE_ACCOUNT_JSON` か `TOL_GOOGLE_SERVICE_ACCOUNT_JSON_CONTENT` が必要）。`.言語コード` の付いた列は `<親>__l10n` の行に展開する
-2. インポート（`POST /master-import/execute`）: `MasterImportService` が対象の mst テーブルを TRUNCATE し、500行ずつ INSERT する
+2. インポート（`POST /master-import/execute`）: `MasterImportService` が対象の mst テーブルを TRUNCATE し、500行ずつ INSERT する。`rarity` / `bonus_rarity` は列の実際の型で扱う（ENUM は `UR` 等の文字列のまま、整数列は UR=6 … C=1 の数値へ変換）。列に入れられない値は TRUNCATE の前にエラーにする
 3. エクスポート（`POST /master-import/export`）:
    - `MasterDataExporter` が mst の `mst_*` テーブルをグループ（親テーブルと `__l10n`）ごとの SQLite に書き出し、`tool/public/masterdata/{マニフェストハッシュ}/{グループ}_{ハッシュ}.sqlite` に置く
    - `MasterDeployService::register()` が `sys_deploy_master` と `sys_deploy_master_table` に登録し、ダミーの `sys_deploy_asset` を作る。既存の `sys_deploy` を全て `is_active = false` にし、新しい `sys_deploy` を `start_at` = 現在時刻・`is_active = true` で入れる（即時公開）

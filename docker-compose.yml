@@ -149,7 +149,7 @@ services:
     container_name: db-master
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
-      DB_NAMES: "${APP_NAME:-nexus}-${APP_ENV:-local}-master ${APP_NAME:-nexus}-testing-master"
+      DB_NAMES: "${APP_NAME:-nexus}-${APP_ENV:-local}-master ${APP_NAME:-nexus}-testing-master ${APP_NAME:-nexus}-testing-tool-master"
     ports:
       - "63063:3306"
     volumes:
