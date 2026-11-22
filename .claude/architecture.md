@@ -248,6 +248,7 @@ api/app/Providers/AppServiceProvider                                 ← bind(�
 - 共用の件数・残高は、行ロックより原子的な UPDATE（`SET n = n + 1`、条件つき UPDATE の影響行数で成否判定）で足りる場合がある。trx の「読む → メモリで計算 → 絶対値で UPDATE」の規約とは別の書き方なので、使うときは Repository のメソッドに閉じ込める。
 - **他人が書く行は、原則 sys に置く**（`database.md` の「trx は本人だけが読み書きする」と揃える）。trx に他人が書く行を作るなら、設計変更として扱う。
 - 他人のデータが別シャード（trx1〜3）にある場合、または trx と sys をまたぐ場合は、1つのトランザクションで両方をロックできない。まず別機能として設計する。この規約では決めない。
+- Repository の行ロック読みは、基底の `selectForUpdate()`（Builder の作りは Sys / Trx の各基底に残してあり、Sys は固定の接続、Trx は `getConnection()` で決めた接続を使う）を使う。トランザクション外の検査は `_BaseRepository::assertInTransactionForLock()`、「キャッシュに同じ行があれば最新の値で差し替える」処理は `replaceCachedModelIfPresent()` に共通化してあり、外で呼ぶと `LogicException`（「トランザクションの中で呼ぶこと」）になる。**未統合**: `ChatRoomRepositoryAdapter`（229 行付近）と `ChatRoomMemberRepositoryAdapter`（144 行付近）は private の `assertInTransaction()` で同じ趣旨の検査を持ち、例外メッセージが Sys / Trx（「トランザクションの中で呼ぶこと」）とずれている。
 - 行ロックは Repository のメソッドに閉じ込める（例: `selectByIdForUpdate()`）。`lockForUpdate()` を UseCase / Service / Controller に書かない。書き込みは従来どおり `setModel()` でキューに積む。trx の行をロックするメソッドは、`setConnection()` で接続を固定する。`_BaseRepository` が `connection` と `connectionExplicitlySet` を設定し、明示すると自動シャード解決を止める。バッチ向けには `forgetCachedModels()` とセットで使う（`api/app/Console/Commands/Mailbox/DeleteExpiredCommand.php` が参考）。
 - 既存の `WalletItemMigrator`（`api/app/Domain/Item/Support/`）は、Domain 層で `lockForUpdate()` を呼び、`moveRow` が `DB::connection($connection)` も直書きしている（「Repository に閉じ込める」の例外）。バッチはメンテナンス中に流す運用に頼っている実例で、通常運用で流すなら上の `trx_item` の行を見直す。
 

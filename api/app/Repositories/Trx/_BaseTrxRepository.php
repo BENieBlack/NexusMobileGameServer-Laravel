@@ -4,7 +4,6 @@ namespace App\Repositories\Trx;
 
 use App\Persistence\ApiSession;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Facades\DB;
 use Nexus\Core\Repositories\Trx\_BaseTrxRepository as PersistenceBaseTrxRepository;
 use Nexus\Core\UnitOfWork\Traits\UsesUnitOfWork;
 
@@ -65,8 +64,7 @@ abstract class _BaseTrxRepository extends PersistenceBaseTrxRepository implement
      * 呼び出し側が getIsDelete() などで判定すること。
      * 接続は getConnection() に固定する（setConnection() 済みならバッチが切り替えた
      * シャード、そうでなければログイン中プレイヤーのシャード）。
-     * トランザクションの外で呼ぶとロックが即座に外れて何も守れないため、
-     * 外で呼ばれたら例外にして気づけるようにする。
+     * トランザクションの外で呼ぶと例外にする（検査は _BaseRepository に共通化）。
      *
      * @return Builder<T>
      *
@@ -76,13 +74,7 @@ abstract class _BaseTrxRepository extends PersistenceBaseTrxRepository implement
     {
         $connection = $this->getConnection();
 
-        if (DB::connection($connection)->transactionLevel() === 0) {
-            throw new \LogicException(sprintf(
-                '%s: 行ロックはトランザクション内でしか効かない。トランザクションの中で呼ぶこと（接続: %s）',
-                static::class,
-                $connection
-            ));
-        }
+        $this->assertInTransactionForLock($connection);
 
         /** @var Builder<T> */
         return $this->modelClass::on($connection)->lockForUpdate();

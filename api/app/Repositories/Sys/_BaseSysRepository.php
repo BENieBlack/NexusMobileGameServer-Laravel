@@ -4,7 +4,6 @@ namespace App\Repositories\Sys;
 
 use App\Persistence\ApiSession;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Facades\DB;
 use Nexus\Core\Repositories\Sys\_BaseSysRepository as PersistenceBaseSysRepository;
 use Nexus\Core\UnitOfWork\Traits\UsesUnitOfWork;
 
@@ -39,8 +38,7 @@ abstract class _BaseSysRepository extends PersistenceBaseSysRepository implement
      *
      * キャッシュにも更新キューにも載せず、常に DB の最新の行を読む。
      * 接続は $connection（sys）に固定する。
-     * トランザクションの外で呼ぶとロックが即座に外れて何も守れないため、
-     * 外で呼ばれたら例外にして気づけるようにする。
+     * トランザクションの外で呼ぶと例外にする（検査は _BaseRepository に共通化）。
      *
      * @return Builder<T>
      *
@@ -48,12 +46,7 @@ abstract class _BaseSysRepository extends PersistenceBaseSysRepository implement
      */
     protected function selectForUpdate(): Builder
     {
-        if (DB::connection($this->connection)->transactionLevel() === 0) {
-            throw new \LogicException(sprintf(
-                '%s: 行ロックはトランザクション内でしか効かない。executeWithTransaction() の中で呼ぶこと',
-                static::class
-            ));
-        }
+        $this->assertInTransactionForLock($this->connection);
 
         return $this->selectWithoutCache()->lockForUpdate();
     }
