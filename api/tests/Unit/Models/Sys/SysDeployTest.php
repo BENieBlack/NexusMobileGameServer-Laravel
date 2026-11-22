@@ -25,12 +25,29 @@ class SysDeployTest extends TestCase
     #[Test]
     public function デプロイキーを年月日と連番に分解する(): void
     {
-        $deploy = $this->makeDeploy(['deploy_key' => 202603153]);
+        $deploy = $this->makeDeploy(['deploy_key' => 2026031503]);
 
         $this->assertSame(
             ['year' => 2026, 'month' => 3, 'day' => 15, 'count' => 3],
             $deploy->parseDeployKey()
         );
+    }
+
+    #[Test]
+    public function デプロイキーの連番は2桁で読む(): void
+    {
+        $deploy = $this->makeDeploy(['deploy_key' => 2026031512]);
+
+        $this->assertSame(12, $deploy->parseDeployKey()['count']);
+    }
+
+    #[Test]
+    public function deploy_keyは整数にキャストされる(): void
+    {
+        // makeDeploy は DB に書かない（現スキーマでは int の上限を超える。S3-2 後に実行のテストを足す）
+        $deploy = $this->makeDeploy(['deploy_key' => '9999999999']);
+
+        $this->assertSame(9999999999, $deploy->deploy_key);
     }
 
     #[Test]

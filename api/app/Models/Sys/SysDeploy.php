@@ -5,6 +5,7 @@ namespace App\Models\Sys;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Nexus\Core\Utilities\ClockUtility;
+use NexusVersion\Constants\DeployKeyConst;
 
 /**
  * SysDeploy Model
@@ -46,6 +47,7 @@ class SysDeploy extends _BaseSys
      */
     /** @var array<string, string> */
     protected $casts = [
+        'deploy_key' => 'integer',
         'is_active' => 'boolean',
     ];
 
@@ -144,7 +146,7 @@ class SysDeploy extends _BaseSys
     }
 
     /**
-     * デプロイキーから年月日とカウントを取得
+     * デプロイキー（10 桁の YYYYMMDDNN）から年月日とカウントを取得
      *
      * @return array{year: int, month: int, day: int, count: int}
      */
@@ -156,7 +158,7 @@ class SysDeploy extends _BaseSys
             'year' => (int) substr($keyString, 0, 4),
             'month' => (int) substr($keyString, 4, 2),
             'day' => (int) substr($keyString, 6, 2),
-            'count' => (int) substr($keyString, 8, 1),
+            'count' => (int) substr($keyString, 8, 2),
         ];
     }
 
@@ -209,12 +211,31 @@ class SysDeploy extends _BaseSys
     }
 
     /**
+     * 「最新」の並びと本番ガードを付ける（スコープ）
+     *
+     * deploy_key 降順 → id 降順。本番（APP_ENV=production）は予約帯を除く。
+     * SysDeployRepository と同じ定義（設計: Nexus db.md 3.3）
+     *
+     * @param  Builder<self>  $query
+     * @return Builder<self>
+     */
+    public function scopeLatestOrder($query)
+    {
+        if (app()->isProduction()) {
+            $query->where('deploy_key', '<', DeployKeyConst::RESERVED_FLOOR);
+        }
+
+        return $query->orderBy('deploy_key', 'desc')
+            ->orderBy('id', 'desc');
+    }
+
+    /**
      * 最新のダウンロード可能なデプロイを取得
      */
     public static function selectLatestDownloadable(): ?self
     {
         return static::downloadable()
-            ->orderBy('deploy_key', 'desc')
+            ->latestOrder()
             ->first();
     }
 
