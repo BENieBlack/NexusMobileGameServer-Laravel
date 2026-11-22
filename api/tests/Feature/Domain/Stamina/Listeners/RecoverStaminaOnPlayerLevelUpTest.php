@@ -5,6 +5,7 @@ namespace Tests\Feature\Domain\Stamina\Listeners;
 use App\Domain\MstConfig\Constants\MstConfigKey;
 use App\Domain\Stamina\Constants\StaminaConst;
 use App\Domain\Stamina\Listeners\RecoverStaminaOnPlayerLevelUp;
+use App\Models\Mst\MstPlayerLevel;
 use App\Persistence\ApiSession;
 use App\Repositories\Mst\MstConfigRepository;
 use Illuminate\Support\Facades\DB;
@@ -48,6 +49,7 @@ class RecoverStaminaOnPlayerLevelUpTest extends TestCase
 
         $this->cleanUp();
         DB::connection('mst')->table('mst_player_level')->insert([
+            'id' => MstPlayerLevel::makeId(2),
             'deploy_key' => self::DEPLOY_KEY,
             'level' => 2,
             'required_exp' => 50,

@@ -108,11 +108,9 @@ API（api/）の接続は `api/config/database.php`、Tool（tool/）の接続�
   - 検査: `api/tests/Architecture/MstNoAutoIncrementIdTest.php`（`packages/*/database/migrations/mst/` と `api/database/migrations/mst/` を走査。Laravel 標準の cache / jobs 系は対象外）。
   - 解消待ち（作り直しがモデル・シーダー・テストへ波及するため、検査の `PENDING_VIOLATIONS` に載せて通している。直したら一覧から消す。消し忘れも失敗する）: `mst_billing_platform_product`、`mst_in_app_purchase`（`packages/nexus-core-billing`）、`mst_vip_login_bonus_content`（`packages/nexus-vip`）。新しい違反を足してはならない。
 - **string の `id` 必須の検査**: `api/tests/Architecture/MstRequiresStringIdTest.php`（走査の範囲は上と同じ。`__l10n` と Laravel 標準は対象外）。`PENDING_VIOLATIONS` の流儀も同じで、直したら一覧から消す（消し忘れも失敗する）。
-  - 解消待ち（`id` 列を持たない 16 テーブル）:
+  - 解消待ち（`id` 列を持たない 13 テーブル。`mst_unit_level`・`mst_equipment_level`・`mst_player_level` は解消済み）:
     - `packages/nexus-core-billing`: `mst_billing_platform_product`、`mst_in_app_purchase`（AUTO_INCREMENT の解消待ちと重複）、`mst_in_app_purchase_content`、`mst_in_app_purchase_effect`
-    - `packages/nexus-core`: `mst_unit_level`、`mst_equipment_level`
     - `packages/nexus-event`: `mst_event_content`
-    - `packages/nexus-level`: `mst_player_level`（主キーは `level`）
     - `packages/nexus-login`: `mst_login_bonus_content`
     - `packages/nexus-mailbox`: `mst_mailbox_content`
     - `packages/nexus-mission`: `mst_mission_content`

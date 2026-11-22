@@ -103,11 +103,11 @@ class MstPlayerLevelTest extends TestCase
     #[Test]
     public function レスポンス用の配列にレベルが載る(): void
     {
-        // 主キーがlevelでidを持たないため、置き換えは起きない
+        // 主キーは string の id（level の文字列）。level 列はそのまま載る
         $array = MstPlayerLevel::findByLevel(3)?->toResponseArray() ?? [];
 
         $this->assertSame(3, $array['level']);
-        $this->assertArrayNotHasKey('id', $array);
+        $this->assertSame('3', $array['id']);
     }
 
     private function makeLevels(): void
@@ -117,6 +117,7 @@ class MstPlayerLevelTest extends TestCase
         DB::connection('mst')->table('mst_player_level')->insert(
             array_map(
                 fn (int $level, array $spec) => [
+                    'id' => MstPlayerLevel::makeId($level),
                     'level' => $level,
                     'required_exp' => $spec[0],
                     'max_stamina' => $spec[1],

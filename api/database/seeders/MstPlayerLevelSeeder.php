@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\Mst\MstPlayerLevel;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Nexus\Core\Models\Mst\_BaseMst;
@@ -55,6 +56,7 @@ class MstPlayerLevelSeeder extends Seeder
 
         for ($level = 1; $level <= self::MAX_LEVEL; $level++) {
             $levels[] = [
+                'id' => MstPlayerLevel::makeId($level),
                 'level' => $level,
                 'deploy_key' => self::DEPLOY_KEY,
                 'required_exp' => $this->calculateRequiredExp($level),

@@ -9,6 +9,7 @@ use App\Exceptions\BusinessLogicException;
 use App\Exceptions\GameException;
 use App\Exceptions\MasterDataException;
 use App\Exceptions\TransactionDataException;
+use App\Models\Mst\MstUnitLevel;
 use App\Persistence\ApiSession;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\Test;
@@ -326,6 +327,7 @@ class UnitLevelUpTest extends TestCase
         DB::connection('mst')->table('mst_unit_level')->insert(
             array_map(
                 fn (int $level, int $requiredExp) => [
+                    'id' => MstUnitLevel::makeId('SR', $level),
                     'rarity' => 'SR',
                     'level' => $level,
                     'required_exp' => $requiredExp,

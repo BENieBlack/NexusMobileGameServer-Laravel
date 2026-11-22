@@ -9,6 +9,7 @@ use App\Exceptions\GameErrorCode;
 use App\Exceptions\GameException;
 use App\Exceptions\MasterDataException;
 use App\Exceptions\TransactionDataException;
+use App\Models\Mst\MstEquipmentLevel;
 use App\Persistence\ApiSession;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\Test;
@@ -343,6 +344,7 @@ class EquipmentLevelUpValidationTest extends TestCase
         DB::connection('mst')->table('mst_equipment_level')->insert(
             array_map(
                 fn (int $level, int $requiredExp) => [
+                    'id' => MstEquipmentLevel::makeId('SR', $level),
                     'rarity' => 'SR',
                     'level' => $level,
                     'required_exp' => $requiredExp,

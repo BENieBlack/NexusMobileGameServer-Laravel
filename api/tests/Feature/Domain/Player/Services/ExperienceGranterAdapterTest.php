@@ -2,6 +2,9 @@
 
 namespace Tests\Feature\Domain\Player\Services;
 
+use App\Models\Mst\MstEquipmentLevel;
+use App\Models\Mst\MstPlayerLevel;
+use App\Models\Mst\MstUnitLevel;
 use App\Persistence\ApiSession;
 use Illuminate\Support\Facades\DB;
 use Nexus\Core\ResourceDelivery\Contracts\ExperienceGranterInterface;
@@ -156,9 +159,9 @@ class ExperienceGranterAdapterTest extends TestCase
     private function insertTestData(): void
     {
         DB::connection('mst')->table('mst_player_level')->insert([
-            ['deploy_key' => self::DEPLOY_KEY, 'level' => 1, 'required_exp' => 0, 'max_stamina' => 50, 'created_at' => now(), 'updated_at' => now()],
-            ['deploy_key' => self::DEPLOY_KEY, 'level' => 2, 'required_exp' => 100, 'max_stamina' => 55, 'created_at' => now(), 'updated_at' => now()],
-            ['deploy_key' => self::DEPLOY_KEY, 'level' => 3, 'required_exp' => 500, 'max_stamina' => 60, 'created_at' => now(), 'updated_at' => now()],
+            ['id' => MstPlayerLevel::makeId(1), 'deploy_key' => self::DEPLOY_KEY, 'level' => 1, 'required_exp' => 0, 'max_stamina' => 50, 'created_at' => now(), 'updated_at' => now()],
+            ['id' => MstPlayerLevel::makeId(2), 'deploy_key' => self::DEPLOY_KEY, 'level' => 2, 'required_exp' => 100, 'max_stamina' => 55, 'created_at' => now(), 'updated_at' => now()],
+            ['id' => MstPlayerLevel::makeId(3), 'deploy_key' => self::DEPLOY_KEY, 'level' => 3, 'required_exp' => 500, 'max_stamina' => 60, 'created_at' => now(), 'updated_at' => now()],
         ]);
 
         DB::connection('mst')->table('mst_unit')->insert([
@@ -172,9 +175,9 @@ class ExperienceGranterAdapterTest extends TestCase
         ]);
 
         DB::connection('mst')->table('mst_unit_level')->insert([
-            ['deploy_key' => self::DEPLOY_KEY, 'rarity' => 'SR', 'level' => 1, 'required_exp' => 0, 'created_at' => now(), 'updated_at' => now()],
-            ['deploy_key' => self::DEPLOY_KEY, 'rarity' => 'SR', 'level' => 2, 'required_exp' => 100, 'created_at' => now(), 'updated_at' => now()],
-            ['deploy_key' => self::DEPLOY_KEY, 'rarity' => 'SR', 'level' => 3, 'required_exp' => 200, 'created_at' => now(), 'updated_at' => now()],
+            ['id' => MstUnitLevel::makeId('SR', 1), 'deploy_key' => self::DEPLOY_KEY, 'rarity' => 'SR', 'level' => 1, 'required_exp' => 0, 'created_at' => now(), 'updated_at' => now()],
+            ['id' => MstUnitLevel::makeId('SR', 2), 'deploy_key' => self::DEPLOY_KEY, 'rarity' => 'SR', 'level' => 2, 'required_exp' => 100, 'created_at' => now(), 'updated_at' => now()],
+            ['id' => MstUnitLevel::makeId('SR', 3), 'deploy_key' => self::DEPLOY_KEY, 'rarity' => 'SR', 'level' => 3, 'required_exp' => 200, 'created_at' => now(), 'updated_at' => now()],
         ]);
 
         DB::connection('mst')->table('mst_equipment')->insert([
@@ -192,9 +195,9 @@ class ExperienceGranterAdapterTest extends TestCase
         ]);
 
         DB::connection('mst')->table('mst_equipment_level')->insert([
-            ['rarity' => 'SR', 'level' => 1, 'required_exp' => 0, 'created_at' => now(), 'updated_at' => now()],
-            ['rarity' => 'SR', 'level' => 2, 'required_exp' => 100, 'created_at' => now(), 'updated_at' => now()],
-            ['rarity' => 'SR', 'level' => 3, 'required_exp' => 250, 'created_at' => now(), 'updated_at' => now()],
+            ['id' => MstEquipmentLevel::makeId('SR', 1), 'rarity' => 'SR', 'level' => 1, 'required_exp' => 0, 'created_at' => now(), 'updated_at' => now()],
+            ['id' => MstEquipmentLevel::makeId('SR', 2), 'rarity' => 'SR', 'level' => 2, 'required_exp' => 100, 'created_at' => now(), 'updated_at' => now()],
+            ['id' => MstEquipmentLevel::makeId('SR', 3), 'rarity' => 'SR', 'level' => 3, 'required_exp' => 250, 'created_at' => now(), 'updated_at' => now()],
         ]);
 
         DB::connection('sys')->table('sys_player')->insert([

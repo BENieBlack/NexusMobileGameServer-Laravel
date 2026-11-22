@@ -53,6 +53,7 @@ class MstUnitLevelSeeder extends Seeder
                 $requiredExp = (int) floor(pow($level, 2) * 100 * $multiplier);
 
                 $data[] = [
+                    'id' => MstUnitLevel::makeId($rarity, $level),
                     'deploy_key' => $deployKey,
                     'rarity' => $rarity,
                     'level' => $level,

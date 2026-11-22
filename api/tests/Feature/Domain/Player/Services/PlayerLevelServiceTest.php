@@ -3,6 +3,7 @@
 namespace Tests\Feature\Domain\Player\Services;
 
 use App\Domain\Stamina\Constants\StaminaConst;
+use App\Models\Mst\MstPlayerLevel;
 use App\Persistence\ApiSession;
 use Illuminate\Support\Facades\DB;
 use Nexus\Core\UnitOfWork\Persistence\QueryManager;
@@ -235,6 +236,7 @@ class PlayerLevelServiceTest extends TestCase
 
         foreach (self::LEVELS as $level => [$requiredExp, $maxStamina]) {
             $rows[] = [
+                'id' => MstPlayerLevel::makeId($level),
                 'deploy_key' => self::DEPLOY_KEY,
                 'level' => $level,
                 'required_exp' => $requiredExp,

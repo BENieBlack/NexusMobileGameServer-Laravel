@@ -50,7 +50,8 @@ class MstPlayerLevelRepository extends _BaseMstRepository
     {
         $allRecords = $this->queryOrMemory();
 
-        return $allRecords->get($level);
+        // 鍵（id）に依存せず、level 列で探す
+        return $allRecords->where('level', $level)->first();
     }
 
     /**

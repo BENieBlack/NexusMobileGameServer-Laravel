@@ -5,6 +5,7 @@ namespace Tests\Feature\Domain\Stamina\Services;
 use App\Domain\MstConfig\Constants\MstConfigKey;
 use App\Domain\Stamina\Constants\StaminaConst;
 use App\Domain\Stamina\Services\StaminaService;
+use App\Models\Mst\MstPlayerLevel;
 use App\Persistence\ApiSession;
 use App\Repositories\Mst\MstConfigRepository;
 use Illuminate\Support\Facades\DB;
@@ -230,6 +231,7 @@ class StaminaServiceTest extends TestCase
     private function createLevelMaster(): void
     {
         DB::connection('mst')->table('mst_player_level')->insert([
+            'id' => MstPlayerLevel::makeId(1),
             'deploy_key' => self::DEPLOY_KEY,
             'level' => 1,
             'required_exp' => 0,

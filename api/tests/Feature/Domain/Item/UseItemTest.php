@@ -5,6 +5,7 @@ namespace Tests\Feature\Domain\Item;
 use App\Domain\Item\UseCases\UseItemUseCase;
 use App\Domain\Stamina\Constants\StaminaConst;
 use App\Exceptions\GameException;
+use App\Models\Mst\MstPlayerLevel;
 use App\Persistence\ApiSession;
 use Illuminate\Support\Facades\DB;
 use Nexus\Core\UnitOfWork\Persistence\QueryManager;
@@ -135,9 +136,9 @@ class UseItemTest extends TestCase
     private function insertTestData(): void
     {
         DB::connection('mst')->table('mst_player_level')->insert([
-            ['level' => 1, 'required_exp' => 0, 'max_stamina' => 50, 'created_at' => now(), 'updated_at' => now()],
-            ['level' => 2, 'required_exp' => 100, 'max_stamina' => 55, 'created_at' => now(), 'updated_at' => now()],
-            ['level' => 3, 'required_exp' => 500, 'max_stamina' => 60, 'created_at' => now(), 'updated_at' => now()],
+            ['id' => MstPlayerLevel::makeId(1), 'level' => 1, 'required_exp' => 0, 'max_stamina' => 50, 'created_at' => now(), 'updated_at' => now()],
+            ['id' => MstPlayerLevel::makeId(2), 'level' => 2, 'required_exp' => 100, 'max_stamina' => 55, 'created_at' => now(), 'updated_at' => now()],
+            ['id' => MstPlayerLevel::makeId(3), 'level' => 3, 'required_exp' => 500, 'max_stamina' => 60, 'created_at' => now(), 'updated_at' => now()],
         ]);
 
         DB::connection('mst')->table('mst_item')->insert([

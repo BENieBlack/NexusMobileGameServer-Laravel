@@ -4,6 +4,7 @@ namespace Tests\Feature\Item;
 
 use App\Domain\Stamina\Constants\StaminaConst;
 use App\Exceptions\GameErrorCode;
+use App\Models\Mst\MstPlayerLevel;
 use App\Persistence\ApiSession;
 use Database\Seeders\MstItemSeeder;
 use Illuminate\Support\Facades\DB;
@@ -205,8 +206,8 @@ class ItemEndpointTest extends TestCase
     private function createMaster(): void
     {
         DB::connection('mst')->table('mst_player_level')->insert([
-            ['level' => 1, 'required_exp' => 0, 'max_stamina' => 50, 'created_at' => now(), 'updated_at' => now()],
-            ['level' => 2, 'required_exp' => 100, 'max_stamina' => 55, 'created_at' => now(), 'updated_at' => now()],
+            ['id' => MstPlayerLevel::makeId(1), 'level' => 1, 'required_exp' => 0, 'max_stamina' => 50, 'created_at' => now(), 'updated_at' => now()],
+            ['id' => MstPlayerLevel::makeId(2), 'level' => 2, 'required_exp' => 100, 'max_stamina' => 55, 'created_at' => now(), 'updated_at' => now()],
         ]);
 
         DB::connection('mst')->table('mst_item')->insert([

@@ -3,6 +3,7 @@
 namespace Tests\Feature\Domain\Equipment;
 
 use App\Domain\Equipment\Services\EquipmentLevelService;
+use App\Models\Mst\MstEquipmentLevel;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\RefreshMultipleDatabases;
@@ -102,9 +103,9 @@ class EquipmentLevelCalculationTest extends TestCase
     private function makeLevelMaster(): void
     {
         DB::connection('mst')->table('mst_equipment_level')->insert([
-            ['rarity' => self::RARITY, 'level' => 1, 'required_exp' => 0],
-            ['rarity' => self::RARITY, 'level' => 2, 'required_exp' => 100],
-            ['rarity' => self::RARITY, 'level' => 3, 'required_exp' => 300],
+            ['id' => MstEquipmentLevel::makeId(self::RARITY, 1), 'rarity' => self::RARITY, 'level' => 1, 'required_exp' => 0],
+            ['id' => MstEquipmentLevel::makeId(self::RARITY, 2), 'rarity' => self::RARITY, 'level' => 2, 'required_exp' => 100],
+            ['id' => MstEquipmentLevel::makeId(self::RARITY, 3), 'rarity' => self::RARITY, 'level' => 3, 'required_exp' => 300],
         ]);
 
         $this->refreshMstCache();
