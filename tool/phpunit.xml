@@ -36,6 +36,8 @@
         <env name="DB_ADMIN_DATABASE" value="nexus-testing-admin"/>
         <env name="DB_SYSTEM_DATABASE" value="nexus-testing-tool-system"/>
         <env name="DB_SHARD_DATABASE" value="nexus-testing-tool-shard"/>
+        <!-- マスターのインポートのテストは mst_* を TRUNCATE するため、開発用（nexus-local-master）を指さない -->
+        <env name="DB_MASTER_DATABASE" value="nexus-testing-tool-master"/>
         <!--
             シャード数は .env（.env.example は 3）に左右されないよう固定する。
             force を付けないと既存の環境変数が優先され、環境によって trx3 まで見に行く。

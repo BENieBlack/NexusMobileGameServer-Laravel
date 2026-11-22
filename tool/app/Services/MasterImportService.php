@@ -4,6 +4,7 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use InvalidArgumentException;
 use RuntimeException;
 
 /**
@@ -18,6 +19,8 @@ use RuntimeException;
  * - 1行目はヘッダ（カラム名）として使用
  * - 既存レコードは全て削除してから再INSERT（truncate & insert）
  * - deploy_key は現在のUnixタイムスタンプを使用
+ * - rarity / bonus_rarity は列の実際の型で扱いを変える（ENUM は文字列のまま、整数列は数値へ変換）。
+ *   不正な値は TRUNCATE の前に検出してエラーにする
  * - トランザクション内で実行（失敗時はロールバック）
  */
 class MasterImportService
@@ -32,6 +35,11 @@ class MasterImportService
      * スプレッドシートに含まれていても無視し、サーバー側で上書きする
      */
     private const AUTO_SET_COLUMNS = ['created_at', 'updated_at'];
+
+    /**
+     * エラーとして表示する不正行の最大件数
+     */
+    private const MAX_REPORTED_ERRORS = 20;
 
     /**
      * シートデータをmstテーブルへインポートする
@@ -73,6 +81,10 @@ class MasterImportService
         // NULLableなカラムを取得（空文字をNULLに変換する対象）
         $nullableColumns = $this->getNullableColumns($tableName);
 
+        // rarity 系カラムの型（ENUM / 整数）を実際の定義から判定する
+        $rarityColumns = $this->getRarityColumns($tableName, array_values($validHeaders));
+        $rarityErrors = [];
+
         foreach ($rows as $index => $row) {
             try {
                 $record = [];
@@ -83,9 +95,9 @@ class MasterImportService
                         ? null
                         : $value;
 
-                    // rarity 系カラムは文字列（UR/SSR等）を数値に変換
-                    if (in_array($header, self::RARITY_COLUMNS, true) && $converted !== null) {
-                        $converted = self::RARITY_MAP[$converted] ?? $converted;
+                    // rarity 系カラムは型に合わせて検証・変換する（不正な値は InvalidArgumentException）
+                    if (isset($rarityColumns[$header]) && $converted !== null) {
+                        $converted = $this->normalizeRarity($header, $converted, $rarityColumns[$header]);
                     }
 
                     $record[$header] = $converted;
@@ -100,10 +112,25 @@ class MasterImportService
                 }
 
                 $insertData[] = $record;
+            } catch (InvalidArgumentException $e) {
+                $rarityErrors[] = '行 '.($index + 2).': '.$e->getMessage();
             } catch (\Throwable $e) {
                 $errors[] = '行 '.($index + 2).': '.$e->getMessage();
                 $skipped++;
             }
+        }
+
+        // レアリティが不正なまま進むと、TRUNCATE の後の INSERT で失敗して既存の行が全て消える。
+        // TRUNCATE より前に、全行を検証した結果をまとめてエラーにする
+        if ($rarityErrors !== []) {
+            $shown = array_slice($rarityErrors, 0, self::MAX_REPORTED_ERRORS);
+            $more = count($rarityErrors) - count($shown);
+
+            throw new RuntimeException(
+                "テーブル {$tableName} のレアリティが不正なため、取り込みを中止しました（既存のデータは変更していません）。\n"
+                .implode("\n", $shown)
+                .($more > 0 ? "\n…ほか {$more} 件" : '')
+            );
         }
 
         if (empty($insertData)) {
@@ -149,7 +176,7 @@ class MasterImportService
 
     /**
      * レアリティ文字列 → 数値マッピング
-     * mst_gacha_rarity_rate / mst_gacha_prize / mst_gacha_step_bonus 等で使用
+     * 整数型（tinyint 等）の rarity 列にだけ使う。api 側の RarityType::findRank() と同じ値
      */
     private const RARITY_MAP = [
         'UR' => 6,
@@ -161,9 +188,82 @@ class MasterImportService
     ];
 
     /**
-     * rarity 系のカラム名（tinyint として数値変換が必要）
+     * レアリティを持つカラム名。変換するかどうかは名前ではなく、その列の型で決める
      */
     private const RARITY_COLUMNS = ['rarity', 'bonus_rarity'];
+
+    /**
+     * rarity 系カラムの型を判定する
+     *
+     * - ENUM 列: 文字列のまま入れる。値は列の定義（enum(...)）に含まれるものだけ許可する。
+     *   並び順に依存しないので、C 先頭（mst_mailbox_content）でも UR 先頭（mst_unit 等）でも同じ
+     * - 整数型の列（tinyint 等）: UR=6 … C=1 の数値へ変換する
+     * - それ以外の型（文字列列など）: 何もしない
+     *
+     * @param  array<int, string>  $headers  取り込み対象のカラム名
+     * @return array<string, array{kind: 'enum', values: array<int, string>}|array{kind: 'int'}>
+     */
+    private function getRarityColumns(string $tableName, array $headers): array
+    {
+        $targets = array_intersect($headers, self::RARITY_COLUMNS);
+        if ($targets === []) {
+            return [];
+        }
+
+        $result = [];
+        foreach (DB::connection('mst')->select("SHOW COLUMNS FROM `{$tableName}`") as $row) {
+            if (! in_array($row->Field, $targets, true)) {
+                continue;
+            }
+
+            $type = strtolower((string) $row->Type);
+            if (str_starts_with($type, 'enum(')) {
+                preg_match_all("/'((?:[^']|'')*)'/", (string) $row->Type, $matches);
+                $result[$row->Field] = [
+                    'kind' => 'enum',
+                    'values' => array_map(fn (string $v) => str_replace("''", "'", $v), $matches[1]),
+                ];
+            } elseif (preg_match('/^(tiny|small|medium|big)?int\b/', $type) === 1) {
+                $result[$row->Field] = ['kind' => 'int'];
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * rarity 系カラムの値を、列の型に合わせて検証・変換する
+     *
+     * @param  array{kind: 'enum', values: array<int, string>}|array{kind: 'int'}  $column
+     *
+     * @throws InvalidArgumentException 列に入れられない値のとき
+     */
+    private function normalizeRarity(string $header, mixed $value, array $column): mixed
+    {
+        $text = is_scalar($value) ? (string) $value : '';
+
+        if ($column['kind'] === 'enum') {
+            if (! in_array($text, $column['values'], true)) {
+                throw new InvalidArgumentException(
+                    "{$header} の値「{$text}」は使えません（".implode('・', $column['values']).' のいずれか）'
+                );
+            }
+
+            return $text;
+        }
+
+        // 整数列: UR/SSR 等は数値へ変換。数値で書かれたシートは 1〜6 の範囲で受け付ける
+        if (isset(self::RARITY_MAP[$text])) {
+            return self::RARITY_MAP[$text];
+        }
+        if (preg_match('/^[1-6]$/', $text) === 1) {
+            return (int) $text;
+        }
+
+        throw new InvalidArgumentException(
+            "{$header} の値「{$text}」は使えません（".implode('・', array_keys(self::RARITY_MAP)).' または 1〜6 の数値）'
+        );
+    }
 
     /**
      * テーブル名のバリデーション（mst_プレフィックスのみ許可）

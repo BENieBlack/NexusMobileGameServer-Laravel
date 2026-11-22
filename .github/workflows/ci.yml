@@ -123,6 +123,10 @@ jobs:
       DB_SHARD2_HOST: 127.0.0.1
       DB_SHARD2_PORT: 33070
       DB_SHARD_DATABASE: nexus-testing-shard
+      # マスターのインポートのテストが使う（同じMySQLの別データベース）
+      DB_MASTER_HOST: 127.0.0.1
+      DB_MASTER_PORT: 33070
+      DB_MASTER_DATABASE: nexus-testing-tool-master
 
     steps:
       - uses: actions/checkout@v7
@@ -175,7 +179,7 @@ jobs:
       - name: テスト用データベースの作成
         run: >-
           mysql -h 127.0.0.1 -P 33070 -uroot -proot
-          -e "CREATE DATABASE IF NOT EXISTS \`nexus-testing-system\`; CREATE DATABASE IF NOT EXISTS \`nexus-testing-shard\`;"
+          -e "CREATE DATABASE IF NOT EXISTS \`nexus-testing-system\`; CREATE DATABASE IF NOT EXISTS \`nexus-testing-shard\`; CREATE DATABASE IF NOT EXISTS \`nexus-testing-tool-master\`;"
 
       - name: テスト
         working-directory: tool
