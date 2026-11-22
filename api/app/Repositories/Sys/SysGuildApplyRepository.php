@@ -62,9 +62,7 @@ class SysGuildApplyRepository extends _BaseSysRepository
         /** @var SysGuildApply|null $apply */
         $apply = $this->selectForUpdate()->find($applyId);
 
-        if ($apply !== null && $this->models !== null && $this->models->has((string) $applyId)) {
-            $this->models->put((string) $applyId, $apply);
-        }
+        $this->replaceCachedModelIfPresent($applyId, $apply);
 
         return $apply;
     }

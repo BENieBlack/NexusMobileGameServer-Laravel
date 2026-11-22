@@ -2,6 +2,7 @@
 
 namespace Nexus\Core\Repositories;
 
+use Illuminate\Support\Facades\DB;
 use Nexus\Core\Models\_BaseModel;
 use Nexus\Core\Support\CustomCollection;
 
@@ -135,6 +136,46 @@ abstract class _BaseRepository implements _BaseRepositoryInterface
     public function getTableName(): string
     {
         return (new $this->modelClass)->getTable();
+    }
+
+    /**
+     * 行ロック（SELECT ... FOR UPDATE）を取る前に、トランザクションの中かを検査する
+     *
+     * トランザクションの外で呼ぶとロックが即座に外れて何も守れないため、
+     * 外で呼ばれたら例外にして気づけるようにする。
+     * Builder の作り（接続・テーブルの扱い）は Sys / Trx で違うので各基底に残し、
+     * 検査と例外メッセージだけをここに寄せる。
+     *
+     * @throws \LogicException トランザクション内でない場合
+     */
+    protected function assertInTransactionForLock(string $connection): void
+    {
+        if (DB::connection($connection)->transactionLevel() === 0) {
+            throw new \LogicException(sprintf(
+                '%s: 行ロックはトランザクションの中で呼ぶこと（接続: %s）',
+                static::class,
+                $connection
+            ));
+        }
+    }
+
+    /**
+     * 行ロックで読み直したモデルを、既にキャッシュにある同じ行と差し替える
+     *
+     * 古い値のまま setModel() して他方の更新を巻き戻さないため。
+     * キャッシュに無い行は載せない（後から読み込まれてよい。書き込みは dirty の列だけで、
+     * 判定に使うのはロック読みの値だから）。
+     *
+     * @param  string|int  $key  キャッシュのキー（ユニークキーの連結文字列）
+     * @param  TModel|null  $lockedModel  ロック読みで得たモデル
+     */
+    protected function replaceCachedModelIfPresent(string|int $key, $lockedModel): void
+    {
+        if ($lockedModel !== null && $this->findCachedModel($key) !== null) {
+            /** @var CustomCollection<string, TModel> $models */
+            $models = $this->models;
+            $models->put((string) $key, $lockedModel);
+        }
     }
 
     /**

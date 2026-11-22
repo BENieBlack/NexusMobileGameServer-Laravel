@@ -163,9 +163,7 @@ class TrxMailboxRepository extends _BaseTrxRepository
         /** @var TrxMailbox|null $trxMailbox */
         $trxMailbox = $this->selectForUpdate()->find($trxMailboxId);
 
-        if ($trxMailbox !== null && $this->models !== null && $this->models->has((string) $trxMailboxId)) {
-            $this->models->put((string) $trxMailboxId, $trxMailbox);
-        }
+        $this->replaceCachedModelIfPresent($trxMailboxId, $trxMailbox);
 
         return $trxMailbox;
     }
