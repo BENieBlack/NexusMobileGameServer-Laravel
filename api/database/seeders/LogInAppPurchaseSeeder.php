@@ -132,7 +132,8 @@ class LogInAppPurchaseSeeder extends Seeder
             // バッチで挿入（500件ごと）
             if (count($data) >= 500) {
                 DB::connection($connection)->table('log_action_in_app_purchase')->insert($data);
-                echo '挿入: '.count($data)." 件 (累計: {$logCount} 件)\n";
+                // 進捗は 1 行の上書きで出す（バッチごとに改行すると大量の行が流れるため）
+                echo "\r  挿入済み: {$logCount} 件";
                 $data = [];
             }
         }
@@ -140,8 +141,9 @@ class LogInAppPurchaseSeeder extends Seeder
         // 残りのデータを挿入
         if (! empty($data)) {
             DB::connection($connection)->table('log_action_in_app_purchase')->insert($data);
-            echo '挿入: '.count($data)." 件 (累計: {$logCount} 件)\n";
         }
+        // 進捗の行を閉じる（上書きしていた行の末尾に改行を入れる）
+        echo "\r  挿入済み: {$logCount} 件\n";
 
         $totalCount = DB::connection($connection)->table('log_action_in_app_purchase')->count();
 

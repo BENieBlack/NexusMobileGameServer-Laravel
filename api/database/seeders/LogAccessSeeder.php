@@ -43,7 +43,10 @@ class LogAccessSeeder extends Seeder
         $data = [];
         $current = $startDate->copy();
 
+        // 進捗は 1 行の上書きで出す（行を増やさず、同じ位置の数字だけ書き換える。
+        // バッチごとに改行すると、365 日分で数百行流れてしまうため）。1 日ぶん進むごとに更新する
         echo "仮データを生成中（{$days}日分）...\n";
+        $lastReportedDay = 0;
 
         // 1年分のデータを10分間隔で生成（データ量を調整）
         while ($current <= $now) {
@@ -104,16 +107,23 @@ class LogAccessSeeder extends Seeder
             // 大量データをバッチで挿入（1000件ごと）
             if (count($data) >= 1000) {
                 DB::connection($connection)->table('log_action_api_access')->insert($data);
-                echo '挿入: '.count($data)." 件\n";
                 $data = [];
+            }
+
+            // 何日分まで進んだか（開始日からの経過日数）。日が進んだときだけ表示を更新する
+            $doneDays = min($days, (int) $startDate->diffInDays($current));
+            if ($doneDays > $lastReportedDay) {
+                $lastReportedDay = $doneDays;
+                echo "\r  {$doneDays}/{$days}日分完了";
             }
         }
 
         // 残りのデータを挿入
         if (! empty($data)) {
             DB::connection($connection)->table('log_action_api_access')->insert($data);
-            echo '挿入: '.count($data)." 件\n";
         }
+        // 進捗の行を閉じる（上書きしていた行の末尾に改行を入れる）
+        echo "\r  {$days}/{$days}日分完了\n";
 
         $totalCount = DB::connection($connection)->table('log_action_api_access')->count();
         echo "\n完了: 合計 {$totalCount} 件のログデータを生成しました。\n";
