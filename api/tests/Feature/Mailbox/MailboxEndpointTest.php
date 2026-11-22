@@ -3,6 +3,7 @@
 namespace Tests\Feature\Mailbox;
 
 use App\Exceptions\GameErrorCode;
+use App\Models\Mst\MstMailboxContent;
 use App\Models\Trx\TrxMailbox;
 use App\Persistence\ApiSession;
 use Illuminate\Support\Facades\DB;
@@ -173,6 +174,7 @@ class MailboxEndpointTest extends TestCase
         ]);
         foreach ([['item', 'item_shape_001', 5, 'SR', true, 2], ['custom', 'custom_shape_001', 1, null, false, 1]] as [$type, $id, $amount, $rarity, $highlight, $sort]) {
             DB::connection('mst')->table('mst_mailbox_content')->insert([
+                'id' => MstMailboxContent::makeId('mailbox_shape_001', $type, $id),
                 'mst_mailbox_id' => 'mailbox_shape_001', 'content_type' => $type, 'content_mst_id' => $id,
                 'content_quantity' => $amount, 'amount' => $amount, 'rarity' => $rarity,
                 'is_highlight' => $highlight, 'sort_desc' => $sort,

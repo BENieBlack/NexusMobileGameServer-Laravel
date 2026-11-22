@@ -34,26 +34,8 @@ class MstRequiresStringIdTest extends TestCase
             'mst_in_app_purchase_content',
             'mst_in_app_purchase_effect',
         ],
-        'packages/nexus-event/database/migrations/mst/2026_01_01_000001_create_event_tables.php' => [
-            'mst_event_content',
-        ],
         'packages/nexus-login/database/migrations/mst/2026_01_01_000001_create_login_tables.php' => [
             'mst_login_bonus_content',
-        ],
-        'packages/nexus-mailbox/database/migrations/mst/2026_01_01_000001_create_mailbox_tables.php' => [
-            'mst_mailbox_content',
-        ],
-        'packages/nexus-mission/database/migrations/mst/2026_01_01_000001_create_mission_tables.php' => [
-            'mst_mission_content',
-        ],
-        'packages/nexus-reward-track/database/migrations/mst/2026_01_01_000001_create_reward_track_tables.php' => [
-            'mst_reward_track_content',
-        ],
-        'packages/nexus-tag/database/migrations/mst/2026_01_01_000001_create_tag_tables.php' => [
-            'mst_tag_content',
-        ],
-        'packages/nexus-trade/database/migrations/mst/2026_01_01_000001_create_trade_tables.php' => [
-            'mst_trade_product_content',
         ],
         'packages/nexus-vip/database/migrations/mst/2026_01_01_000001_create_vip_tables.php' => [
             'mst_vip_level_reward',

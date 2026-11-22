@@ -86,6 +86,7 @@ return new class extends Migration
         // 同一マイルストーン・同一ラインに複数コンテンツを持てる
         // ------------------------------------------------
         Schema::create('mst_reward_track_content', function (Blueprint $table) {
+            $table->string('id')->primary()->comment('ID（{mst_reward_track_milestone_id}:{mst_reward_track_line_id}:{content_type}:{content_mst_id}）');
             $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
             $table->string('mst_reward_track_milestone_id')->comment('mst_reward_track_milestoneテーブルのID');
             $table->string('mst_reward_track_line_id')->comment('mst_reward_track_lineテーブルのID');
@@ -100,9 +101,9 @@ return new class extends Migration
             $table->dateTime('updated_at')->default(DB::raw('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'))->comment('更新日時');
 
             // マイルストーン × ライン × コンテンツの組み合わせで一意
-            $table->primary(
+            $table->unique(
                 ['mst_reward_track_milestone_id', 'mst_reward_track_line_id', 'content_type', 'content_mst_id'],
-                'pk_reward_track_content'
+                'uk_reward_track_content'
             );
 
             $table->index('deploy_key');

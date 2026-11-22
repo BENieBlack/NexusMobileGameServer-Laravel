@@ -4,6 +4,7 @@ namespace Tests\Feature\Mailbox;
 
 use App\Domain\Mailbox\UseCases\ReceiveAllUseCase;
 use App\Domain\Mailbox\UseCases\ReceiveUseCase;
+use App\Models\Mst\MstMailboxContent;
 use App\Models\Trx\TrxMailbox;
 use App\Persistence\ApiSession;
 use Illuminate\Support\Facades\DB;
@@ -314,6 +315,7 @@ class MailboxReceiveContentTest extends TestCase
     private function makeContent(string $contentType, string $contentMstId, int $contentQuantity, int $amount): void
     {
         DB::connection('mst')->table('mst_mailbox_content')->insert([
+            'id' => MstMailboxContent::makeId(self::MST_MAILBOX_ID, $contentType, $contentMstId),
             'mst_mailbox_id' => self::MST_MAILBOX_ID,
             'content_type' => $contentType,
             'content_mst_id' => $contentMstId,

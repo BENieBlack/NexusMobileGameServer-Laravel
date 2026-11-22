@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /**
  * MstMailboxContent Model
  *
+ * @property string $id
  * @property int $deploy_key
  * @property string $mst_mailbox_id
  * @property string $content_type
@@ -22,11 +23,15 @@ class MstMailboxContent extends _BaseMst
 {
     public $table = 'mst_mailbox_content';
 
+    /** 主キーは string の id（{mst_mailbox_id}:{content_type}:{content_mst_id}）。自然キーは unique */
     public $incrementing = false;
+
+    protected $keyType = 'string';
 
     /** @var list<string> */
     protected $fillable = [
         'deploy_key',
+        'id',
         'mst_mailbox_id',
         'content_type',
         'content_mst_id',
@@ -52,16 +57,6 @@ class MstMailboxContent extends _BaseMst
     ];
 
     public $timestamps = true;
-
-    /**
-     * 複合主キーを取得
-     *
-     * @return array<int, string>
-     */
-    public function getKeyName(): array
-    {
-        return ['mst_mailbox_id', 'content_type', 'content_mst_id'];
-    }
 
     /**
      * メールボックスとのリレーション
@@ -155,5 +150,16 @@ class MstMailboxContent extends _BaseMst
     public function getSortDesc(): int
     {
         return $this->getAttribute('sort_desc');
+    }
+
+    /**
+     * id を作る（シーダー・テスト・取り込みの検証が同じ規則を使う）
+     *
+     * 規則は {mst_mailbox_id}:{content_type}:{content_mst_id}。mst_mailbox_id と content_type に ':' を含めない（取り込みで拒否する）
+     * tool の MasterImportService::ID_RULES も同じ規則を持つ。変えるときは両方を直す
+     */
+    public static function makeId(string $parentId, string $contentType, string $contentMstId): string
+    {
+        return $parentId.':'.$contentType.':'.$contentMstId;
     }
 }

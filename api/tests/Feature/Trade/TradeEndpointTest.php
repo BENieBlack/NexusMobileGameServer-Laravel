@@ -3,6 +3,7 @@
 namespace Tests\Feature\Trade;
 
 use App\Exceptions\GameErrorCode;
+use App\Models\Mst\MstTradeProductContent;
 use App\Persistence\ApiSession;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\TestResponse;
@@ -379,6 +380,7 @@ class TradeEndpointTest extends TestCase
 
         DB::connection('mst')->table('mst_trade_product_content')->insert(array_map(
             fn (string $productId) => [
+                'id' => MstTradeProductContent::makeId($productId, 'item', self::REWARD_ID),
                 'mst_trade_product_id' => $productId,
                 'content_type' => 'item',
                 'content_mst_id' => self::REWARD_ID,

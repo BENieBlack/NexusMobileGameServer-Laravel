@@ -2,7 +2,6 @@
 
 namespace App\Models\Mst;
 
-use App\Traits\CompositePrimaryKeyTrait;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
@@ -10,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  *
  * タグとマスター（ユニット・アイテム等）の紐付け（多対多）
  *
+ * @property string $id
  * @property int $deploy_key
  * @property string $mst_tag_id
  * @property string $content_type
@@ -19,20 +19,17 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class MstTagContent extends _BaseMst
 {
-    use CompositePrimaryKeyTrait;
-
     public $table = 'mst_tag_content';
 
+    /** 主キーは string の id（{mst_tag_id}:{content_type}:{content_mst_id}）。自然キーは unique */
     public $incrementing = false;
 
     protected $keyType = 'string';
 
-    /** テーブル定義どおりの複合主キー */
-    protected $primaryKey = ['mst_tag_id', 'content_type', 'content_mst_id'];
-
     /** @var list<string> */
     protected $fillable = [
         'deploy_key',
+        'id',
         'mst_tag_id',
         'content_type',
         'content_mst_id',
@@ -66,5 +63,16 @@ class MstTagContent extends _BaseMst
     public function getContentMstId(): string
     {
         return (string) $this->getAttribute('content_mst_id');
+    }
+
+    /**
+     * id を作る（シーダー・テスト・取り込みの検証が同じ規則を使う）
+     *
+     * 規則は {mst_tag_id}:{content_type}:{content_mst_id}。mst_tag_id と content_type に ':' を含めない（取り込みで拒否する）
+     * tool の MasterImportService::ID_RULES も同じ規則を持つ。変えるときは両方を直す
+     */
+    public static function makeId(string $parentId, string $contentType, string $contentMstId): string
+    {
+        return $parentId.':'.$contentType.':'.$contentMstId;
     }
 }

@@ -5,6 +5,7 @@ namespace Tests\Feature\Event;
 use App\Domain\Gacha\Services\GachaValidationService;
 use App\Exceptions\GameErrorCode;
 use App\Exceptions\GameException;
+use App\Models\Mst\MstEventContent;
 use App\Models\Mst\MstGacha;
 use Illuminate\Support\Facades\DB;
 use Nexus\Core\Utilities\ClockUtility;
@@ -237,6 +238,7 @@ class EventPeriodOverrideTest extends TestCase
     private function addEventContent(string $contentType, string $contentMstId): void
     {
         DB::connection('mst')->table('mst_event_content')->insert([
+            'id' => MstEventContent::makeId(self::EVENT_ID, $contentType, $contentMstId),
             'mst_event_id' => self::EVENT_ID,
             'content_type' => $contentType,
             'content_mst_id' => $contentMstId,

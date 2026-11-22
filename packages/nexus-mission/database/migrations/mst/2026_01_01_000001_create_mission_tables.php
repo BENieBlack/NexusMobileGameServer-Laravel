@@ -62,6 +62,7 @@ return new class extends Migration
         // 1つのミッションに複数の報酬を持てる
         // ------------------------------------------------
         Schema::create('mst_mission_content', function (Blueprint $table) {
+            $table->string('id')->primary()->comment('ID（{mst_mission_id}:{content_type}:{content_mst_id}）');
             $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
             $table->string('mst_mission_id')->comment('mst_missionテーブルのID');
             $table->string('content_type')->comment('報酬の種別 (item / unit / equipment / stamina など。無償ダイヤは item + free_diamond)');
@@ -71,7 +72,7 @@ return new class extends Migration
             $table->dateTime('created_at')->default(DB::raw('CURRENT_TIMESTAMP'))->comment('作成日時');
             $table->dateTime('updated_at')->default(DB::raw('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'))->comment('更新日時');
 
-            $table->primary(['mst_mission_id', 'content_type', 'content_mst_id'], 'pk_mission_content');
+            $table->unique(['mst_mission_id', 'content_type', 'content_mst_id'], 'uk_mission_content');
             $table->index('deploy_key');
         });
     }

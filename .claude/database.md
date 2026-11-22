@@ -108,18 +108,13 @@ API（api/）の接続は `api/config/database.php`、Tool（tool/）の接続�
   - 検査: `api/tests/Architecture/MstNoAutoIncrementIdTest.php`（`packages/*/database/migrations/mst/` と `api/database/migrations/mst/` を走査。Laravel 標準の cache / jobs 系は対象外）。
   - 解消待ち（作り直しがモデル・シーダー・テストへ波及するため、検査の `PENDING_VIOLATIONS` に載せて通している。直したら一覧から消す。消し忘れも失敗する）: `mst_billing_platform_product`、`mst_in_app_purchase`（`packages/nexus-core-billing`）、`mst_vip_login_bonus_content`（`packages/nexus-vip`）。新しい違反を足してはならない。
 - **string の `id` 必須の検査**: `api/tests/Architecture/MstRequiresStringIdTest.php`（走査の範囲は上と同じ。`__l10n` と Laravel 標準は対象外）。`PENDING_VIOLATIONS` の流儀も同じで、直したら一覧から消す（消し忘れも失敗する）。
-  - 解消待ち（`id` 列を持たない 13 テーブル。`mst_unit_level`・`mst_equipment_level`・`mst_player_level` は解消済み）:
+  - 解消待ち（`id` 列を持たない 7 テーブル。`mst_unit_level`・`mst_equipment_level`・`mst_player_level` と、`mst_event_content`・`mst_mailbox_content`・`mst_mission_content`・`mst_reward_track_content`・`mst_tag_content`・`mst_trade_product_content` は解消済み）:
     - `packages/nexus-core-billing`: `mst_billing_platform_product`、`mst_in_app_purchase`（AUTO_INCREMENT の解消待ちと重複）、`mst_in_app_purchase_content`、`mst_in_app_purchase_effect`
-    - `packages/nexus-event`: `mst_event_content`
     - `packages/nexus-login`: `mst_login_bonus_content`
-    - `packages/nexus-mailbox`: `mst_mailbox_content`
-    - `packages/nexus-mission`: `mst_mission_content`
-    - `packages/nexus-reward-track`: `mst_reward_track_content`
-    - `packages/nexus-tag`: `mst_tag_content`
-    - `packages/nexus-trade`: `mst_trade_product_content`
     - `packages/nexus-vip`: `mst_vip_level_reward`、`mst_vip_login_bonus_content`（AUTO_INCREMENT の解消待ちと重複）
   - 移行の進め方: 機能を触るときに、そのテーブルを少しずつ直して一覧から消す。新規の mst テーブルは最初から `id` を持たせ、一覧へ足さない。
   - 主キーに `id` を足すときの影響: Model（`$primaryKey` の配列と `CompositePrimaryKeyTrait` を外す）、Repository（`queryOrMemory` の鍵）、シーダー、運営のシートのインポート（シート名 = テーブル名で truncate + INSERT なので、シートへ `id` 列を足す）、マスター配信の SQLite、クライアントの `master_data`（列が増える）を合わせて直す。
+  - `mst_reward_track_content` は Model が無く（`RewardTrackMasterRepositoryAdapter` が `DB::table` で読む）、tool の `MasterImportService::ID_RULES` が id 規則の唯一の定義。Model を作るときは他の `*_content` と同じ `makeId` を足し、ID_RULES と相互参照のコメントを付ける。
   - `*_content` の `id` の作り方の案: 親の ID・`content_type`・`content_mst_id` を `:` でつないだ文字列（例 `login_bonus_001:item:item_potion`）。同じ親に同じ中身を 2 行置かない前提で、自然キーの `unique` と一致させる。
 - **trx の複合主キー**: 複合主キーで一意になる trx テーブルは `id` を持たなくてよい（`trx_item` = `sys_player_id, mst_item_id`）。Model 側は `$primaryKey` を配列にして `api/app/Traits/CompositePrimaryKeyTrait.php` を使う。mst と違い、trx には「`id` 必須」の規約を課さない。
 - 主キー・ユニークキーに名前を付けるときは `pk_xxx` / `uk_xxx`。
