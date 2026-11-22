@@ -19,28 +19,28 @@ use Tests\TestCase;
 class MasterImportServiceTest extends TestCase
 {
     private const TABLES = [
-        'mst_unit_level' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, rarity ENUM(\'UR\',\'SSR\',\'SR\',\'R\',\'UC\',\'C\') NOT NULL, level INT UNSIGNED NOT NULL, UNIQUE KEY uk_unit_level (rarity, level)',
-        'mst_equipment_level' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, rarity ENUM(\'UR\',\'SSR\',\'SR\',\'R\',\'UC\',\'C\') NOT NULL, level INT UNSIGNED NOT NULL, UNIQUE KEY uk_equipment_level (rarity, level)',
-        'mst_player_level' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, level INT UNSIGNED NOT NULL, UNIQUE KEY uk_player_level (level)',
-        'mst_unit' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, rarity ENUM(\'UR\',\'SSR\',\'SR\',\'R\',\'UC\',\'C\') NOT NULL',
-        'mst_mailbox_content' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, mst_mailbox_id VARCHAR(191) NOT NULL, content_type VARCHAR(191) NOT NULL, content_mst_id VARCHAR(191) NOT NULL, rarity ENUM(\'C\',\'UC\',\'R\',\'SR\',\'SSR\',\'UR\') NULL, UNIQUE KEY uk_mailbox_content (mst_mailbox_id, content_type, content_mst_id)',
-        'mst_event_content' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, mst_event_id VARCHAR(191) NOT NULL, content_type VARCHAR(191) NOT NULL, content_mst_id VARCHAR(191) NOT NULL, UNIQUE KEY uk_event_content (mst_event_id, content_type, content_mst_id)',
-        'mst_mission_content' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, mst_mission_id VARCHAR(191) NOT NULL, content_type VARCHAR(191) NOT NULL, content_mst_id VARCHAR(191) NOT NULL, UNIQUE KEY uk_mission_content (mst_mission_id, content_type, content_mst_id)',
-        'mst_reward_track_content' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, mst_reward_track_milestone_id VARCHAR(191) NOT NULL, mst_reward_track_line_id VARCHAR(191) NOT NULL, content_type VARCHAR(191) NOT NULL, content_mst_id VARCHAR(191) NOT NULL, UNIQUE KEY uk_reward_track_content (mst_reward_track_milestone_id, mst_reward_track_line_id, content_type, content_mst_id)',
-        'mst_tag_content' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, mst_tag_id VARCHAR(191) NOT NULL, content_type VARCHAR(191) NOT NULL, content_mst_id VARCHAR(191) NOT NULL, UNIQUE KEY uk_tag_content (mst_tag_id, content_type, content_mst_id)',
-        'mst_trade_product_content' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, mst_trade_product_id VARCHAR(191) NOT NULL, content_type VARCHAR(191) NOT NULL, content_mst_id VARCHAR(191) NOT NULL, UNIQUE KEY uk_trade_product_content (mst_trade_product_id, content_type, content_mst_id)',
-        'mst_login_bonus_content' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, mst_login_bonus_id VARCHAR(191) NOT NULL, day INT UNSIGNED NOT NULL DEFAULT 0, content_type VARCHAR(191) NOT NULL, content_mst_id VARCHAR(191) NOT NULL, sort_desc INT UNSIGNED NOT NULL DEFAULT 0, UNIQUE KEY uk_login_bonus_content (mst_login_bonus_id, day, content_type, content_mst_id)',
-        'mst_vip_login_bonus_content' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, mst_vip_login_bonus_id VARCHAR(191) NOT NULL, day INT UNSIGNED NOT NULL, content_type VARCHAR(191) NOT NULL, content_mst_id VARCHAR(191) NOT NULL, sort_desc INT UNSIGNED NOT NULL DEFAULT 0, UNIQUE KEY uk_vip_login_bonus_content (mst_vip_login_bonus_id, day, content_type, content_mst_id)',
-        'mst_vip_level_reward' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, vip_level SMALLINT NOT NULL, content_type VARCHAR(191) NOT NULL, content_mst_id VARCHAR(191) NOT NULL, UNIQUE KEY uk_vip_level_reward (vip_level, content_type, content_mst_id)',
-        'mst_billing_platform_product' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, billing_platform ENUM(\'app_store\',\'google_play\',\'pay_pal\',\'stripe\') NOT NULL, platform_product_id VARCHAR(255) NOT NULL, UNIQUE KEY uk_billing_platform_product (billing_platform, platform_product_id)',
-        'mst_in_app_purchase' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, type ENUM(\'diamond\',\'pack\',\'pass\') NOT NULL',
-        'mst_in_app_purchase__l10n' => 'mst_in_app_purchase_id VARCHAR(191) NOT NULL, language VARCHAR(10) NOT NULL, name VARCHAR(191) NOT NULL, PRIMARY KEY (mst_in_app_purchase_id, language)',
-        'mst_in_app_purchase_content' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, mst_in_app_purchase_id VARCHAR(191) NOT NULL, content_type VARCHAR(191) NOT NULL, content_mst_id VARCHAR(191) NOT NULL, UNIQUE KEY uk_purchase_content (mst_in_app_purchase_id, content_type, content_mst_id)',
-        'mst_in_app_purchase_effect' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, mst_in_app_purchase_id VARCHAR(191) NOT NULL, effect_type VARCHAR(191) NOT NULL, UNIQUE KEY uk_purchase_effect (mst_in_app_purchase_id, effect_type)',
-        'mst_gacha_prize' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, rarity TINYINT UNSIGNED NOT NULL',
-        'mst_equipment' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, rarity ENUM(\'UR\',\'SSR\',\'SR\',\'R\',\'UC\',\'C\') NOT NULL',
-        'mst_item' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, name VARCHAR(191) NOT NULL',
-        'mst_gacha_step_bonus' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, bonus_rarity TINYINT UNSIGNED NULL',
+        'mst_unit_level' => 'id VARCHAR(255) NOT NULL PRIMARY KEY, rarity ENUM(\'UR\',\'SSR\',\'SR\',\'R\',\'UC\',\'C\') NOT NULL, level INT UNSIGNED NOT NULL, UNIQUE KEY uk_unit_level (rarity, level)',
+        'mst_equipment_level' => 'id VARCHAR(255) NOT NULL PRIMARY KEY, rarity ENUM(\'UR\',\'SSR\',\'SR\',\'R\',\'UC\',\'C\') NOT NULL, level INT UNSIGNED NOT NULL, UNIQUE KEY uk_equipment_level (rarity, level)',
+        'mst_player_level' => 'id VARCHAR(255) NOT NULL PRIMARY KEY, level INT UNSIGNED NOT NULL, UNIQUE KEY uk_player_level (level)',
+        'mst_unit' => 'id VARCHAR(255) NOT NULL PRIMARY KEY, rarity ENUM(\'UR\',\'SSR\',\'SR\',\'R\',\'UC\',\'C\') NOT NULL',
+        'mst_mailbox_content' => 'id VARCHAR(255) NOT NULL PRIMARY KEY, mst_mailbox_id VARCHAR(255) NOT NULL, content_type VARCHAR(255) NOT NULL, content_mst_id VARCHAR(255) NOT NULL, rarity ENUM(\'C\',\'UC\',\'R\',\'SR\',\'SSR\',\'UR\') NULL, UNIQUE KEY uk_mailbox_content (mst_mailbox_id, content_type, content_mst_id)',
+        'mst_event_content' => 'id VARCHAR(255) NOT NULL PRIMARY KEY, mst_event_id VARCHAR(255) NOT NULL, content_type VARCHAR(255) NOT NULL, content_mst_id VARCHAR(255) NOT NULL, UNIQUE KEY uk_event_content (mst_event_id, content_type, content_mst_id)',
+        'mst_mission_content' => 'id VARCHAR(255) NOT NULL PRIMARY KEY, mst_mission_id VARCHAR(255) NOT NULL, content_type VARCHAR(255) NOT NULL, content_mst_id VARCHAR(255) NOT NULL, UNIQUE KEY uk_mission_content (mst_mission_id, content_type, content_mst_id)',
+        'mst_reward_track_content' => 'id VARCHAR(255) NOT NULL PRIMARY KEY, mst_reward_track_milestone_id VARCHAR(255) NOT NULL, mst_reward_track_line_id VARCHAR(255) NOT NULL, content_type VARCHAR(255) NOT NULL, content_mst_id VARCHAR(255) NOT NULL',
+        'mst_tag_content' => 'id VARCHAR(255) NOT NULL PRIMARY KEY, mst_tag_id VARCHAR(255) NOT NULL, content_type VARCHAR(255) NOT NULL, content_mst_id VARCHAR(255) NOT NULL, UNIQUE KEY uk_tag_content (mst_tag_id, content_type, content_mst_id)',
+        'mst_trade_product_content' => 'id VARCHAR(255) NOT NULL PRIMARY KEY, mst_trade_product_id VARCHAR(255) NOT NULL, content_type VARCHAR(255) NOT NULL, content_mst_id VARCHAR(255) NOT NULL, UNIQUE KEY uk_trade_product_content (mst_trade_product_id, content_type, content_mst_id)',
+        'mst_login_bonus_content' => 'id VARCHAR(255) NOT NULL PRIMARY KEY, mst_login_bonus_id VARCHAR(255) NOT NULL, day INT UNSIGNED NOT NULL DEFAULT 0, content_type VARCHAR(255) NOT NULL, content_mst_id VARCHAR(255) NOT NULL, sort_desc INT UNSIGNED NOT NULL DEFAULT 0, UNIQUE KEY uk_login_bonus_content (mst_login_bonus_id, day, content_type, content_mst_id)',
+        'mst_vip_login_bonus_content' => 'id VARCHAR(255) NOT NULL PRIMARY KEY, mst_vip_login_bonus_id VARCHAR(255) NOT NULL, day INT UNSIGNED NOT NULL, content_type VARCHAR(255) NOT NULL, content_mst_id VARCHAR(255) NOT NULL, sort_desc INT UNSIGNED NOT NULL DEFAULT 0, UNIQUE KEY uk_vip_login_bonus_content (mst_vip_login_bonus_id, day, content_type, content_mst_id)',
+        'mst_vip_level_reward' => 'id VARCHAR(255) NOT NULL PRIMARY KEY, vip_level SMALLINT NOT NULL, content_type VARCHAR(255) NOT NULL, content_mst_id VARCHAR(255) NOT NULL, UNIQUE KEY uk_vip_level_reward (vip_level, content_type, content_mst_id)',
+        'mst_billing_platform_product' => 'id VARCHAR(255) NOT NULL PRIMARY KEY, billing_platform ENUM(\'app_store\',\'google_play\',\'pay_pal\',\'stripe\') NOT NULL, platform_product_id VARCHAR(255) NOT NULL, UNIQUE KEY uk_billing_platform_product (billing_platform, platform_product_id)',
+        'mst_in_app_purchase' => 'id VARCHAR(255) NOT NULL PRIMARY KEY, type ENUM(\'diamond\',\'pack\',\'pass\') NOT NULL',
+        'mst_in_app_purchase__l10n' => 'mst_in_app_purchase_id VARCHAR(255) NOT NULL, language VARCHAR(10) NOT NULL, name VARCHAR(255) NOT NULL, PRIMARY KEY (mst_in_app_purchase_id, language)',
+        'mst_in_app_purchase_content' => 'id VARCHAR(255) NOT NULL PRIMARY KEY, mst_in_app_purchase_id VARCHAR(255) NOT NULL, content_type VARCHAR(255) NOT NULL, content_mst_id VARCHAR(255) NOT NULL, UNIQUE KEY uk_purchase_content (mst_in_app_purchase_id, content_type, content_mst_id)',
+        'mst_in_app_purchase_effect' => 'id VARCHAR(255) NOT NULL PRIMARY KEY, mst_in_app_purchase_id VARCHAR(255) NOT NULL, effect_type VARCHAR(255) NOT NULL, UNIQUE KEY uk_purchase_effect (mst_in_app_purchase_id, effect_type)',
+        'mst_gacha_prize' => 'id VARCHAR(255) NOT NULL PRIMARY KEY, rarity TINYINT UNSIGNED NOT NULL',
+        'mst_equipment' => 'id VARCHAR(255) NOT NULL PRIMARY KEY, rarity ENUM(\'UR\',\'SSR\',\'SR\',\'R\',\'UC\',\'C\') NOT NULL',
+        'mst_item' => 'id VARCHAR(255) NOT NULL PRIMARY KEY, name VARCHAR(255) NOT NULL',
+        'mst_gacha_step_bonus' => 'id VARCHAR(255) NOT NULL PRIMARY KEY, bonus_rarity TINYINT UNSIGNED NULL',
     ];
 
     private const ALL_RARITIES = ['UR', 'SSR', 'SR', 'R', 'UC', 'C'];
@@ -280,7 +280,7 @@ class MasterImportServiceTest extends TestCase
             'id が空' => [['id', 'rarity', 'level'], [$ok, ['id' => '', 'rarity' => 'SR', 'level' => '2']], 'id が空'],
             'id が重複' => [['id', 'rarity', 'level'], [$ok, $ok], '重複'],
             'id が大文字小文字違いで重複' => [['id', 'rarity', 'level'], [$ok, ['id' => 'ur:1', 'rarity' => 'SR', 'level' => '1']], '重複'],
-            'id が 191 文字超' => [['id', 'rarity', 'level'], [['id' => str_repeat('a', 192), 'rarity' => 'UR', 'level' => '1']], '191 文字'],
+            'id が 255 文字超' => [['id', 'rarity', 'level'], [['id' => str_repeat('a', 256), 'rarity' => 'UR', 'level' => '1']], '255 文字'],
             'id が規則と違う' => [['id', 'rarity', 'level'], [['id' => 'UR:2', 'rarity' => 'UR', 'level' => '1']], '規則'],
         ];
     }
@@ -307,9 +307,9 @@ class MasterImportServiceTest extends TestCase
     }
 
     #[Test]
-    public function idがちょうど191文字なら取り込める(): void
+    public function idがちょうど255文字なら取り込める(): void
     {
-        $id = str_repeat('a', 191);
+        $id = str_repeat('a', 255);
         $result = (new MasterImportService)->import('mst_item', ['id', 'name'], [['id' => $id, 'name' => 'x']]);
 
         $this->assertSame(1, $result['inserted']);
@@ -434,6 +434,24 @@ class MasterImportServiceTest extends TestCase
 
         $this->assertSame(2, $result['inserted']);
         $this->assertSame(2, DB::connection('mst')->table($table)->count());
+    }
+
+    #[Test]
+    public function 報酬トラックは4列が同じでidが違う行を規則違反として拒否する(): void
+    {
+        $columns = ['mst_reward_track_milestone_id', 'mst_reward_track_line_id'];
+        $first = $this->contentRow($columns, 'parent_a', 'item', 'same');
+        // 4 列は同じだが id が違う（4 列 unique が無いので、取り込みの検証が一意性の穴を閉じる）
+        $second = ['id' => 'other_id'] + $first;
+
+        try {
+            (new MasterImportService)->import('mst_reward_track_content', array_keys($first), [$first, $second]);
+            $this->fail('RuntimeException が投げられるはず');
+        } catch (RuntimeException $e) {
+            $this->assertStringContainsString('規則', $e->getMessage());
+        }
+
+        $this->assertSame(0, DB::connection('mst')->table('mst_reward_track_content')->count());
     }
 
     /**

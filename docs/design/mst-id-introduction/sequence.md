@@ -66,7 +66,7 @@ sequenceDiagram
     CL->>CL: master_data の Local リポジトリが SELECT（列を明示。id を読むのは VIP の報酬行だけ。db.md 9.2）
 ```
 
-- **`id` が効く箇所**: ①シートの 1 列目以降に `id` 列があること（`getSheetData` が列として拾う）②取り込みの検証（空・重複・規則違反）③DB の PK = `id`・自然キー = unique で、**行の一意が 2 重に守られる**（INSERT 時の重複は MySQL が拒否し、その表の取り込み全体が失敗する。TRUNCATE 後なので表は空になる。ここも既存の穴）④配信 SQLite の PK ⑤deploy_key 上乗せの畳み（`id` 単位で最大の `deploy_key` の行を採る）。⑤は deploy_key 上乗せの S2/S3 の範囲で、S0 は **畳みの鍵が存在する状態にする**ところまで。
+- **`id` が効く箇所**: ①シートの 1 列目以降に `id` 列があること（`getSheetData` が列として拾う）②取り込みの検証（空・重複・規則違反）③DB の PK = `id`・自然キー = unique で、**行の一意が 2 重に守られる**（`mst_reward_track_content` だけは 4 列 unique を置かず、`id` の PK が担う。db.md 3.1）（INSERT 時の重複は MySQL が拒否し、その表の取り込み全体が失敗する。TRUNCATE 後なので表は空になる。ここも既存の穴）④配信 SQLite の PK ⑤deploy_key 上乗せの畳み（`id` 単位で最大の `deploy_key` の行を採る）。⑤は deploy_key 上乗せの S2/S3 の範囲で、S0 は **畳みの鍵が存在する状態にする**ところまで。
 - **S0 の後も `deploy_key` の扱いは変わらない**: 取り込みは今までどおり TRUNCATE + INSERT（畳みは S3）。S0 は列と PK だけを変える。
 - 取り込みの拒否の粒度（テーブル単位で止める）と、`created_at`・`updated_at` の自動設定は現状のまま。
 
