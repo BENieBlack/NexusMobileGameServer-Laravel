@@ -14,6 +14,11 @@ class TrxChangeLoggerTest extends TestCase
     protected function tearDown(): void
     {
         Mockery::close();
+        // DB ファサードをモックに差し替えると、コンテナの 'db' もモックになる。Laravel 13.43 以降は
+        // フレームワークの後始末（disconnectDatabaseConnections）がその 'db' に getConnections() を呼び、
+        // 期待が無くて BadMethodCallException になる。後始末の前にモックを捨てる（捨てれば後始末は何もしない）。
+        DB::clearResolvedInstance('db');
+        $this->app->forgetInstance('db');
         parent::tearDown();
     }
 
