@@ -2,7 +2,6 @@
 
 namespace App\Models\Mst;
 
-use App\Traits\CompositePrimaryKeyTrait;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
@@ -10,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  *
  * ログインボーナスの報酬内容
  *
+ * @property string $id
  * @property int $deploy_key
  * @property string $mst_login_bonus_id
  * @property int $day
@@ -21,22 +21,17 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class MstLoginBonusContent extends _BaseMst
 {
-    use CompositePrimaryKeyTrait;
-
     public $table = 'mst_login_bonus_content';
 
+    /** 主キーは string の id（{mst_login_bonus_id}:{day}:{content_type}:{content_mst_id}）。自然キーは unique */
     public $incrementing = false;
-
-    /**
-     * 複合主キー
-     */
-    protected $primaryKey = ['mst_login_bonus_id', 'day', 'content_type', 'content_mst_id'];
 
     protected $keyType = 'string';
 
     /** @var list<string> */
     protected $fillable = [
         'deploy_key',
+        'id',
         'mst_login_bonus_id',
         'day',
         'content_type',
@@ -131,5 +126,16 @@ class MstLoginBonusContent extends _BaseMst
     public function getIsPaid(): bool
     {
         return $this->getAttribute('is_paid');
+    }
+
+    /**
+     * id を作る（シーダー・テスト・取り込みの検証が同じ規則を使う）
+     *
+     * 規則は {mst_login_bonus_id}:{day}:{content_type}:{content_mst_id}。mst_login_bonus_id と content_type に ':' を含めない（取り込みで拒否する）
+     * tool の MasterImportService::ID_RULES も同じ規則を持つ。変えるときは両方を直す
+     */
+    public static function makeId(string $parentId, int $day, string $contentType, string $contentMstId): string
+    {
+        return $parentId.':'.$day.':'.$contentType.':'.$contentMstId;
     }
 }

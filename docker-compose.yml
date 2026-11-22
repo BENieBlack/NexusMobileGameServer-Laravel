@@ -56,6 +56,8 @@ services:
       - ./.env:/var/www/.env:ro  # Mount root .env as read-only
       # エージェント向けドキュメント（読み取り専用）。.opencodeは.claudeへのシンボリックリンク
       - ./.claude:/var/www/.claude:ro
+      # 動画撮影用の配信ファイル（RecordingDeploySeeder）を、運営ツールの配信ディレクトリへ書くための共有
+      - ./tool/public/masterdata:/var/www/tool-masterdata
     environment:
       # 既定値は設けない。未設定なら署名検証が起動時に失敗する（既知の鍵で通してしまうのを防ぐ）
       - CLIENT_SECRET=${CLIENT_SECRET}

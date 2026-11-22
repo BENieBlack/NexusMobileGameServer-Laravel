@@ -2,6 +2,8 @@
 
 namespace Tests\Feature\Domain\Login\Services;
 
+use App\Models\Mst\MstLoginBonusContent;
+use App\Models\Mst\MstVipLoginBonusContent;
 use App\Persistence\ApiSession;
 use Illuminate\Support\Facades\DB;
 use NexusLogin\Services\LoginBonusOrchestrator;
@@ -150,6 +152,7 @@ class LoginBonusIntegrationTest extends TestCase
 
         for ($day = 1; $day <= 7; $day++) {
             DB::connection('mst')->table('mst_login_bonus_content')->insert([
+                'id' => MstLoginBonusContent::makeId($bonusId, $day, 'item', 'free_diamond'),
                 'mst_login_bonus_id' => $bonusId,
                 'day' => $day,
                 'content_type' => 'item',
@@ -185,6 +188,7 @@ class LoginBonusIntegrationTest extends TestCase
                 $goldAmount = (int) floor(1000 * $day * $multiplier);
 
                 DB::connection('mst')->table('mst_vip_login_bonus_content')->insert([
+                    'id' => MstVipLoginBonusContent::makeId($bonusId, $day, 'item', 'free_diamond'),
                     'mst_vip_login_bonus_id' => $bonusId,
                     'day' => $day,
                     'content_type' => 'item',
@@ -220,6 +224,7 @@ class LoginBonusIntegrationTest extends TestCase
 
         for ($day = 1; $day <= 7; $day++) {
             DB::connection('mst')->table('mst_login_bonus_content')->insert([
+                'id' => MstLoginBonusContent::makeId($bonusId, 0, 'item', "day_{$day}_diamond"),
                 'mst_login_bonus_id' => $bonusId,
                 'content_type' => 'item',
                 'content_mst_id' => "day_{$day}_diamond", // 各日で異なるIDを使用

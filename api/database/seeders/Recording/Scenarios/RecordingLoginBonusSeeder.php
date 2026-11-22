@@ -2,6 +2,7 @@
 
 namespace Database\Seeders\Recording\Scenarios;
 
+use App\Models\Mst\MstLoginBonusContent;
 use Database\Seeders\Recording\RecordingScenarioSeeder;
 use Illuminate\Support\Facades\DB;
 use Nexus\Core\Models\Mst\_BaseMst;
@@ -16,7 +17,7 @@ use Nexus\Core\Utilities\ClockUtility;
  * 使うケース（client_design.md 7節）: 1（初回のログインボーナス）、2（受け取り済み）、
  * 3（規約の後のログインボーナス）、5（2日目）、13。
  *
- * 冪等性: mst_login_bonus と mst_login_bonus_content を主キーで updateOrInsert。
+ * 冪等性: mst_login_bonus と mst_login_bonus_content を id で updateOrInsert。
  * 無ければ作り、あれば有効に戻す。
  * 副作用: 他のログインボーナス・他の行は消さない（MstLoginBonusSeeder は truncate するので、
  * 動画用ではこちらを使う）。マスターの変更なので、デプロイ済みの配信ファイルには反映されない。
@@ -74,13 +75,12 @@ class RecordingLoginBonusSeeder extends RecordingScenarioSeeder
 
         foreach ($dayRewards as $day => [$type, $mstId, $amount]) {
             DB::connection('mst')->table('mst_login_bonus_content')->updateOrInsert(
+                ['id' => MstLoginBonusContent::makeId(self::DAILY_LOGIN_BONUS_ID, $day, $type, $mstId)],
                 [
                     'mst_login_bonus_id' => self::DAILY_LOGIN_BONUS_ID,
                     'day' => $day,
                     'content_type' => $type,
                     'content_mst_id' => $mstId,
-                ],
-                [
                     'content_option' => null,
                     'content_quantity' => $amount,
                     // amount は倍率。配布量は content_quantity に入れるので 1（MstLoginBonusSeeder と同じ）

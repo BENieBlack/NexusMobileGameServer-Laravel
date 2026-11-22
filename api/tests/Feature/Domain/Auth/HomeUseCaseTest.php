@@ -4,6 +4,7 @@ namespace Tests\Feature\Domain\Auth;
 
 use App\Models\Mst\MstLoginBonus;
 use App\Models\Mst\MstLoginBonusContent;
+use App\Models\Mst\MstVipLoginBonusContent;
 use App\Models\Sys\SysPlayer;
 use Carbon\CarbonImmutable;
 use Database\Seeders\SysShardingSeeder;
@@ -113,6 +114,7 @@ class HomeUseCaseTest extends TestCase
         for ($day = 1; $day <= 7; $day++) {
             // アイテム報酬
             MstLoginBonusContent::create([
+                'id' => MstLoginBonusContent::makeId($bonusId, $day, 'item', 'item_potion_001'),
                 'mst_login_bonus_id' => $bonusId,
                 'day' => $day,
                 'content_type' => 'item',
@@ -125,6 +127,7 @@ class HomeUseCaseTest extends TestCase
             // 7日目のみダイヤ報酬追加
             if ($day === 7) {
                 MstLoginBonusContent::create([
+                    'id' => MstLoginBonusContent::makeId($bonusId, $day, 'item', 'free_diamond'),
                     'mst_login_bonus_id' => $bonusId,
                     'day' => $day,
                     'content_type' => 'item',
@@ -377,6 +380,7 @@ class HomeUseCaseTest extends TestCase
             'is_active' => true,
         ]);
         DB::connection('mst')->table('mst_vip_login_bonus_content')->insert([
+            'id' => MstVipLoginBonusContent::makeId('test_vip_login', 1, 'item', 'free_diamond'),
             'mst_vip_login_bonus_id' => 'test_vip_login',
             'day' => 1,
             'content_type' => 'item',
@@ -421,6 +425,7 @@ class HomeUseCaseTest extends TestCase
             'is_active' => true,
         ]);
         MstLoginBonusContent::create([
+            'id' => MstLoginBonusContent::makeId('comeback_7', 0, 'item', 'free_diamond'),
             'mst_login_bonus_id' => 'comeback_7',
             'day' => 0,
             'content_type' => 'item',
@@ -470,6 +475,7 @@ class HomeUseCaseTest extends TestCase
             'is_active' => true,
         ]);
         MstLoginBonusContent::create([
+            'id' => MstLoginBonusContent::makeId('comeback_7', 0, 'item', 'free_diamond'),
             'mst_login_bonus_id' => 'comeback_7',
             'day' => 0,
             'content_type' => 'item',
@@ -597,6 +603,7 @@ class HomeUseCaseTest extends TestCase
                 'id' => $id, 'vip_level' => $level, 'loop_days' => 7, 'is_active' => true,
             ]);
             DB::connection('mst')->table('mst_vip_login_bonus_content')->insert([
+                'id' => MstVipLoginBonusContent::makeId($id, 1, 'item', 'free_diamond'),
                 'mst_vip_login_bonus_id' => $id, 'day' => 1, 'content_type' => 'item',
                 'content_mst_id' => 'free_diamond', 'content_quantity' => 5 + $level, 'amount' => 1,
             ]);

@@ -30,9 +30,6 @@ class MstNoAutoIncrementIdTest extends TestCase
             'mst_billing_platform_product',
             'mst_in_app_purchase',
         ],
-        'packages/nexus-vip/database/migrations/mst/2026_01_01_000001_create_vip_tables.php' => [
-            'mst_vip_login_bonus_content',
-        ],
     ];
 
     /**

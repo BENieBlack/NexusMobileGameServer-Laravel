@@ -20,13 +20,15 @@ class MstVipLevelReward extends _BaseMst
 {
     protected $table = 'mst_vip_level_reward';
 
+    /** 主キーは string の id（{vip_level}:{content_type}:{content_mst_id}）。自然キーは unique */
     public $incrementing = false;
 
-    protected $primaryKey = ['vip_level', 'content_type', 'content_mst_id'];
+    protected $keyType = 'string';
 
     /** @var list<string> */
     protected $fillable = [
         'deploy_key',
+        'id',
         'vip_level',
         'content_type',
         'content_mst_id',
@@ -122,5 +124,16 @@ class MstVipLevelReward extends _BaseMst
     public function isActive(): bool
     {
         return $this->is_active;
+    }
+
+    /**
+     * id を作る（シーダー・テスト・取り込みの検証が同じ規則を使う）
+     *
+     * 規則は {vip_level}:{content_type}:{content_mst_id}。content_type に ':' を含めない（取り込みで拒否する）
+     * tool の MasterImportService::ID_RULES も同じ規則を持つ。変えるときは両方を直す
+     */
+    public static function makeId(int $vipLevel, string $contentType, string $contentMstId): string
+    {
+        return $vipLevel.':'.$contentType.':'.$contentMstId;
     }
 }

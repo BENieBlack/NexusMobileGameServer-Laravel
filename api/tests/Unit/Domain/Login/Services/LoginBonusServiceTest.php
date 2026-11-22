@@ -148,6 +148,7 @@ class LoginBonusServiceTest extends TestCase
 
         for ($day = 1; $day <= 7; $day++) {
             MstLoginBonusContent::create([
+                'id' => MstLoginBonusContent::makeId($bonusId, $day, 'item', 'item_potion_001'),
                 'mst_login_bonus_id' => $bonusId,
                 'day' => $day,
                 'content_type' => 'item',
@@ -269,6 +270,7 @@ class LoginBonusServiceTest extends TestCase
 
         for ($day = 1; $day <= 6; $day++) {
             MstLoginBonusContent::create([
+                'id' => MstLoginBonusContent::makeId($bonusId, $day, 'item', 'item_potion_001'),
                 'mst_login_bonus_id' => $bonusId,
                 'day' => $day,
                 'content_type' => 'item',
@@ -280,6 +282,7 @@ class LoginBonusServiceTest extends TestCase
         }
 
         MstLoginBonusContent::create([
+            'id' => MstLoginBonusContent::makeId($bonusId, 7, 'item', 'item_potion_001'),
             'mst_login_bonus_id' => $bonusId,
             'day' => 7,
             'content_type' => 'item',
@@ -290,6 +293,7 @@ class LoginBonusServiceTest extends TestCase
         ]);
 
         MstLoginBonusContent::create([
+            'id' => MstLoginBonusContent::makeId($bonusId, 7, 'item', 'free_diamond'),
             'mst_login_bonus_id' => $bonusId,
             'day' => 7,
             // 無償ダイヤは item + free_diamond
@@ -357,6 +361,7 @@ class LoginBonusServiceTest extends TestCase
         ]);
 
         MstLoginBonusContent::create([
+            'id' => MstLoginBonusContent::makeId($bonusId, 1, 'item', 'item_potion_001'),
             'mst_login_bonus_id' => $bonusId,
             'day' => 1,
             'content_type' => 'item',
@@ -367,6 +372,7 @@ class LoginBonusServiceTest extends TestCase
         ]);
 
         MstLoginBonusContent::create([
+            'id' => MstLoginBonusContent::makeId($bonusId, 1, 'item', 'free_diamond'),
             'mst_login_bonus_id' => $bonusId,
             'day' => 1,
             // 無償ダイヤは item + free_diamond

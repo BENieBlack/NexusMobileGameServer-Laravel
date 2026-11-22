@@ -29,6 +29,9 @@ class MasterImportServiceTest extends TestCase
         'mst_reward_track_content' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, mst_reward_track_milestone_id VARCHAR(191) NOT NULL, mst_reward_track_line_id VARCHAR(191) NOT NULL, content_type VARCHAR(191) NOT NULL, content_mst_id VARCHAR(191) NOT NULL, UNIQUE KEY uk_reward_track_content (mst_reward_track_milestone_id, mst_reward_track_line_id, content_type, content_mst_id)',
         'mst_tag_content' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, mst_tag_id VARCHAR(191) NOT NULL, content_type VARCHAR(191) NOT NULL, content_mst_id VARCHAR(191) NOT NULL, UNIQUE KEY uk_tag_content (mst_tag_id, content_type, content_mst_id)',
         'mst_trade_product_content' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, mst_trade_product_id VARCHAR(191) NOT NULL, content_type VARCHAR(191) NOT NULL, content_mst_id VARCHAR(191) NOT NULL, UNIQUE KEY uk_trade_product_content (mst_trade_product_id, content_type, content_mst_id)',
+        'mst_login_bonus_content' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, mst_login_bonus_id VARCHAR(191) NOT NULL, day INT UNSIGNED NOT NULL DEFAULT 0, content_type VARCHAR(191) NOT NULL, content_mst_id VARCHAR(191) NOT NULL, sort_desc INT UNSIGNED NOT NULL DEFAULT 0, UNIQUE KEY uk_login_bonus_content (mst_login_bonus_id, day, content_type, content_mst_id)',
+        'mst_vip_login_bonus_content' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, mst_vip_login_bonus_id VARCHAR(191) NOT NULL, day INT UNSIGNED NOT NULL, content_type VARCHAR(191) NOT NULL, content_mst_id VARCHAR(191) NOT NULL, sort_desc INT UNSIGNED NOT NULL DEFAULT 0, UNIQUE KEY uk_vip_login_bonus_content (mst_vip_login_bonus_id, day, content_type, content_mst_id)',
+        'mst_vip_level_reward' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, vip_level SMALLINT NOT NULL, content_type VARCHAR(191) NOT NULL, content_mst_id VARCHAR(191) NOT NULL, UNIQUE KEY uk_vip_level_reward (vip_level, content_type, content_mst_id)',
         'mst_gacha_prize' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, rarity TINYINT UNSIGNED NOT NULL',
         'mst_equipment' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, rarity ENUM(\'UR\',\'SSR\',\'SR\',\'R\',\'UC\',\'C\') NOT NULL',
         'mst_item' => 'id VARCHAR(191) NOT NULL PRIMARY KEY, name VARCHAR(191) NOT NULL',
@@ -508,5 +511,207 @@ class MasterImportServiceTest extends TestCase
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('id 列がありません');
         (new MasterImportService)->import($table, array_keys($row), [$row]);
+    }
+
+    // ========================================
+    // login・vip の id（login / vip の content は day を含む 4 列、vip_level_reward は vip_level 始まりの 3 列）
+    // ========================================
+
+    /**
+     * @return array<string, string>
+     */
+    private function loginRow(string $table, string $parentColumn, string $parent, int $day, string $type, string $mstId, int $sortDesc = 0): array
+    {
+        return [
+            'id' => implode(':', [$parent, $day, $type, $mstId]),
+            $parentColumn => $parent,
+            'day' => (string) $day,
+            'content_type' => $type,
+            'content_mst_id' => $mstId,
+            'sort_desc' => (string) $sortDesc,
+        ];
+    }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function loginTables(): array
+    {
+        return [
+            'mst_login_bonus_content' => ['mst_login_bonus_content', 'mst_login_bonus_id'],
+            'mst_vip_login_bonus_content' => ['mst_vip_login_bonus_content', 'mst_vip_login_bonus_id'],
+        ];
+    }
+
+    #[Test]
+    #[DataProvider('loginTables')]
+    public function loginとvipのcontentは規則どおりのidなら取り込める(string $table, string $parentColumn): void
+    {
+        $rows = [
+            $this->loginRow($table, $parentColumn, 'bonus_a', 1, 'item', 'item_potion', 2),
+            $this->loginRow($table, $parentColumn, 'bonus_a', 2, 'item', 'item:with:colon', 1),
+        ];
+
+        $result = (new MasterImportService)->import($table, array_keys($rows[0]), $rows);
+
+        $this->assertSame(2, $result['inserted']);
+    }
+
+    #[Test]
+    #[DataProvider('loginTables')]
+    public function loginとvipのcontentはidが規則と違えば中止され既存の行が残る(string $table, string $parentColumn): void
+    {
+        $seed = $this->loginRow($table, $parentColumn, 'bonus_a', 1, 'item', 'old');
+        DB::connection('mst')->table($table)->insert($seed);
+
+        $bad = $this->loginRow($table, $parentColumn, 'bonus_a', 1, 'item', 'new');
+        $bad['id'] = 'bonus_a:item:new';
+
+        try {
+            (new MasterImportService)->import($table, array_keys($bad), [$bad]);
+            $this->fail('RuntimeException が投げられるはず');
+        } catch (RuntimeException $e) {
+            $this->assertStringContainsString('規則', $e->getMessage());
+        }
+
+        $this->assertSame([$seed['id']], DB::connection('mst')->table($table)->pluck('id')->all());
+    }
+
+    #[Test]
+    #[DataProvider('loginTables')]
+    public function loginとvipのcontentは親_i_dやcontent_typeにコロンを含む行を拒否する(string $table, string $parentColumn): void
+    {
+        foreach ([['parent:a', 'item', $parentColumn], ['parent_a', 'item:x', 'content_type']] as [$parent, $type, $column]) {
+            $bad = $this->loginRow($table, $parentColumn, $parent, 1, $type, 'new');
+            try {
+                (new MasterImportService)->import($table, array_keys($bad), [$bad]);
+                $this->fail('RuntimeException が投げられるはず');
+            } catch (RuntimeException $e) {
+                $this->assertStringContainsString($column, $e->getMessage());
+            }
+        }
+        $this->assertSame(0, DB::connection('mst')->table($table)->count());
+    }
+
+    #[Test]
+    public function vipレベル報酬はidがvip_levelから始まる規則で検証される(): void
+    {
+        $ok = ['id' => '3:item:free_diamond', 'vip_level' => '3', 'content_type' => 'item', 'content_mst_id' => 'free_diamond'];
+        $result = (new MasterImportService)->import('mst_vip_level_reward', array_keys($ok), [$ok]);
+        $this->assertSame(1, $result['inserted']);
+
+        $bad = ['id' => 'vip_3:item:free_diamond'] + $ok;
+        try {
+            (new MasterImportService)->import('mst_vip_level_reward', array_keys($bad), [$bad]);
+            $this->fail('RuntimeException が投げられるはず');
+        } catch (RuntimeException $e) {
+            $this->assertStringContainsString('規則', $e->getMessage());
+        }
+        $this->assertSame(['3:item:free_diamond'], DB::connection('mst')->table('mst_vip_level_reward')->pluck('id')->all());
+    }
+
+    #[Test]
+    public function vipログインボーナスはsort_descが同じ日の同値を拒否し既存の行が残る(): void
+    {
+        $table = 'mst_vip_login_bonus_content';
+        $seed = $this->loginRow($table, 'mst_vip_login_bonus_id', 'vip_a', 1, 'item', 'old', 1);
+        DB::connection('mst')->table($table)->insert($seed);
+
+        // 同じ親・同じ日・同じ sort_desc（中身は違う）
+        $rows = [
+            $this->loginRow($table, 'mst_vip_login_bonus_id', 'vip_a', 1, 'item', 'item_a', 5),
+            $this->loginRow($table, 'mst_vip_login_bonus_id', 'vip_a', 1, 'item', 'item_b', 5),
+        ];
+
+        try {
+            (new MasterImportService)->import($table, array_keys($rows[0]), $rows);
+            $this->fail('RuntimeException が投げられるはず');
+        } catch (RuntimeException $e) {
+            $this->assertStringContainsString('sort_desc', $e->getMessage());
+            $this->assertStringContainsString('行 3', $e->getMessage());
+            $this->assertStringContainsString('既存のデータは変更していません', $e->getMessage());
+        }
+
+        $this->assertSame([$seed['id']], DB::connection('mst')->table($table)->pluck('id')->all());
+    }
+
+    #[Test]
+    public function vipログインボーナスはsort_descが違うか日や親が違えば同値でも取り込める(): void
+    {
+        $table = 'mst_vip_login_bonus_content';
+        $rows = [
+            $this->loginRow($table, 'mst_vip_login_bonus_id', 'vip_a', 1, 'item', 'item_a', 5),
+            $this->loginRow($table, 'mst_vip_login_bonus_id', 'vip_a', 1, 'item', 'item_b', 4),
+            $this->loginRow($table, 'mst_vip_login_bonus_id', 'vip_a', 2, 'item', 'item_a', 5),
+            $this->loginRow($table, 'mst_vip_login_bonus_id', 'vip_b', 1, 'item', 'item_a', 5),
+        ];
+
+        $result = (new MasterImportService)->import($table, array_keys($rows[0]), $rows);
+
+        $this->assertSame(4, $result['inserted']);
+    }
+
+    #[Test]
+    public function vipログインボーナスはsort_desc列が無いと全行が0の同値として拒否される(): void
+    {
+        $table = 'mst_vip_login_bonus_content';
+        $rows = [
+            $this->loginRow($table, 'mst_vip_login_bonus_id', 'vip_a', 1, 'item', 'item_a'),
+            $this->loginRow($table, 'mst_vip_login_bonus_id', 'vip_a', 1, 'item', 'item_b'),
+        ];
+        foreach ($rows as &$row) {
+            unset($row['sort_desc']);
+        }
+        unset($row);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('sort_desc');
+        (new MasterImportService)->import($table, array_keys($rows[0]), $rows);
+    }
+
+    #[Test]
+    public function vipログインボーナスの親idは数値として比べず文字列で比べる(): void
+    {
+        $table = 'mst_vip_login_bonus_content';
+        // '1' と '01' は数値なら同じだが、親 ID は別の ID（取り込める）
+        $rows = [
+            $this->loginRow($table, 'mst_vip_login_bonus_id', '1', 1, 'item', 'item_a', 5),
+            $this->loginRow($table, 'mst_vip_login_bonus_id', '01', 1, 'item', 'item_b', 5),
+        ];
+
+        $result = (new MasterImportService)->import($table, array_keys($rows[0]), $rows);
+
+        $this->assertSame(2, $result['inserted']);
+    }
+
+    #[Test]
+    public function vipログインボーナスのdayとsort_descは数値として比べる(): void
+    {
+        $table = 'mst_vip_login_bonus_content';
+        // day '1' と '01'、sort_desc '5' と '05' は同じ値
+        $a = $this->loginRow($table, 'mst_vip_login_bonus_id', 'vip_a', 1, 'item', 'item_a', 5);
+        $b = $this->loginRow($table, 'mst_vip_login_bonus_id', 'vip_a', 1, 'item', 'item_b', 5);
+        $b['day'] = '01';
+        $b['id'] = 'vip_a:01:item:item_b';
+        $b['sort_desc'] = '05';
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('sort_desc');
+        (new MasterImportService)->import($table, array_keys($a), [$a, $b]);
+    }
+
+    #[Test]
+    public function 通常のログインボーナスはsort_descが同値でも取り込める(): void
+    {
+        // 通常側は同値の並びを content_type・content_mst_id の昇順で決めるので、拒否の対象外
+        $table = 'mst_login_bonus_content';
+        $rows = [
+            $this->loginRow($table, 'mst_login_bonus_id', 'bonus_a', 1, 'item', 'item_a', 1),
+            $this->loginRow($table, 'mst_login_bonus_id', 'bonus_a', 1, 'item', 'item_b', 1),
+        ];
+
+        $result = (new MasterImportService)->import($table, array_keys($rows[0]), $rows);
+
+        $this->assertSame(2, $result['inserted']);
     }
 }

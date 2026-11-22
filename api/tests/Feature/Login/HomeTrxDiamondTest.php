@@ -217,6 +217,7 @@ class HomeTrxDiamondTest extends TestCase
     {
         MstLoginBonus::create(['id' => 'daily_login', 'type' => 'daily', 'loop_days' => 7, 'is_active' => true]);
         MstLoginBonusContent::create([
+            'id' => MstLoginBonusContent::makeId('daily_login', 1, 'item', 'free_diamond'),
             'mst_login_bonus_id' => 'daily_login',
             'day' => 1,
             'content_type' => 'item',

@@ -23,8 +23,9 @@ use RuntimeException;
  *   不正な値は TRUNCATE の前に検出してエラーにする
  * - id 列（string）を持つテーブルは、TRUNCATE の前に id 列を検証する。
  *   シートに id 列が無い・空・重複（大文字小文字を区別しない照合順序に合わせる）・191 文字超は取り込みを中止する。
- *   level 系の3表と *_content 系の6表は、id が自然キーの規則どおりかも検証する（ID_RULES。api の Model の makeId と同じ規則）。
+ *   level 系の3表と *_content 系の9表（login・vip 含む）は、id が自然キーの規則どおりかも検証する（ID_RULES。api の Model の makeId と同じ規則）。
  *   *_content 系は、親 ID と content_type に ':' を含む行も拒否する（別の組が同じ id になりうるため。設計 3.1）
+ * - mst_vip_login_bonus_content は (mst_vip_login_bonus_id, day, sort_desc) の重複も拒否する（UNIQUE_COLUMN_GROUPS）
  * - トランザクション内で実行（失敗時はロールバック）
  */
 class MasterImportService
@@ -49,11 +50,12 @@ class MasterImportService
      * id が自然キーの規則どおりかを検証するテーブルと、id を作る列（':' でつなぐ）
      *
      * api の Model の makeId（MstUnitLevel・MstEquipmentLevel・MstPlayerLevel と、
-     * MstEventContent・MstMailboxContent・MstMissionContent・MstTagContent・MstTradeProductContent）と同じ規則を持つ。
+     * MstEventContent・MstMailboxContent・MstMissionContent・MstTagContent・MstTradeProductContent・
+     * MstLoginBonusContent・MstVipLoginBonusContent・NexusVip の MstVipLevelReward）と同じ規則を持つ。
      * mst_reward_track_content は api に Model が無く（アダプターが DB::table で読む）、この規則が唯一の定義になる。
      * tool は api の Model を読み込めず、api の docker コンテナも tool のコードを読めないため、
      * 突き合わせるテストが書けない。規則を変えるときは必ず両方を同時に直す。
-     * 残りの表（mst_login_bonus_content・mst_vip_*・billing 系）は、対応する PR で足す（設計: mst-id-introduction/db.md 8.2）
+     * 残りの表（billing 系）は、対応する PR で足す（設計: mst-id-introduction/db.md 8.2）
      *
      * 列が 3 つ以上の規則は、最後の列（content_mst_id）以外が ':' を含んではならない（validateIds）
      */
@@ -67,7 +69,27 @@ class MasterImportService
         'mst_reward_track_content' => ['mst_reward_track_milestone_id', 'mst_reward_track_line_id', 'content_type', 'content_mst_id'],
         'mst_tag_content' => ['mst_tag_id', 'content_type', 'content_mst_id'],
         'mst_trade_product_content' => ['mst_trade_product_id', 'content_type', 'content_mst_id'],
+        'mst_login_bonus_content' => ['mst_login_bonus_id', 'day', 'content_type', 'content_mst_id'],
+        'mst_vip_login_bonus_content' => ['mst_vip_login_bonus_id', 'day', 'content_type', 'content_mst_id'],
+        'mst_vip_level_reward' => ['vip_level', 'content_type', 'content_mst_id'],
     ];
+
+    /**
+     * 同じ組み合わせで値が重なってはならない列（取り込みで拒否する）
+     *
+     * mst_vip_login_bonus_content は、同じ日の中の並びを sort_desc 降順で決める。同値の並びは
+     * サーバー（MySQL の文字列順の id）とクライアント（SQLite の id ASC）で食い違いうるので、
+     * (mst_vip_login_bonus_id, day, sort_desc) の重複を作らない（設計: mst-id-introduction/db.md 12 節 6）
+     */
+    private const UNIQUE_COLUMN_GROUPS = [
+        'mst_vip_login_bonus_content' => ['mst_vip_login_bonus_id', 'day', 'sort_desc'],
+    ];
+
+    /**
+     * UNIQUE_COLUMN_GROUPS のうち、数値として比べる列（'1' と '01' を同じ値とみなし、空は 0）。
+     * それ以外の列（親 ID など）は文字列のまま、大文字小文字を区別せずに比べる（DB の照合順序に合わせる）
+     */
+    private const UNIQUE_NUMERIC_COLUMNS = ['day', 'sort_desc'];
 
     /**
      * エラーとして表示する不正行の最大件数
@@ -109,6 +131,7 @@ class MasterImportService
 
         // id 列の検証は TRUNCATE の前に済ませる（失敗しても既存の行を残す）
         $this->validateIds($tableName, $headers, $rows);
+        $this->validateUniqueColumnGroups($tableName, $rows);
 
         $insertData = [];
         $skipped = 0;
@@ -297,6 +320,57 @@ class MasterImportService
 
             throw new RuntimeException(
                 "テーブル {$tableName} の id が不正なため、取り込みを中止しました（既存のデータは変更していません）。\n"
+                .implode("\n", $shown)
+                .($more > 0 ? "\n…ほか {$more} 件" : '')
+            );
+        }
+    }
+
+    /**
+     * UNIQUE_COLUMN_GROUPS のテーブルについて、列の組み合わせの重複を検証する。問題があれば TRUNCATE の前に例外で中止する
+     *
+     * 数値の列（UNIQUE_NUMERIC_COLUMNS）が空・無いときは、DB の既定値（0）と同じ扱いで比べる。親 ID は文字列で比べる。
+     *
+     * @param  array<int, array<string, mixed>>  $rows
+     *
+     * @throws RuntimeException
+     */
+    private function validateUniqueColumnGroups(string $tableName, array $rows): void
+    {
+        $columns = self::UNIQUE_COLUMN_GROUPS[$tableName] ?? null;
+        if ($columns === null) {
+            return;
+        }
+
+        $errors = [];
+        $seen = [];
+        foreach ($rows as $index => $row) {
+            $parts = [];
+            foreach ($columns as $column) {
+                $value = $row[$column] ?? '';
+                $text = is_scalar($value) ? trim((string) $value) : '';
+                // 数値は '1' と '01' を同じ値とみなす。空は既定値 0
+                if (in_array($column, self::UNIQUE_NUMERIC_COLUMNS, true)) {
+                    $parts[] = $text === '' ? '0' : (is_numeric($text) ? (string) (int) $text : $text);
+                } else {
+                    $parts[] = mb_strtolower($text);
+                }
+            }
+            $key = implode("\0", $parts);
+            if (isset($seen[$key])) {
+                $errors[] = '行 '.($index + 2).': ('.implode(', ', $columns).") が行 {$seen[$key]} と同じ値です（並びが決まらなくなります）";
+
+                continue;
+            }
+            $seen[$key] = $index + 2;
+        }
+
+        if ($errors !== []) {
+            $shown = array_slice($errors, 0, self::MAX_REPORTED_ERRORS);
+            $more = count($errors) - count($shown);
+
+            throw new RuntimeException(
+                "テーブル {$tableName} の ".implode('・', $columns)." が重複しているため、取り込みを中止しました（既存のデータは変更していません）。\n"
                 .implode("\n", $shown)
                 .($more > 0 ? "\n…ほか {$more} 件" : '')
             );

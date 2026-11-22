@@ -53,6 +53,7 @@ return new class extends Migration
         // mst_login_bonus_content: ログインボーナス報酬内容
         // ========================================
         Schema::create('mst_login_bonus_content', function (Blueprint $table) {
+            $table->string('id')->primary()->comment('ID（{mst_login_bonus_id}:{day}:{content_type}:{content_mst_id}）');
             $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
             $table->string('mst_login_bonus_id')->comment('ログインボーナスID');
             $table->unsignedInteger('day')->default(0)->comment('ログイン日数（1〜N。カムバック報酬は0）');
@@ -66,15 +67,9 @@ return new class extends Migration
             $table->dateTime('created_at')->default(DB::raw('CURRENT_TIMESTAMP'))->comment('作成日時');
             $table->dateTime('updated_at')->default(DB::raw('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'))->comment('更新日時');
 
-            $table->primary(['mst_login_bonus_id', 'day', 'content_type', 'content_mst_id'], 'pk_login_bonus_content');
+            $table->unique(['mst_login_bonus_id', 'day', 'content_type', 'content_mst_id'], 'uk_login_bonus_content');
             $table->index('deploy_key');
             $table->index('sort_desc');
-
-            // 外部キー制約
-            $table->foreign('mst_login_bonus_id', 'fk_login_bonus_content')
-                ->references('id')
-                ->on('mst_login_bonus')
-                ->onDelete('cascade');
         });
     }
 
