@@ -100,11 +100,10 @@ return new class extends Migration
             $table->dateTime('created_at')->default(DB::raw('CURRENT_TIMESTAMP'))->comment('作成日時');
             $table->dateTime('updated_at')->default(DB::raw('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'))->comment('更新日時');
 
-            // マイルストーン × ライン × コンテンツの組み合わせで一意
-            $table->unique(
-                ['mst_reward_track_milestone_id', 'mst_reward_track_line_id', 'content_type', 'content_mst_id'],
-                'uk_reward_track_content'
-            );
+            // 4 列の unique（マイルストーン × ライン × content_type × content_mst_id）は置かない。
+            // string が VARCHAR(255) だと 4 列の索引は 4080 バイトで、InnoDB の上限 3072 バイトを超えて作れない（ERROR 1071）。
+            // 一意性は、この 4 列を ':' でつないだ主キー id が担う（id の規則は tool の MasterImportService::ID_RULES。
+            // 親 ID・content_type に ':' を含めない規則が前提）。
 
             $table->index('deploy_key');
             $table->index('mst_reward_track_milestone_id');

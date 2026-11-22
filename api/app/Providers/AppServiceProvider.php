@@ -487,8 +487,11 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // Set default string length for database
-        Schema::defaultStringLength(191);
+        // 文字列（string / varchar）の既定の長さ。255 文字（TEXT 列は対象外）。
+        // utf8mb4 は 1 文字 4 バイトで、InnoDB の索引キー長の上限は 3072 バイト（= 768 文字）。
+        // 1 つの索引（主キー・unique・index）に入れる string 列の長さの合計が 768 文字以内に収まるようにする。
+        // 255 文字だと 3 列までなら収まる（3 列 unique = 3060 バイト。4 列目を足すと超える）。
+        Schema::defaultStringLength(255);
 
         // リレーションの遅延読み込み（1件ごとにSELECTが走るN+1）を、本番以外では例外にする。
         // リレーションを使うときは、Repository で with() して先に読む

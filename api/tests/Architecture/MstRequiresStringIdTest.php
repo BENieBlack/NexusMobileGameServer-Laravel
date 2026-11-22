@@ -110,7 +110,7 @@ class MstRequiresStringIdTest extends TestCase
             $table->id()->comment('ID');
         });
         Schema::create('mst_good_content', function (Blueprint $table) {
-            $table->string('id', 191)->primary()->comment('ID');
+            $table->string('id', 255)->primary()->comment('ID');
             $table->string('content_type')->comment('種別');
         });
         Schema::create('mst_unit__l10n', function (Blueprint $table) {

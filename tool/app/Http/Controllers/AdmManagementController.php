@@ -117,7 +117,7 @@ class AdmManagementController extends Controller
     public function storePage(Request $request): RedirectResponse
     {
         $data = $request->validate([
-            'id' => ['required', 'string', 'max:191', 'regex:/^[a-zA-Z0-9_.:-]+$/', 'unique:admin.adm_page,id'],
+            'id' => ['required', 'string', 'max:255', 'regex:/^[a-zA-Z0-9_.:-]+$/', 'unique:admin.adm_page,id'],
         ]);
 
         AdmPage::create($data);
@@ -128,7 +128,7 @@ class AdmManagementController extends Controller
     public function updatePage(Request $request, AdmPage $page): RedirectResponse
     {
         $data = $request->validate([
-            'id' => ['required', 'string', 'max:191', 'regex:/^[a-zA-Z0-9_.:-]+$/', 'unique:admin.adm_page,id,'.$page->id.',id'],
+            'id' => ['required', 'string', 'max:255', 'regex:/^[a-zA-Z0-9_.:-]+$/', 'unique:admin.adm_page,id,'.$page->id.',id'],
         ]);
 
         if ($data['id'] !== $page->id) {

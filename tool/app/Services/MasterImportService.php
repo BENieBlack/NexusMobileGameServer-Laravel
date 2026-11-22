@@ -22,7 +22,7 @@ use RuntimeException;
  * - rarity / bonus_rarity は列の実際の型で扱いを変える（ENUM は文字列のまま、整数列は数値へ変換）。
  *   不正な値は TRUNCATE の前に検出してエラーにする
  * - id 列（string）を持つテーブルは、TRUNCATE の前に id 列を検証する。
- *   シートに id 列が無い・空・重複（大文字小文字を区別しない照合順序に合わせる）・191 文字超は取り込みを中止する。
+ *   シートに id 列が無い・空・重複（大文字小文字を区別しない照合順序に合わせる）・255 文字超は取り込みを中止する。
  *   level 系の3表と *_content 系の9表（login・vip 含む）と billing 系の3表（mst_billing_platform_product・mst_in_app_purchase_content・mst_in_app_purchase_effect）は、id が自然キーの規則どおりかも検証する（ID_RULES。api の Model の makeId と同じ規則）。
  *   *_content 系は、親 ID と content_type に ':' を含む行も拒否する（別の組が同じ id になりうるため。設計 3.1）
  * - mst_vip_login_bonus_content は (mst_vip_login_bonus_id, day, sort_desc) の重複も拒否する（UNIQUE_COLUMN_GROUPS）
@@ -42,9 +42,9 @@ class MasterImportService
     private const AUTO_SET_COLUMNS = ['created_at', 'updated_at'];
 
     /**
-     * id 列の最大長（実 DB の string は Schema::defaultStringLength(191) で varchar(191)）
+     * id 列の最大長（実 DB の string は Schema::defaultStringLength(255) で varchar(255)）
      */
-    private const MAX_ID_LENGTH = 191;
+    private const MAX_ID_LENGTH = 255;
 
     /**
      * id が自然キーの規則どおりかを検証するテーブルと、id を作る列（':' でつなぐ）
@@ -53,7 +53,7 @@ class MasterImportService
      * MstEventContent・MstMailboxContent・MstMissionContent・MstTagContent・MstTradeProductContent・
      * MstLoginBonusContent・MstVipLoginBonusContent・NexusVip の MstVipLevelReward、
      * MstBillingPlatformProduct・MstInAppPurchaseContent・MstInAppPurchaseEffect）と同じ規則を持つ。
-     * mst_in_app_purchase は自然キーが無く（人が決める安定した値。例 iap_diamond_100）、規則の対象外（id の空・重複・191 文字超だけ検証する）。
+     * mst_in_app_purchase は自然キーが無く（人が決める安定した値。例 iap_diamond_100）、規則の対象外（id の空・重複・255 文字超だけ検証する）。
      * mst_billing_platform_product は billing_platform が先頭固定なので、platform_product_id が ':' を含んでも曖昧にならない（設計 3.1）。
      * mst_reward_track_content は api に Model が無く（アダプターが DB::table で読む）、この規則が唯一の定義になる。
      * tool は api の Model を読み込めず、api の docker コンテナも tool のコードを読めないため、
@@ -243,7 +243,7 @@ class MasterImportService
      *
      * 対象は id 列が文字列型のテーブルだけ（整数の id のテーブルは何もしない）。
      * - シートに id 列が無い
-     * - id が空・重複・191 文字超の行
+     * - id が空・重複・255 文字超の行
      * - ID_RULES のテーブルは、id が自然キーの列を ':' でつないだ値と一致しない行
      *
      * @param  array<int, string>  $headers

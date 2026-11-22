@@ -17,7 +17,7 @@ use Tests\TestCase;
 /**
  * *_content 系 6 表（event / mailbox / mission / reward_track / tag / trade_product）の string id のテスト
  *
- * id の生成規則・id の主キー・自然キーの unique・Model が id で引けることを確認する
+ * id の生成規則・id の主キー・自然キーの unique（報酬トラックは unique を置かず id の主キーが担う）・Model が id で引けることを確認する
  */
 class MstContentIdTest extends TestCase
 {
@@ -146,13 +146,32 @@ class MstContentIdTest extends TestCase
         $this->insertRewardTrackRow('dup', 'line_paid');
     }
 
+    /**
+     * 報酬トラックの 4 列 unique は、索引キー長の上限（3072 バイト）を超えるので置かない（string が 255 文字のため）。
+     * 一意性は 4 列をつないだ id の主キーが担う。id が構成列から作られること（上のテスト）・id の PK の重複拒否と、
+     * 取り込みが ':' を含む親 ID・content_type と、4 列が同じで id が違う行を拒否すること（tool の MasterImportServiceTest）で、id と自然キーの一致を守る。
+     */
     #[Test]
-    public function 報酬トラックの自然キーの重複はuniqueで拒否される(): void
+    public function 報酬トラックの4列の索引は置かない(): void
     {
-        $this->insertRewardTrackRow('id_a', 'line_free');
+        $indexes = DB::connection('mst')->select(
+            'SELECT DISTINCT INDEX_NAME AS name FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?',
+            [self::REWARD_TRACK_TABLE]
+        );
+        $names = array_map(static fn ($row) => $row->name, $indexes);
+
+        $this->assertNotContains('uk_reward_track_content', $names);
+        $this->assertContains('idx_milestone_line', $names);
+    }
+
+    #[Test]
+    public function idは255文字ちょうどなら入り256文字は拒否される(): void
+    {
+        $this->insertRewardTrackRow(str_repeat('a', 255), 'line_free');
+        $this->assertSame(1, DB::connection('mst')->table(self::REWARD_TRACK_TABLE)->where('id', str_repeat('a', 255))->count());
 
         $this->expectException(QueryException::class);
-        $this->insertRewardTrackRow('id_b', 'line_free');
+        $this->insertRewardTrackRow(str_repeat('b', 256), 'line_paid');
     }
 
     private function insertRow(string $table, string $parentColumn, string $contentType, string $contentMstId, ?string $id = null): string

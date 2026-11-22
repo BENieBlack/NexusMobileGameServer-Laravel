@@ -38,13 +38,13 @@
 | 9 | `mst_login_bonus_content`（login） | `(mst_login_bonus_id, day, content_type, content_mst_id)`（`pk_login_bonus_content`） | 同左 | なし | あり（`MstLoginBonusSeeder`・`RecordingLoginBonusSeeder`） | `{mst_login_bonus_id}:{day}:{content_type}:{content_mst_id}`（例 `daily_login:1:item:item_potion`）**仮置き**（Nexus 5 節の案どおり） | PK `id`。`uk_login_bonus_content`。`foreign()` は規約違反なので外す（6.2） |
 | 10 | `mst_mailbox_content`（mailbox） | `(mst_mailbox_id, content_type, content_mst_id)`（`pk_mailbox_content`）。**ただし Model は `$primaryKey` を宣言していない**（7.1） | 同左 | なし | シーダー無し | `{mst_mailbox_id}:{content_type}:{content_mst_id}` **仮置き**（Nexus 5 節の案どおり） | PK `id`。`uk_mailbox_content`。`idx(mst_mailbox_id)` は unique の先頭列と重複するので外す |
 | 11 | `mst_mission_content`（mission） | `(mst_mission_id, content_type, content_mst_id)` | 同左 | なし | シーダー無し | `{mst_mission_id}:{content_type}:{content_mst_id}` **仮置き**（Nexus 5 節の案どおり） | PK `id`。`uk_mission_content` |
-| 12 | `mst_reward_track_content`（reward-track） | `(mst_reward_track_milestone_id, mst_reward_track_line_id, content_type, content_mst_id)`（4 列） | 同左 | なし（Model 無し。`RewardTrackMasterRepositoryAdapter` が `DB::table` で読む） | シーダー無し | `{mst_reward_track_milestone_id}:{mst_reward_track_line_id}:{content_type}:{content_mst_id}` **仮置き**（Nexus の「別の列を含む。S0 で確認」への答え: 4 列。確認した） | PK `id`。`uk_reward_track_content`（元の 4 列）。`idx_milestone_line` などの既存索引は残す |
+| 12 | `mst_reward_track_content`（reward-track） | `(mst_reward_track_milestone_id, mst_reward_track_line_id, content_type, content_mst_id)`（4 列） | 同左 | なし（Model 無し。`RewardTrackMasterRepositoryAdapter` が `DB::table` で読む） | シーダー無し | `{mst_reward_track_milestone_id}:{mst_reward_track_line_id}:{content_type}:{content_mst_id}` **仮置き**（Nexus の「別の列を含む。S0 で確認」への答え: 4 列。確認した） | PK `id`。**`uk_reward_track_content`（元の 4 列）は外す**（string が VARCHAR(255) だと 4 列の索引は 4080 バイトで上限 3072 を超える。一意性は 4 列を `:` でつないだ `id` の PK が担う。3.1・12 節 9）。`idx_milestone_line`（2 列）などの既存索引は残す |
 | 13 | `mst_tag_content`（tag） | `(mst_tag_id, content_type, content_mst_id)` | 同左 | なし | シーダー無し | `{mst_tag_id}:{content_type}:{content_mst_id}` **仮置き**（Nexus 5 節の案どおり） | PK `id`。`uk_tag_content`。`idx_tag_content_target` は残す |
 | 14 | `mst_trade_product_content`（trade） | `(mst_trade_product_id, content_type, content_mst_id)` | 同左 | なし | シーダー無し | `{mst_trade_product_id}:{content_type}:{content_mst_id}` **仮置き**（Nexus 5 節の案どおり） | PK `id`。`uk_trade_product_content` |
 | 15 | `mst_vip_level_reward`（vip） | `(vip_level, content_type, content_mst_id)`（`pk_vip_level_reward`） | 同左 | なし | シーダー無し | `{vip_level}:{content_type}:{content_mst_id}` **仮置き**（Nexus 5 節の案どおり） | PK `id`。`uk_vip_level_reward` |
 | 16 | `mst_vip_login_bonus_content`（vip） | `id`（AUTO_INCREMENT）。`deploy_key` 列が無い。`timestamps()` | **無い**（unique が無いので同じ `(bonus, day, type, content)` を 2 行置ける） | なし（`MstVipLoginBonusRepository` が読む） | あり（`MstVipLoginBonusSeeder`。11 レベル × 数行） | `string('id')`。`{mst_vip_login_bonus_id}:{day}:{content_type}:{content_mst_id}`（例 `vip_login_lv5:4:item:item_exp_002`）**仮置き**（Nexus 案「親 ID + 中身」どおり） | PK `id`。`uk_vip_login_bonus_content`（元の 4 列。**新しく足す unique**）。`idx_vip_login_bonus_day` は unique の先頭 2 列と重複するので外す。`foreign()` は外す（6.2） |
 
-- 「元の PK を unique にする」ので、行を一意にする条件は今と変わらない。キー長の条件も今の PK と同じ（今動いているなら動く）。新しい `id` 列（`varchar(191)`。実 DB は `Schema::defaultStringLength(191)`）の主キーが加わるだけ。
+- 「元の PK を unique にする」ので、行を一意にする条件は今と変わらない。キー長の条件も今の PK と同じ（今動いているなら動く）。新しい `id` 列（`varchar(255)`。実 DB は `Schema::defaultStringLength(255)`）の主キーが加わるだけ。ただし `mst_reward_track_content` の 4 列は 255 文字だと索引の上限を超えるので、unique を置かない（3.1）。
 - `deploy_key` 列は触らない（型の BIGINT 化・既定値は deploy_key 上乗せの S3 の範囲）。`mst_vip_login_bonus_content` に `deploy_key` が無いのも、この S0 では直さない（Nexus db.md 3.3・7 節が「列が無いまま畳む」と決めている）。
 - `created_at`・`updated_at` は触らない（#16 の `timestamps()` は規約から外れる（`dateTime` 明示）が、この S0 の範囲外。12 節 8。S3 で直す）。
 
@@ -53,8 +53,8 @@
 ### 3.1 区切りと形
 
 - 区切りは `:`（Nexus 案）。**親の ID と `content_type` に `:` を含めない**（含むと別の組が同じ `id` になりうる。例: `a:b` + `c` と `a` + `b:c`）。最後の `content_mst_id` は `:` を含んでよい（切り分けは常に先頭から。ただし `id` を分解して使うコードは作らない）。**仮置き**: 取り込みで、`:` を含む親 ID・`content_type` を拒否する。ただし `mst_billing_platform_product.platform_product_id`（外部の識別子）が `:` を含む場合は `billing_platform` が先頭固定で曖昧にならないので許す。
-- 長さは `string('id')` = `VARCHAR(191)` を主キーにする前提（実 DB は `AppServiceProvider` の `Schema::defaultStringLength(191)` で `string` が varchar(191)。実測済み: 191 文字 × 4 バイトの列を 4 本並べた `mst_reward_track_content` の unique は 3056 バイトで、InnoDB の索引キー長の上限 3072 バイトにぎりぎり収まる。255 だと 4080 バイトで失敗する）。規則どおりに作ると、複数列をつなぐ表（特に `mst_billing_platform_product`〔`platform_product_id`〕と `mst_reward_track_content`〔4 列〕）は 191 を超えうる。**仮置き**: **全 16 表**の取り込み（と、シーダー・`makeId`）で、`id` が 191 文字を超える行を拒否する（切り詰めない）。照合順序は `utf8mb4_unicode_ci`（大文字小文字を区別しない）なので、`UR:1` と `ur:1` は同じ `id` と見なされる。ID は小文字・スネークケースを基本にし、`rarity` だけ慣習どおり大文字（`.claude/database.md` 5 節の例外）。
-- `id` は**自然キーと必ず一致させる**（unique が一致を保証する。`id` が規則からずれても主キー・unique の両方が通ってしまう点は、取り込みの検証で守る。8.2）。
+- 長さは `string('id')` = `VARCHAR(255)` を主キーにする（人の決定。12 節 9。文字列〔varchar〕は VARCHAR(255)、TEXT 列は今のまま。実 DB は `AppServiceProvider` の `Schema::defaultStringLength(255)`。以前は 191 だった）。InnoDB の索引キー長の上限は 3072 バイトで、utf8mb4（1 文字 4 バイト）なので **1 つの索引に入る string 列の長さの合計は 768 文字まで**。255 文字の列だと **3 列までなら収まる**（3 列の unique は 3060 バイトで、上限まで残り 12 バイト）。4 列は 4080 バイトで超える（使い捨て DB で ERROR 1071 を確認済み）。このため **`mst_reward_track_content` の 4 列 unique `uk_reward_track_content` は外し**、一意性は 4 列を `:` でつないだ主キー `id` に寄せる（`id` は tool の `MasterImportService::ID_RULES` で構成列から決まり、親 ID・`content_type` に `:` を含めない規則〔上〕が前提。`idx_milestone_line`〔2 列〕は残す）。ほかの索引は 255 でも収まる。3 列 unique（`uk_event_content` など）は 3060 バイトで残り 12 バイトしかないので、**4 列目を足すと超える**（足すときは `id` に寄せるか、列の長さを個別に絞る）。また、255 文字の列 3 本の索引に別の型の列（int など）を足すのも限界に近い（残り 8 バイト。int 1 列 4 バイトまでは入るが、2 列目で超える）。規則どおりに作ると、複数列をつなぐ表（特に `mst_billing_platform_product`〔`platform_product_id`〕と `mst_reward_track_content`〔4 列〕）は 255 を超えうる。**仮置き**: **全 16 表**の取り込み（と、シーダー・`makeId`）で、`id` が 255 文字を超える行を拒否する（切り詰めない）。照合順序は `utf8mb4_unicode_ci`（大文字小文字を区別しない）なので、`UR:1` と `ur:1` は同じ `id` と見なされる。ID は小文字・スネークケースを基本にし、`rarity` だけ慣習どおり大文字（`.claude/database.md` 5 節の例外）。
+- `id` は**自然キーと必ず一致させる**（unique が一致を保証する。`mst_reward_track_content` だけは unique を置かないので、`id` の PK が一意性を担う。`id` が規則からずれても主キー・unique の両方が通ってしまう点は、取り込みの検証で守る。8.2）。
 
 ### 3.2 rarity の表記（Nexus が「S0 で決める」とした点）
 
@@ -349,11 +349,12 @@ mst への書き込みは**シーダーとテストだけ**（`_BaseMst::allowWr
 | 6 | VIP 報酬の `sort_desc` 同値（`(mst_vip_login_bonus_id, day, sort_desc)` の重複）は**取り込みで拒否する** | サーバー（MySQL の照合）とクライアント（SQLite の BINARY）の並びの食い違いを避けるため（9.2）。実装の置き場は PR ③ | 取り込みの検証 |
 | 7 | `RARITY_MAP` の疑い（3.2）を**実装の前に開発 DB で確かめる**。**S0 の PR ① の前提作業**として載せる | 確かめる範囲は `mst_unit`・`mst_equipment`・`mst_unit_level`・`mst_equipment_level`。結果（入れ替わり・INSERT 失敗・unique 衝突）次第で**別の修正**になる（S0 の範囲外。切り出す）。`id` は `UR:1` のまま | PR ① の着手条件 |
 | 8 | `foreign()` は S0 で外す（#9・#16）。`mst_vip_login_bonus_content` の **`timestamps()` と `deploy_key` 列の無さは deploy_key 上乗せの S3 で直す** | S0 では触らない | PR ③ の範囲 |
+| 9 | （2026-11-22 追補。人の決定）文字列（varchar）の長さを **VARCHAR(255)** にする（`Schema::defaultStringLength(191)` → 255。TEXT 列は今のまま）。`mst_reward_track_content` の **4 列 unique `uk_reward_track_content` を外し**、一意性を 4 列をつないだ主キー `id` に寄せる | 255 で 3072 バイトを超える索引はこの 4 列 unique だけ（4080 バイト）。最大は 3 列 unique の 3060 バイト（残り 12 バイト）。`id` の規則と、親 ID・`content_type` に `:` を禁止する規則が前提（取り込みの検証で守る）。tool の `MAX_ID_LENGTH`・`adm_page.id` の `max` も 255（`adm_page.id` の列は元から 255）。以前の 191 前提の実測（3056 バイト）は置き換え | `AppServiceProvider`、reward-track の mst create、tool の `MasterImportService`・`AdmManagementController`、テスト、`.claude/database.md` |
 
 ### 12.1 仮置きとして残るもの（人の確認が要る）
-人が答えたのは上の 8 点だけ。次は引き続き**仮置き**（変えるなら人が指示する）。
+人が答えたのは上の 8 点と、追補の 9 だけ。次は引き続き**仮置き**（変えるなら人が指示する）。
 - 個別のテーブルの id 規則（2 節。Nexus db.md 5 節の案を広げたもの。`mst_unit_level` の rarity 表記を英字にする点を含む。3.2）。
-- `:` を含む親 ID の拒否、`id` 191 文字超の拒否（3.1）。
+- `:` を含む親 ID の拒否、`id` 255 文字超の拒否（3.1）。
 - 各 Model の `makeId` に生成規則を寄せる（7.3）。
 - PR の分け方と順序（11 節）。
 
@@ -363,6 +364,6 @@ mst への書き込みは**シーダーとテストだけ**（`_BaseMst::allowWr
 - 他のクライアント（Godot 以外）が課金 API・報酬トラックの API を呼んでいるか（12 節 2）。
 - `_BaseBuyUseCase::generateUniqueRequestId` の文字列の使い道と長さの制限（4.1）。
 - `RARITY_MAP` と ENUM（3.2。12 節 7）。`mst_unit`・`mst_equipment` を含む。入れ替わり・INSERT 失敗・unique 衝突のどれが起きるかは MySQL 実機で未確認。
-- （解消済み）varchar(191) の `id` と、`mst_reward_track_content` の 4 列 unique の索引キー長は実測で収まる（3056/3072 バイト。3.1）。
+- （解消済み）`id` を VARCHAR(255) にしたときの索引キー長。4 列 unique〔`mst_reward_track_content`〕は 4080 バイトで超えるので外した（12 節 9）。残る最大は 3 列 unique の 3060 バイト（3072 以内。全 migration の成功をテスト用 DB で確認）。
 - `mst_in_app_purchase__l10n` の運営シートの列の並び（親の `id` 列と同じシートにあるか）。
 - 実行（マイグレーション・シーダー・テスト・`make check`）はしていない。
