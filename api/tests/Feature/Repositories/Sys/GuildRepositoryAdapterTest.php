@@ -114,7 +114,7 @@ class GuildRepositoryAdapterTest extends TestCase
     public function 一覧を取得できる(): void
     {
         $this->createGuild();
-        $this->createGuild('ふたつめ');
+        $this->createGuild('ふたつめ', $this->signUpPlayer()['player']->id);
 
         $names = array_map(fn (Guild $guild) => $guild->getName(), $this->repository->selectList(50, 0));
 
@@ -126,7 +126,7 @@ class GuildRepositoryAdapterTest extends TestCase
     {
         // ギルドはゲーム内に無数にあるため、全件を返す口は用意しない
         $this->createGuild();
-        $this->createGuild('ふたつめ');
+        $this->createGuild('ふたつめ', $this->signUpPlayer()['player']->id);
 
         $this->assertCount(1, $this->repository->selectList(1, 0));
         $this->assertCount(1, $this->repository->selectList(1, 1));
@@ -252,9 +252,13 @@ class GuildRepositoryAdapterTest extends TestCase
         $this->assertDatabaseMissing('sys_guild', ['id' => $guild->getId()], 'sys');
     }
 
-    private function createGuild(string $name = 'テストギルド'): Guild
+    /**
+     * ギルドを作る。マスターは一人一ギルド（sys_guild_member.sys_player_id は unique）なので、
+     * 2 つ目以降は別のプレイヤーを渡すこと
+     */
+    private function createGuild(string $name = 'テストギルド', ?int $masterPlayerId = null): Guild
     {
-        $guild = $this->repository->insert($name, '説明文', $this->masterPlayerId);
+        $guild = $this->repository->insert($name, '説明文', $masterPlayerId ?? $this->masterPlayerId);
         $this->queryManager->execAllQuery();
 
         return $guild;

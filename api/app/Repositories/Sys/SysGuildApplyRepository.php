@@ -70,6 +70,24 @@ class SysGuildApplyRepository extends _BaseSysRepository
     }
 
     /**
+     * プレイヤーの全申請を、ID昇順で FOR UPDATE して読む（脱退の排他）
+     *
+     * 申請行は承認者が書く（他人が書く行）ので、脱退が削除する前に押さえる。
+     * 複数行なので主キー昇順に取る。該当行が無いときはギャップロックになるが、
+     * 申請を挿入するのは本人（player.lock で直列）だけなので、他人とは競合しない。
+     *
+     * @param  int  $playerId  プレイヤーID
+     * @return Collection<array-key, SysGuildApply>
+     */
+    public function selectAllByPlayerIdForUpdate(int $playerId): Collection
+    {
+        return $this->selectForUpdate()
+            ->where('sys_player_id', $playerId)
+            ->orderBy('id')
+            ->get();
+    }
+
+    /**
      * ギルドIDとプレイヤーIDで既存の申請を検索（Model返却）
      *
      * @param  int  $guildId  ギルドID

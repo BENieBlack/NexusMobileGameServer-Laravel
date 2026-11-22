@@ -89,6 +89,42 @@ class ChatGroupLockTest extends TestCase
     }
 
     #[Test]
+    public function test_change_role_locks_room_row_first_then_the_requester(): void
+    {
+        $roomId = $this->makeGroupRoom();
+        $this->invite($roomId, $this->otherPlayerId)->assertOk();
+
+        $locks = $this->collectLockTables(function () use ($roomId): void {
+            $this->changeRole($roomId, $this->otherPlayerId, 'admin')->assertOk();
+        });
+
+        // 部屋 → 実行者の権限、の順（invite・kick・leave と同じく部屋が先）
+        $this->assertSame(['sys_chat_room', 'sys_chat_room_member'], $locks);
+        $this->assertSame('admin', $this->memberRole($roomId, $this->otherPlayerId));
+    }
+
+    #[Test]
+    public function test_change_role_by_a_demoted_or_removed_requester_fails(): void
+    {
+        $roomId = $this->makeGroupRoom();
+        $this->invite($roomId, $this->otherPlayerId)->assertOk();
+
+        // 降格済みのオーナー（admin）は、ロック下の最新の役職で判定されて失敗する
+        DB::connection('sys')->table('sys_chat_room_member')
+            ->where('chat_room_id', $roomId)->where('sys_player_id', $this->ownerPlayerId)
+            ->update(['role' => 'admin']);
+        $demoted = $this->changeRole($roomId, $this->otherPlayerId, 'admin');
+        $this->assertSame(GameErrorCode::CHAT_NO_ROLE_MANAGE_PERMISSION, $demoted->json('error_code'));
+        $this->assertSame('member', $this->memberRole($roomId, $this->otherPlayerId));
+
+        // 外された実行者も同じ
+        DB::connection('sys')->table('sys_chat_room_member')
+            ->where('chat_room_id', $roomId)->where('sys_player_id', $this->ownerPlayerId)->delete();
+        $removed = $this->changeRole($roomId, $this->otherPlayerId, 'admin');
+        $this->assertSame(GameErrorCode::CHAT_NO_ROLE_MANAGE_PERMISSION, $removed->json('error_code'));
+    }
+
+    #[Test]
     public function test_invite_succeeds_one_below_the_limit_and_fails_at_the_limit(): void
     {
         $roomId = $this->makeGroupRoom();
@@ -192,6 +228,21 @@ class ChatGroupLockTest extends TestCase
         }
 
         return $this->postJson($uri, $body, $this->authHeaders($this->ownerToken));
+    }
+
+    private function changeRole(int $roomId, int $targetPlayerId, string $role): TestResponse
+    {
+        return $this->postJson(
+            '/api/chat/group/role',
+            ['sys_chat_room_id' => $roomId, 'sys_player_id' => $targetPlayerId, 'role' => $role],
+            $this->authHeaders($this->ownerToken)
+        );
+    }
+
+    private function memberRole(int $roomId, int $playerId): string
+    {
+        return (string) DB::connection('sys')->table('sys_chat_room_member')
+            ->where('chat_room_id', $roomId)->where('sys_player_id', $playerId)->value('role');
     }
 
     private function findRoom(int $roomId): object

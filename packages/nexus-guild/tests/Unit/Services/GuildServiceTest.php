@@ -393,16 +393,88 @@ class GuildServiceTest extends TestCase
     }
 
     #[Test]
-    public function 承認は申請_ギルド_メンバー数_申請者の順にロックを取ってから判定する(): void
+    public function 承認は申請_ギルド_承認者_メンバー数_申請者の順にロックを取ってから判定する(): void
     {
         $this->givenPendingApply(GuildRole::MASTER);
 
         $this->service->acceptApply(self::APPLY_ID, self::MASTER_ID);
 
         $this->assertSame(
-            ['apply', 'guild', 'member_count', 'applicant'],
+            ['apply', 'guild', 'approver', 'member_count', 'applicant'],
             $this->lockLog->getArrayCopy()
         );
+    }
+
+    #[Test]
+    public function ロック後に降格していた承認者は承認できない(): void
+    {
+        // 非ロックの読みではマスターだったが、ロックを取って読み直すと一般メンバーに降格している
+        $this->givenPendingApply(GuildRole::MASTER);
+        $this->memberRepository->byGuildAndPlayerForUpdate = $this->member(self::MASTER_ID, GuildRole::MEMBER);
+
+        try {
+            $this->service->acceptApply(self::APPLY_ID, self::MASTER_ID);
+            $this->fail('降格済みの承認者が承認できてしまった');
+        } catch (GuildException $e) {
+            $this->assertSame(GuildException::CODE_PERMISSION_DENIED, $e->getCode());
+        }
+        $this->assertSame([], $this->memberRepository->inserted);
+    }
+
+    #[Test]
+    public function ロック後に脱退していた承認者は承認できない(): void
+    {
+        $this->givenPendingApply(GuildRole::MASTER);
+        $this->memberRepository->noApproverForUpdate = true;
+
+        try {
+            $this->service->acceptApply(self::APPLY_ID, self::MASTER_ID);
+            $this->fail('脱退済みの承認者が承認できてしまった');
+        } catch (GuildException $e) {
+            $this->assertStringContainsString('Member not found', $e->getMessage());
+        }
+        $this->assertSame([], $this->memberRepository->inserted);
+    }
+
+    #[Test]
+    public function 脱退は申請_ギルド_本人の順にロックを取り承認と順序を揃える(): void
+    {
+        $this->memberRepository->byPlayerId = $this->member(self::MEMBER_ID, GuildRole::MEMBER);
+        $this->guildRepository->byId = $this->guild();
+
+        $this->service->leaveGuild(self::MEMBER_ID);
+
+        // 承認は 申請 → ギルド → … → 申請者のプレイヤー行。脱退も同じ向きに取る
+        $this->assertSame(['apply_player', 'guild', 'applicant'], $this->lockLog->getArrayCopy());
+    }
+
+    #[Test]
+    public function ロック後に所属が変わっていた脱退は止める(): void
+    {
+        $this->memberRepository->byPlayerId = $this->member(self::MEMBER_ID, GuildRole::MEMBER);
+        // ロックして読み直すと、既に脱退済み
+        $this->memberRepository->noPlayerForUpdate = true;
+
+        try {
+            $this->service->leaveGuild(self::MEMBER_ID);
+            $this->fail('脱退済みの人が再度脱退できてしまった');
+        } catch (GuildException $e) {
+            $this->assertSame(GuildException::CODE_NOT_IN_GUILD, $e->getCode());
+        }
+        $this->assertSame([], $this->memberRepository->deleted);
+        $this->assertSame([], $this->applyRepository->deletedPlayerIds);
+    }
+
+    #[Test]
+    public function ロック後にマスターへ昇格していた人は脱退できない(): void
+    {
+        $this->memberRepository->byPlayerId = $this->member(self::MEMBER_ID, GuildRole::MEMBER);
+        $this->memberRepository->byPlayerIdForUpdate = $this->member(self::MEMBER_ID, GuildRole::MASTER);
+
+        $this->expectException(GuildException::class);
+        $this->expectExceptionMessage('Master cannot leave');
+
+        $this->service->leaveGuild(self::MEMBER_ID);
     }
 
     #[Test]
@@ -527,6 +599,22 @@ class GuildServiceTest extends TestCase
 
         $this->assertSame([$member], $this->memberRepository->deleted);
         $this->assertSame([self::MEMBER_ID], $this->applyRepository->deletedPlayerIds, '申請も残さない');
+    }
+
+    #[Test]
+    public function ロック時にギルド行が無くてもエラーにせず脱退を続ける(): void
+    {
+        $member = $this->member(self::MEMBER_ID, GuildRole::MEMBER);
+        $this->memberRepository->byPlayerId = $member;
+        // ギルド行は脱退の判定に使わない（ロックを取るだけ）。解散済みなどで null でも、
+        // 本人のメンバー行と申請は残さず消せなければ、所属が宙に浮いたままになる
+        $this->guildRepository->byId = null;
+        $this->guildRepository->byIdForUpdate = null;
+
+        $this->service->leaveGuild(self::MEMBER_ID);
+
+        $this->assertSame([$member], $this->memberRepository->deleted);
+        $this->assertSame([self::MEMBER_ID], $this->applyRepository->deletedPlayerIds);
     }
 
     #[Test]
@@ -889,6 +977,13 @@ class FakeGuildApplyRepository implements GuildApplyRepositoryInterface
         return $this->byGuildAndPlayer;
     }
 
+    public function selectAllByPlayerIdForUpdate(int $playerId): array
+    {
+        $this->lockLog?->append('apply_player');
+
+        return [];
+    }
+
     public function selectAppliesByGuildId(int $guildId): array
     {
         return $this->appliesByGuildId;
@@ -987,6 +1082,22 @@ class FakeGuildMemberRepository implements GuildMemberRepositoryInterface
         return $this->byGuildAndPlayer;
     }
 
+    /** ロック版だけ別の値を返したいとき（null なら byGuildAndPlayer） */
+    public ?GuildMember $byGuildAndPlayerForUpdate = null;
+
+    /** ロックして読み直すと承認者がもう居ない状態にする */
+    public bool $noApproverForUpdate = false;
+
+    /** ロックして読み直すと本人がもう居ない状態にする */
+    public bool $noPlayerForUpdate = false;
+
+    public function selectByGuildAndPlayerForUpdate(int $guildId, int $playerId): ?GuildMember
+    {
+        $this->lockLog?->append('approver');
+
+        return $this->noApproverForUpdate ? null : ($this->byGuildAndPlayerForUpdate ?? $this->byGuildAndPlayer);
+    }
+
     public function selectByPlayerId(int $playerId): ?GuildMember
     {
         return $this->byPlayerId;
@@ -1013,7 +1124,7 @@ class FakeGuildMemberRepository implements GuildMemberRepositoryInterface
     {
         $this->lockLog?->append('applicant');
 
-        return $this->byPlayerIdForUpdate ?? $this->byPlayerId;
+        return $this->noPlayerForUpdate ? null : ($this->byPlayerIdForUpdate ?? $this->byPlayerId);
     }
 
     public function insert(int $guildId, int $playerId, string $role): GuildMember

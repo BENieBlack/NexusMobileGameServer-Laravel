@@ -467,7 +467,10 @@ class ChatServiceTest extends TestCase
     #[Test]
     public function オーナーはロールを変更できる(): void
     {
-        $this->memberRepository->shouldReceive('selectByRoomAndPlayer')->with(1, 100)
+        // 部屋の行ロックが先、権限確認もロック付きの読み
+        $this->roomRepository->shouldReceive('selectByIdForUpdate')->with(1)->once()
+            ->andReturn($this->makeRoom(type: ChatRoomType::GROUP));
+        $this->memberRepository->shouldReceive('selectByRoomAndPlayerForUpdate')->with(1, 100)
             ->andReturn($this->makeMember(role: ChatRoomRole::OWNER));
         $this->memberRepository->shouldReceive('updateRole')
             ->with(1, 200, ChatRoomRole::ADMIN)
@@ -480,8 +483,35 @@ class ChatServiceTest extends TestCase
     public function 管理者はロールを変更できない(): void
     {
         // 招待・キックはできてもロール管理はOWNER専用
-        $this->memberRepository->shouldReceive('selectByRoomAndPlayer')->with(1, 100)
+        $this->roomRepository->shouldReceive('selectByIdForUpdate')->with(1)->once()
+            ->andReturn($this->makeRoom(type: ChatRoomType::GROUP));
+        $this->memberRepository->shouldReceive('selectByRoomAndPlayerForUpdate')->with(1, 100)
             ->andReturn($this->makeMember(role: ChatRoomRole::ADMIN));
+
+        $this->expectExceptionObject(ChatException::noRoleManagePermission());
+
+        $this->service->changeRole(1, 100, 200, ChatRoomRole::ADMIN);
+    }
+
+    #[Test]
+    public function ロック後にメンバーから外れていた実行者はロールを変更できない(): void
+    {
+        // kick・leave と競合して、ロックを待つ間に外された者
+        $this->roomRepository->shouldReceive('selectByIdForUpdate')->with(1)->once()
+            ->andReturn($this->makeRoom(type: ChatRoomType::GROUP));
+        $this->memberRepository->shouldReceive('selectByRoomAndPlayerForUpdate')->with(1, 100)->andReturn(null);
+        $this->memberRepository->shouldReceive('updateRole')->never();
+
+        $this->expectExceptionObject(ChatException::noRoleManagePermission());
+
+        $this->service->changeRole(1, 100, 200, ChatRoomRole::ADMIN);
+    }
+
+    #[Test]
+    public function ルームが無ければロールを変更できない(): void
+    {
+        $this->roomRepository->shouldReceive('selectByIdForUpdate')->with(1)->once()->andReturn(null);
+        $this->memberRepository->shouldReceive('updateRole')->never();
 
         $this->expectExceptionObject(ChatException::noRoleManagePermission());
 
