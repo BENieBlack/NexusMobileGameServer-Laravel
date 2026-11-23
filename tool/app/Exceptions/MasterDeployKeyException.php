@@ -23,6 +23,11 @@ class MasterDeployKeyException extends RuntimeException
 
     public const REGISTER_FAILED = 'register_failed';
 
+    /** sys の COMMIT 処理中のエラー（登録されたか分からない。db.md 4.7）。Runner が読み直して判断する内部のコード */
+    public const REGISTER_COMMIT_UNKNOWN = 'register_commit_unknown';
+
+    public const DEPLOY_KEY_NOT_CONFIGURED = 'deploy_key_not_configured';
+
     public function __construct(
         public readonly string $errorCode,
         string $message,
@@ -61,5 +66,16 @@ class MasterDeployKeyException extends RuntimeException
     public static function registerFailed(?\Throwable $previous = null): self
     {
         return new self(self::REGISTER_FAILED, 'sys への登録に失敗しました。ログの詳細を確認してください', 500, $previous);
+    }
+
+    /** build の環境で fixed_key と explicit_key が両方ある・どちらも無い・explicit_key の形が不正（db.md 7.2） */
+    public static function deployKeyNotConfigured(string $reason): self
+    {
+        return new self(self::DEPLOY_KEY_NOT_CONFIGURED, "build の deploy_key の設定が不正です（{$reason}）。MASTER_DEPLOY_FIXED_KEY か MASTER_DEPLOY_KEY のどちらか 1 つだけを設定してください", 500);
+    }
+
+    public static function registerCommitUnknown(?\Throwable $previous = null): self
+    {
+        return new self(self::REGISTER_COMMIT_UNKNOWN, 'sys の COMMIT 中にエラーが発生しました（登録されたか確認が必要です）', 500, $previous);
     }
 }

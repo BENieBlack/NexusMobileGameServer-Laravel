@@ -47,6 +47,30 @@ return [
             'report' => false,
         ],
 
+        // マスター配信の成果物（db.md 6.5.3）。ローカルは tool-web が /masterdata で配る。本番側は s3 などに差し替える（種類は未決）
+        'master_artifact' => [
+            'driver' => 'local',
+            'root' => public_path('masterdata'),
+            'throw' => false,
+            'report' => false,
+        ],
+
+        // import の pull 元（読み取りだけ。import の環境だけ設定する。db.md 6.5.3）
+        'master_artifact_upstream' => [
+            'driver' => 'local',
+            'root' => env('MASTER_ARTIFACT_UPSTREAM_ROOT', storage_path('app/master_artifact_upstream')),
+            'throw' => false,
+            'report' => false,
+        ],
+
+        // アセット（設計は別の機能。disk の名前だけ予約する。db.md 6.5.3）
+        'asset_artifact' => [
+            'driver' => 'local',
+            'root' => public_path('asset'),
+            'throw' => false,
+            'report' => false,
+        ],
+
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),

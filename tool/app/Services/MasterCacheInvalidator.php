@@ -192,6 +192,16 @@ class MasterCacheInvalidator
     }
 
     /**
+     * 切り替え予定の一覧（`sys:sys_deploy:schedule`）だけを破棄する（版ごとの mst DB 設計。mst のキャッシュは破棄しない。db.md 3.6・8.3）
+     *
+     * @return array{invalidated: bool, failed_key_list: list<string>}
+     */
+    public function forgetSchedule(): array
+    {
+        return $this->forgetAll([self::SYS_DEPLOY_SCHEDULE_KEY]);
+    }
+
+    /**
      * 全破棄: mst の全表（`mst_%`）と、有効な sys_deploy 行の 3 種
      *
      * 全破棄が要るとき（`shouldInvalidateAll()`）と、`POST /master-import/clear-cache` で使う。

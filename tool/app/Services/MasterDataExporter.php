@@ -18,6 +18,9 @@ class MasterDataExporter
 
     private ?ConnectionInterface $connection = null;
 
+    /** 読み取り元の DB 名。null は接続の既定（基底 DB。旧経路）。版ごとの mst DB 設計では作業用 DB・版の DB を指す（db.md 10.4） */
+    private ?string $database = null;
+
     public function __construct()
     {
         $this->outputDir = public_path('masterdata');
@@ -35,6 +38,51 @@ class MasterDataExporter
         $clone->connection = $connection;
 
         return $clone;
+    }
+
+    /**
+     * 読み取り元を、同じ MySQL サーバーの別の DB（作業用 DB・版の DB）にした複製を返す（db.md 6.5.1・10.4）。
+     */
+    public function withDatabase(string $database): static
+    {
+        $clone = clone $this;
+        $clone->database = $database;
+
+        return $clone;
+    }
+
+    /** クエリビルダ・SHOW に渡す表名（DB を指定したときは `db.table`） */
+    private function tableRef(string $tableName): string
+    {
+        return $this->database === null ? $tableName : $this->database.'.'.$tableName;
+    }
+
+    /** 生の SQL に書く表名（バッククォート付き） */
+    private function quotedTableRef(string $tableName): string
+    {
+        $quote = static fn (string $name): string => '`'.str_replace('`', '``', $name).'`';
+
+        return $this->database === null ? $quote($tableName) : $quote($this->database).'.'.$quote($tableName);
+    }
+
+    /**
+     * 配信 SQLite をテーブルグループごとに `$outputDir` へ書く（公開・hash の確定はしない。ディレクトリ名は呼び出し側が決める。db.md 6.5.1）
+     *
+     * 読み取り元は withDatabase() の DB（無指定なら接続の既定）。ファイル名は `{グループ}_{sqlite の sha256}.sqlite`。
+     *
+     * @return array<string, array{hash: string, file_name: string, file_size: int, public_url: string}> グループ名 => 結果（public_url は空。呼び出し側が埋める）
+     */
+    public function exportSqliteGroups(string $outputDir): array
+    {
+        if (! is_dir($outputDir) && ! mkdir($outputDir, 0755, true) && ! is_dir($outputDir)) {
+            throw new RuntimeException('SQLite の出力先ディレクトリを作れません');
+        }
+        $result = [];
+        foreach ($this->groupTables($this->listTableNames()) as $groupName => $groupTableArray) {
+            $result[$groupName] = $this->exportGroup($groupName, $groupTableArray, $outputDir);
+        }
+
+        return $result;
     }
 
     private function connection(): ConnectionInterface
@@ -114,7 +162,9 @@ class MasterDataExporter
     {
         $tableNames = array_map(
             static fn ($row) => array_values((array) $row)[0],
-            $this->connection()->select("SHOW TABLES LIKE 'mst_%'")
+            $this->database === null
+                ? $this->connection()->select("SHOW TABLES LIKE 'mst_%'")
+                : $this->connection()->select('SHOW TABLES FROM `'.str_replace('`', '``', $this->database)."` LIKE 'mst_%'")
         );
         sort($tableNames, SORT_STRING);
 
@@ -157,10 +207,10 @@ class MasterDataExporter
             $sqlite->beginTransaction();
 
             foreach ($tableNameArray as $tableName) {
-                $columns = $this->connection()->select("SHOW COLUMNS FROM `{$tableName}`");
+                $columns = $this->connection()->select('SHOW COLUMNS FROM '.$this->quotedTableRef($tableName));
                 $sqlite->exec($this->buildCreateTableSql($tableName, $columns));
                 $rowCollection = $this->orderByPrimaryKey(
-                    $this->connection()->table($tableName),
+                    $this->connection()->table($this->tableRef($tableName)),
                     $columns
                 )->get();
 

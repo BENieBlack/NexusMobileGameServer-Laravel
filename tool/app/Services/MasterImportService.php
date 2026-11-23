@@ -824,6 +824,25 @@ class MasterImportService
     }
 
     /**
+     * 1 つの値を mst の列に入れる形にする（版の DB の投入用。db.md 6.6 の `version_db`・`work_db`）
+     *
+     * 旧 import の行変換と同じ規則: NULL 可の列だけ空文字を NULL にし、rarity 系の列は型に合わせて検証・変換する。
+     *
+     * @param  array{kind: 'enum', values: array<int, string>}|array{kind: 'int'}|null  $rarityColumn  rarityColumnsOf() の、その列の要素
+     *
+     * @throws InvalidArgumentException rarity の値が列に入れられないとき
+     */
+    public function convertValue(string $header, mixed $value, bool $nullable, ?array $rarityColumn): mixed
+    {
+        $converted = ($value === '' && $nullable) ? null : $value;
+        if ($rarityColumn !== null && $converted !== null) {
+            $converted = $this->normalizeRarity($header, $converted, $rarityColumn);
+        }
+
+        return $converted;
+    }
+
+    /**
      * rarity 系カラムの値を、列の型に合わせて検証・変換する
      *
      * @param  array{kind: 'enum', values: array<int, string>}|array{kind: 'int'}  $column
