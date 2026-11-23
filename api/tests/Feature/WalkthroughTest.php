@@ -23,6 +23,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Nexus\Core\Utilities\ClockUtility;
 use Tests\RefreshMultipleDatabases;
+use Tests\Support\SysDeployMasterColumns;
 use Tests\TestCase;
 
 /**
@@ -90,6 +91,7 @@ class WalkthroughTest extends TestCase
         $deployMasterId = DB::connection('sys')->table('sys_deploy_master')->insertGetId([
             'deploy_key' => 2026010101,
             'hash' => hash('sha256', 'test_master_2026010101'),
+            ...SysDeployMasterColumns::for(2026010101, 'test_master_2026010101'),
             'deploy_date' => '2026-01-01',
             'deploy_count' => 1,
             'status' => 'completed',

@@ -50,18 +50,26 @@ return new class extends Migration
         // ========================================
         Schema::connection('tool')->create('tol_master_deploy_run', function (Blueprint $table) {
             $table->id()->comment('ID');
-            $table->enum('mode', ['real', 'fixed'])->comment('本物のキー（real）か固定キー（fixed）');
-            $table->bigInteger('deploy_key')->nullable()->comment('畳みの上限 T（採番前は null）');
-            $table->enum('status', ['running', 'succeeded', 'failed', 'inconsistent', 'aborted'])->comment('実行状態');
-            $table->enum('phase', ['lock', 'read', 'validate', 'apply', 'export', 'register', 'commit', 'invalidate', 'done'])
-                ->comment('最後に着手した段階');
+            $table->enum('kind', ['build', 'import', 'rollback', 'cancel_schedule', 'deactivate', 'cleanup', 'finalize'])
+                ->comment('操作の種類 (build = シートから畳んで成果物を作る, import = 上流の成果物を取り込む, rollback = 巻き戻し, cancel_schedule = 予約の取り消し, deactivate = 緊急停止・再開, cleanup = 掃除, finalize = QA完了の印)');
+            $table->enum('mode', ['explicit', 'fixed'])->nullable()->comment('buildのみ。Tを環境の明示キーで決めた(explicit)か固定キー(fixed)か。他のkindはnull');
+            $table->bigInteger('deploy_key')->nullable()->comment('対象のdeploy_key（buildはT。cleanupと開始前の失敗はnull）');
+            $table->enum('status', ['running', 'succeeded', 'failed', 'aborted'])->comment('実行状態');
+            $table->enum('phase', [
+                'lock', 'read', 'validate', 'fold', 'work_db', 'artifact', 'pull', 'verify', 'check',
+                'version_db', 'check_rows', 'store', 'register', 'drop', 'done',
+            ])->comment('最後に着手した段階（kindごとに取りうる値が違う。version_dbはbuild・import・rollback・deactivateで共有）');
             $table->unsignedBigInteger('adm_account_id')->nullable()->comment('実行した管理者（adm_account.id。CLI 実行は null）');
             $table->string('app_env', 32)->comment('実行時の APP_ENV');
-            $table->string('master_hash', 64)->nullable()->comment('書き出したマニフェストの hash');
+            $table->string('master_hash', 64)->nullable()->comment('成果物のhash（完全な64文字）');
+            $table->string('artifact_dir', 128)->nullable()->comment('成果物のディレクトリ名（{deploy_key}_{hash}）');
+            $table->string('mst_database', 64)->nullable()->comment('作った版のDB名（DBを作る直前に書く。孤児の追跡用）');
+            $table->string('schema_fingerprint', 64)->nullable()->comment('作ったDBのスキーマ版');
+            $table->dateTime('start_at')->nullable()->comment('登録したsys_deploy.start_at（UTC）');
             $table->unsignedBigInteger('sys_deploy_master_id')->nullable()->comment('登録または再利用した sys_deploy_master の ID');
-            $table->unsignedBigInteger('sys_deploy_id')->nullable()->comment('有効にした sys_deploy の ID');
-            $table->boolean('is_new')->nullable()->comment('新しい版を登録したか（既存を再利用したら false）');
-            $table->json('summary')->nullable()->comment('表ごとの件数とキャッシュ破棄の成否');
+            $table->unsignedBigInteger('sys_deploy_id')->nullable()->comment('足した sys_deploy の ID');
+            $table->boolean('is_new')->nullable()->comment('新しい (deploy_key, hash) を登録したか（既存を再利用したら false）');
+            $table->json('summary')->nullable()->comment('表ごとの件数・row_digest・work_database・created_database_list（この run が新規に作ったDB名）・warning_list・cache_invalidated・follow_check など');
             $table->string('error_code', 50)->nullable()->comment('エラーコード');
             $table->text('error_message')->nullable()->comment('利用者に出したメッセージ');
             $table->dateTime('started_at')->comment('開始日時（UTC）');
@@ -69,6 +77,8 @@ return new class extends Migration
             $table->dateTime('created_at')->default(DB::raw('CURRENT_TIMESTAMP'))->comment('作成日時');
             $table->dateTime('updated_at')->default(DB::raw('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'))->comment('更新日時');
 
+            $table->index('kind');
+            $table->index('mst_database');
             $table->index('deploy_key');
             $table->index('status');
             $table->index('started_at');

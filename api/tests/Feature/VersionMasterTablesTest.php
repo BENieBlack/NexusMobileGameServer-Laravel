@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use Illuminate\Support\Facades\DB;
 use Tests\RefreshMultipleDatabases;
+use Tests\Support\SysDeployMasterColumns;
 use Tests\TestCase;
 
 /**
@@ -40,6 +41,7 @@ class VersionMasterTablesTest extends TestCase
         $masterId = DB::connection('sys')->table('sys_deploy_master')->insertGetId([
             'deploy_key' => 2026010101,
             'hash' => hash('sha256', 'master'),
+            ...SysDeployMasterColumns::for(2026010101, 'master'),
             'deploy_date' => '2026-01-01',
             'deploy_count' => 1,
             'status' => 'completed',

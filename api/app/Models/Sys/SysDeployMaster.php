@@ -3,6 +3,7 @@
 namespace App\Models\Sys;
 
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Carbon;
 
 /**
  * SysDeployMaster Model
@@ -12,6 +13,11 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int $deploy_key
  * @property string $hash
  * @property string $status
+ * @property string $mst_database
+ * @property string $artifact_dir
+ * @property string $schema_fingerprint
+ * @property string $source_kind
+ * @property ?Carbon $mst_dropped_at
  */
 class SysDeployMaster extends _BaseSys
 {
@@ -35,6 +41,11 @@ class SysDeployMaster extends _BaseSys
         'deployed_by',
         'deployed_at',
         'description',
+        'mst_database',
+        'artifact_dir',
+        'schema_fingerprint',
+        'source_kind',
+        'mst_dropped_at',
     ];
 
     /**
@@ -45,6 +56,7 @@ class SysDeployMaster extends _BaseSys
     /** @var array<string, string> */
     protected $casts = [
         'deploy_date' => 'date',
+        'mst_dropped_at' => 'datetime',
     ];
 
     /**
@@ -59,6 +71,13 @@ class SysDeployMaster extends _BaseSys
     public const STATUS_FAILED = 'failed';
 
     public const STATUS_ROLLED_BACK = 'rolled_back';
+
+    /**
+     * 登録の元（source_kind）の定数
+     */
+    public const SOURCE_KIND_BUILD = 'build';
+
+    public const SOURCE_KIND_IMPORT = 'import';
 
     /**
      * 利用可能なステータス一覧を取得
@@ -202,6 +221,54 @@ class SysDeployMaster extends _BaseSys
     public function setDescription(string $description): void
     {
         $this->setAttribute('description', $description);
+    }
+
+    /**
+     * この版の mst DB 名を取得（API が接続先を決める唯一の根拠）
+     */
+    public function getMstDatabase(): ?string
+    {
+        return $this->getAttribute('mst_database');
+    }
+
+    /**
+     * 成果物のディレクトリ名（{deploy_key}_{hash}）を取得
+     */
+    public function getArtifactDir(): ?string
+    {
+        return $this->getAttribute('artifact_dir');
+    }
+
+    /**
+     * この版 DB の現在のスキーマ版を取得
+     */
+    public function getSchemaFingerprint(): ?string
+    {
+        return $this->getAttribute('schema_fingerprint');
+    }
+
+    /**
+     * 登録の元（build / import）を取得
+     */
+    public function getSourceKind(): ?string
+    {
+        return $this->getAttribute('source_kind');
+    }
+
+    /**
+     * 掃除で版の DB を消した日時を取得
+     */
+    public function getMstDroppedAt(): ?Carbon
+    {
+        return $this->getAttribute('mst_dropped_at');
+    }
+
+    /**
+     * 版の DB が掃除済み（切り替えできない）かチェック
+     */
+    public function isMstDropped(): bool
+    {
+        return $this->getAttribute('mst_dropped_at') !== null;
     }
 
     /**

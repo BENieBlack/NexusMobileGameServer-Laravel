@@ -14,7 +14,7 @@ use Tests\TestCase;
  *
  * deploy_key は現状 int 型・UNIQUE で、固定キー（9999999999 など）や同じ deploy_key の複数行を
  * 入れられない。スキーマ変更後でも通るよう、DB には入れず、クエリの条件で固定する。
- * 固定キーが本物より先になることは「deploy_key 降順」の並びで保証される。
+ * 最新の並びは start_at 降順 → deploy_key 降順 → id 降順（deploy_key の大小は同じ start_at のときだけ効く）。
  */
 class SysDeployRepositoryTest extends TestCase
 {
@@ -26,13 +26,13 @@ class SysDeployRepositoryTest extends TestCase
     }
 
     #[Test]
-    public function リポジトリの最新はdeploy_key降順からid降順の並び(): void
+    public function リポジトリの最新はstart_at降順からdeploy_key降順とid降順の並び(): void
     {
         $this->setEnvironment('testing');
 
         $orders = $this->orders((new SysDeployRepository)->buildLatestDownloadableQuery());
 
-        $this->assertSame([['deploy_key', 'desc'], ['id', 'desc']], $orders);
+        $this->assertSame([['start_at', 'desc'], ['deploy_key', 'desc'], ['id', 'desc']], $orders);
     }
 
     #[Test]
@@ -42,7 +42,7 @@ class SysDeployRepositoryTest extends TestCase
 
         $orders = $this->orders(SysDeploy::downloadable()->latestOrder());
 
-        $this->assertSame([['deploy_key', 'desc'], ['id', 'desc']], $orders);
+        $this->assertSame([['start_at', 'desc'], ['deploy_key', 'desc'], ['id', 'desc']], $orders);
     }
 
     #[Test]

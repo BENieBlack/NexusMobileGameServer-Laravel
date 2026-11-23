@@ -261,14 +261,14 @@ class RecordingScenarioTest extends RecordingTestCase
     }
 
     #[Test]
-    public function 録画用より大きいdeploy_keyの有効なデプロイがあれば追加せずリセットでも消さない(): void
+    public function start_atが未来の予約済みデプロイがあれば追加せずリセットでも消さない(): void
     {
         $this->ensureMasterRows();
         $sys = DB::connection('sys');
         $sys->table('sys_deploy')->where('deploy_key', RecordingDeploySeeder::DEPLOY_KEY)->delete();
         foreach ([9999999999, 8888888888] as $key) {
             $sys->table('sys_deploy')->insert([
-                'deploy_key' => $key, 'start_at' => '2020-01-01 00:00:00',
+                'deploy_key' => $key, 'start_at' => '2999-01-01 00:00:00',
                 'sys_deploy_master_id' => 1, 'sys_deploy_asset_id' => 1, 'is_active' => true,
             ]);
         }
