@@ -70,7 +70,7 @@ docker compose exec -T tool-php php artisan migrate --path=database/migrations/t
 
 | ルート | 内容 |
 | --- | --- |
-| `GET /master-import` | 画面（Inertia。props に `target`）。**画面（`Index.vue`）はまだ旧 API（`execute`・`export`）を呼んでおり、動かない。作り直しは次の段階** |
+| `GET /master-import` | 画面（Inertia。props に `target`）。画面（`Index.vue`。部品は `resources/js/Components/MasterImport/`）は `target.role` で切り替える。build は検証（dry run）・build・QA 完了（検証 → 確定）とシート一覧（読まれるタブの確認用）、import は上流の成果物の選択と `start_at`（UTC 入力・JST 併記・「すぐ」）での dry run・取り込み。共通で、対象（env・T・基底 DB・いまの版・直近の run・warning）、予約の取り消し・止める・再開、版の一覧と「この版に戻す」、掃除（dry run → 確認 → 実行）、結果表示（表ごとの件数・`error_list` 20 件・警告・棚卸し）を持つ。504 でも処理は続くので、応答が切れたら `target` を自動で再取得して run を追う |
 | `GET /master-import/target`・`/artifact-list?source=upstream\|own` | 対象・版の一覧・予約・警告 / 成果物の一覧 |
 | `POST /master-import/build`・`/import`・`/finalize`・`/rollback` | `dry_run` 可。import は `start_at` のキーが必須（値は null 可） |
 | `POST /master-import/cancel-schedule`・`/deactivate`・`/activate` | `sys_deploy_id` |
