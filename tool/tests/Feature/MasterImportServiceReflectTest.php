@@ -357,4 +357,22 @@ class MasterImportServiceReflectTest extends TestCase
         $this->commit();
         $this->assertSame(1203, $again['tables']['mst_reflect_item']['unchanged']);
     }
+
+    #[Test]
+    public function replaceがtrueの空の表は全行を削除し_replaceなしの空の表は触らない(): void
+    {
+        DB::connection('mst')->table('mst_reflect_item')->insert([['id' => 'a', 'name' => 'A'], ['id' => 'b', 'name' => 'B']]);
+        DB::connection('mst')->table('mst_reflect_untouched')->insert([['id' => 'u', 'name' => 'U']]);
+
+        $result = (new MasterImportService)->reflect([
+            'mst_reflect_item' => ['headers' => [], 'rows' => [], 'replace' => true],
+            'mst_reflect_untouched' => ['headers' => ['id', 'name'], 'rows' => []],
+        ]);
+        $this->commit();
+
+        $this->assertSame(['inserted' => 0, 'updated' => 0, 'deleted' => 2, 'unchanged' => 0], $result['tables']['mst_reflect_item']);
+        $this->assertArrayNotHasKey('mst_reflect_untouched', $result['tables']);
+        $this->assertSame([], $this->items());
+        $this->assertSame(1, DB::connection('mst')->table('mst_reflect_untouched')->count());
+    }
 }

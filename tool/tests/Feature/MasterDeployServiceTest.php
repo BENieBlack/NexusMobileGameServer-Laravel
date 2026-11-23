@@ -371,4 +371,27 @@ class MasterDeployServiceTest extends TestCase
         $this->assertSame(2, $result['sys_deploy_id']);
         $this->assertSame([2], $this->activeIds());
     }
+
+    #[Test]
+    public function before_commitは登録の後_commi_tの前に呼ばれ_例外ならロールバックしてregister_failedになる(): void
+    {
+        $seen = null;
+        $result = $this->service()->registerDeploy($this->export(), 2026112301, false, $this->now(), function () use (&$seen): void {
+            $seen = DB::connection('sys')->table('sys_deploy')->count();
+        });
+        $this->assertSame(1, $seen); // 登録済み（トランザクション内で見える）
+        $this->assertTrue($result['is_new']);
+
+        $before = DB::connection('sys')->table('sys_deploy')->count();
+        try {
+            $this->service()->registerDeploy($this->export('hash-b'), 2026112302, false, $this->now(), function (): void {
+                throw new \RuntimeException('tol down');
+            });
+            $this->fail('register_failed が投げられませんでした');
+        } catch (MasterDeployKeyException $e) {
+            $this->assertSame('register_failed', $e->errorCode);
+        }
+        $this->assertSame($before, DB::connection('sys')->table('sys_deploy')->count());
+        $this->assertSame(0, DB::connection('sys')->table('sys_deploy_master')->where('hash', 'hash-b')->count());
+    }
 }
