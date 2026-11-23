@@ -15,14 +15,14 @@ Nexus の全体設計「マスター配信」の決定（D1〜D10。Nexus の AD
 | 方式 | デプロイのたびに**新しい mst DB を作り**、`sys_deploy.start_at`（UTC）で「いまの mst」を切り替える（**決定**。ADR 0007）。1 つの mst を書き換えない。`TRUNCATE`・差分反映・補償・全破棄の判定・採番は**無くなる** |
 | 流れ（build 環境: develop・LD・QA） | シート（`mst_` 始まりのタブの全行）→ 検証 → T（畳みの上限。環境ごとに明示）以下を畳む → 作業用 DB に入れて型を確定 → 成果物（行データ・スキーマ・配信 SQLite・マニフェスト）を作る → 版の DB を作る → ストレージに `{deploy_key}_{hash}` で置く → **sys に 1 トランザクションで登録**（`start_at` つき） |
 | 流れ（import 環境: review・production・staging） | 上流の成果物を pull → 検証 → 版の DB を作る → 不変性の検査（production） → 自環境のストレージに置く → sys に登録（`start_at` を指定）。**シートは持たず、畳まない** |
-| 版の DB 名 | `{APP_NAME}-{env}-master-{deploy_key}-{HASH}`（**決定**。env は `APP_ENV`。4.2。HASH は固定長の先頭 16 文字。**仮置き**） |
+| 版の DB 名 | `{APP_NAME}-{env}-master-{deploy_key}-{HASH}`（**決定**。env は `APP_ENV`。4.2。HASH は固定長の先頭 16 文字。**決定**。人の決定。2026-11-23） |
 | 切り替え | API は**リクエストの始め**に `start_at <= 現在` の最新の版を決め、`mst` 接続の database を差し替える（8.1。**仮置き**。R22）。「最新はどれか」は**一覧をキャッシュし、リクエスト時刻で毎回選ぶ**ので、`start_at` をまたいでも古い版は返らない（8.3） |
 | キャッシュ | キーに版の DB 名を含める（`mst:{DB名}:{表}:all`）。版の DB は作成後に書き換えないので、**mst のキャッシュの破棄は不要**（8.4） |
 | 巻き戻し | 戻したい版を指す**新しい `sys_deploy` 行**を、直前の最新行より後の `start_at`（`max(現在, 直前の最新行の start_at) + 1 秒`）で入れる（3.6。**仮置き**。決定は「`sys_deploy` の切り替え」）。**予約済みの未来の行があるときは拒否**し、先に予約の取り消しを要求する。DB・成果物は作り直さない |
 | 失敗時 | 登録は sys の 1 トランザクションだけなので、**2 つの DB にまたがる整合の問題は無い**。途中で失敗しても、版の DB が孤児として残るだけで配信には影響しない（4.7） |
 | sys | `sys_deploy_master` に `mst_database`・`artifact_dir`・`schema_fingerprint` などを足し、`hash` の UNIQUE を `(deploy_key, hash)` に直す。「最新」は `start_at` の新しい順（3 節） |
 | 実行記録 | `tol_master_deploy_run` に種別（build/import）・版の DB 名などを足し、`inconsistent`・補償・全破棄のための phase を外す（5 節） |
-| 成果物 | `{deploy_key}_{hash}/`（hash は完全な 64 文字。入力は**データ＋スキーマ版**）に行データ（型を保つ NDJSON）・スキーマ・配信 SQLite・マニフェストを置く。保存先は Laravel のファイルシステムの disk で抽象化（6.5） |
+| 成果物 | `{deploy_key}_{hash}/`（ディレクトリ名の hash は完全な hash の**先頭 16 文字**。**決定**。完全な hash は SHA-256 の 64 文字で、`sys_deploy_master.hash`・`manifest.json`・I1 の再計算にそのまま使う。入力は**データ＋スキーマ版**）に行データ（型を保つ NDJSON）・スキーマ・配信 SQLite・マニフェストを置く。保存先は Laravel のファイルシステムの disk で抽象化（6.5） |
 | 録画（R19） | キーは `7777777777`（**決定**。Q2）。最新は `start_at` 基準なので、録画用は `start_at = 現在` で登録すれば最新になる。録画用の mst を版の DB として作る方式の**細部だけが未決**（11.2） |
 | シートに行が無い表 | 版の DB で**空の表**（**決定**。R33。6.1） |
 
@@ -32,8 +32,8 @@ Nexus の全体設計「マスター配信」の決定（D1〜D10。Nexus の AD
 | --- | --- | --- | --- |
 | C1 | `sys_deploy`・`sys_deploy_master`・`sys_deploy_asset` の `deploy_key` | `bigInteger`・UNIQUE 無し（済み。S3-2・S3-3）。`master`・`asset` の UNIQUE は `(deploy_key, hash)` に直す（3.2） | 型は**決定**（D7）。UNIQUE の直しは**仮置き** |
 | C2 | `sys_deploy_master` の列追加 | `mst_database`・`artifact_dir`・`schema_fingerprint`・`source_kind`・`mst_dropped_at`（3.1） | **仮置き**（ADR は「DB 名を引く列」が要ると決定。形は仮置き） |
-| C3 | 「最新」の選び方 | `start_at` が最も新しい行 → `deploy_key` → `id`（3.3） | **決定**（`is_active` を見るかは**未決**） |
-| C4 | 版ごとの mst DB の作成・命名・保持・掃除 | 4 節 | 命名は**決定**（HASH の長さは**仮置き**）。他は**仮置き** |
+| C3 | 「最新」の選び方 | `start_at` が最も新しい行 → `deploy_key` → `id`（3.3） | **決定**（`is_active` も**見る**。R39 の決定。位置づけは緊急停止専用。3.3・3.6） |
+| C4 | 版ごとの mst DB の作成・命名・保持・掃除 | 4 節 | 命名は**決定**（HASH は先頭 16 文字。決定）。他は**仮置き** |
 | C5 | ゲーム API の動的な mst 接続・キャッシュキー・JOIN の置き換え | 8 節 | 方式は**仮置き**（R22） |
 | C6 | 成果物（artifact）とストレージの抽象化 | 6.5 | `{deploy_key}_{hash}`・抽象化・ローカルの置き場は**決定**。中身・hash は**仮置き** |
 | C7 | build と import | 6.6・6.7 | 流れは**決定**（ADR 0007）。細部は**仮置き** |
@@ -55,10 +55,10 @@ Nexus の全体設計「マスター配信」の決定（D1〜D10。Nexus の AD
 | --- | --- | --- |
 | `sys_deploy.deploy_key` | `bigInteger`・index | 変えない。意味は「畳みの上限（T）とラベル」。最新の選択には使わない |
 | `sys_deploy.start_at` | `dateTime`・index。コメント「DL可能となる日時」 | 型は変えない。コメントを「いまの版になる日時（UTC）」に。**切り替えの唯一の時刻**（決定） |
-| `sys_deploy.is_active` | `boolean` 既定 true | 残す。**最新の選択で見るかは未決**（3.3） |
+| `sys_deploy.is_active` | `boolean` 既定 true | 残す。**最新の選択で見る**（決定。R39。位置づけは緊急停止専用。3.3・3.6）。デプロイ・巻き戻し・予約の取り消しは自動では変えない。運営が明示的に止める操作（`master:deactivate`。仮置き）だけが落とす |
 | `sys_deploy.sys_deploy_master_id` / `sys_deploy_asset_id` | `unsignedBigInteger`・index | 変えない |
 | `sys_deploy_master.deploy_key` | `bigInteger`・index | 変えない（UNIQUE は 3.2） |
-| `sys_deploy_master.hash` | `string(64)`・UNIQUE | 長さは変えない（完全な SHA-256。R24 は**未決**で、仮置きは現行維持）。UNIQUE を `(deploy_key, hash)` に（3.2）。意味は「成果物の hash（6.5.2。データ＋スキーマ版から作る）」 |
+| `sys_deploy_master.hash` | `string(64)`・UNIQUE | 長さは変えない（**完全な SHA-256 の 64 文字をそのまま保存**する。DB 名・ディレクトリ名に使うのは先頭 16 文字だけ。決定）。UNIQUE を `(deploy_key, hash)` に（3.2）。意味は「成果物の hash（6.5.2。データ＋スキーマ版から作る）」 |
 | `sys_deploy_master.deploy_date` / `deploy_count` | 登録日 / その日の何回目 | 変えない。`deploy_count` は本物のキーは `deploy_key % 100`（NN）、予約キーは 0（**仮置き**。採番を廃止したので件数は数えない） |
 | `sys_deploy_master.status` | ENUM `scheduled`・`in_progress`・`completed`・`failed`・`rolled_back` | 登録できたものだけが行になるので**常に `completed`**。他の値は使わない（ENUM の値は残す。`rolled_back` は巻き戻しが新しい `sys_deploy` 行で表せるので使わない。**決定**: 旧 3.6 の判断を維持） |
 | **`sys_deploy_master.mst_database`**（新） | - | `string(64)`・NOT NULL・UNIQUE。この版の mst DB 名（4.2）。**API が接続先を決める唯一の根拠** |
@@ -87,13 +87,13 @@ Nexus の全体設計「マスター配信」の決定（D1〜D10。Nexus の AD
 SELECT d.*, m.*
 FROM sys_deploy d JOIN sys_deploy_master m ON m.id = d.sys_deploy_master_id
 WHERE d.start_at <= :now                 -- :now はリクエスト時刻（ApiSession::getNow()。UTC）
-  /* AND d.is_active = 1 */             -- 見るかは未決
+  AND d.is_active = 1                   -- 見る（決定。R39。緊急停止専用。3.6）
   AND d.deploy_key < 7000000000          -- 本番（APP_ENV=production）のときだけ付ける（決定。Q7）
 ORDER BY d.start_at DESC, d.deploy_key DESC, d.id DESC
 LIMIT 1;
 ```
 
-- **`is_active` を見るか: 未決**（台帳に確認待ちとして残る）。**仮置き**（暫定の実装）: 現行どおり**見る**（現行を変えない側。緊急停止の手段として残す）。見ない決定になったら、行を無効にする手段は「より新しい `start_at` の行を足す」「未到達の行を削除する（予約の取り消し。3.6）」だけになる。**巻き戻しや予約の運用は、`is_active` の決定に依存しない形にしてある**（3.6。予約済みの未来の行があるときの巻き戻しは拒否する）。`WHERE` の 1 行を外すだけで切り替わるよう、実装は条件を 1 か所にまとめる。
+- **`is_active` は最新の選択で見る**（**決定**。人の決定。2026-11-23。R39 は A）。**位置づけは「緊急停止専用」**（以下は決定を具体化した**仮置き**。決定は「見る」まで）: デプロイ（build・import の登録）・巻き戻し・予約の取り消しは、**`is_active` を自動では変えない**（登録した行は有効、取り消しは行の削除、巻き戻しは新しい行の追加）。**運営が明示的に「この行を止める」操作（`master:deactivate`。3.6）をしたときだけ**落とす。目的は、予約の `start_at` の直前（現在 + 2 × `schedule_ttl` ＝ 120 秒以内）の「取り消しも巻き戻しもできない窓」（3.6。P47）で、悪い版が配信される直前に止められる**唯一の手段**にすること。**巻き戻しや予約の取り消しの運用は `is_active` に依存しない形のまま**（3.6。予約済みの未来の行があるときの巻き戻しは拒否する）。実装は条件を 1 か所にまとめる（既存の方針）。止めたあと、切り替え予定のキャッシュ（`schedule` キー。TTL 60 秒。8.3）に最大 60 秒古い判断が残るので、**止める操作は同時に `forget` する**（失敗は警告 `schedule_cache_not_invalidated` と同じ扱い。3.6）。
 - **選んだ版の DB が掃除済み（`mst_dropped_at` が NULL でない）のとき**は、古い版に黙って落とさず**エラー**（299 / `SystemDataException::deploy()`。ログに残す）。掃除の規則（4.6）が、いまの版・未来の版を消さないので、通常は起きない。
 - **`start_at` が現在より後の版しか無いとき**は「いまの版が無い」として 299（**仮置き**。Nexus api.md 5 節）。
 - **本番の予約帯の除外**（決定。Q7）は変えない: 本番（`APP_ENV=production`）は `deploy_key >= 7000000000`（予約帯）の行を最新に選ばない。予約帯の値は定数 `Nexus\Version\Constants\DeployKeyConst::RESERVED_FLOOR`（`packages/nexus-version`）。tool 側にも同じ値（`config/master_deploy.php` の `reserved_floor`）を持ち、相互にコメントで参照する（今のまま）。
@@ -145,14 +145,21 @@ LIMIT 1;
   - **予約済みの未来の行があるとき（M5。`start_at` が現在より後の `sys_deploy` 行が 1 つでもあるとき）は、巻き戻しを拒否する**（`rollback_blocked_by_scheduled`。戻し先の行は直前の最新行より後の `start_at` を持つが、**未来の行の `start_at` に到達すると、その行が最新になって巻き戻しが黙って無効になる**ため。**`is_active` を見るかの決定には依存しない**: 見る・見ないどちらでも、未来の行は到達すれば最新の候補になる）。拒否のメッセージは、予約の一覧と、次の「予約の取り消し」を案内する。
     - **「予約済み」の判定から除く行**（**仮置き**）: `start_at <= 現在 + start_at_past_grace`（60 秒）**かつ戻し先と同じ `sys_deploy_master` を指す行**は、「予約済み」に数えない。理由: 巻き戻しの `start_at` は `max(現在, 直前の最新行の start_at) + 1 秒` で、現在より約 1 秒先になりうる。その行が約 1 秒間「予約済み」に見えて、**直後の巻き戻し（やり直し）が `rollback_blocked_by_scheduled` になる**のを避ける。**戻し先と別の版を指す、近い（60 秒以内）予約の行は除かない**（除くと、その行が到達して巻き戻しが黙って無効になる。M5 の問題が戻る）。
     - **巻き戻しの二重登録**（**仮置き。許容**）: 巻き戻しを 2 回続けると、2 回目の `start_at` は「直前の最新行（1 回目の行を含みうる）+ 1 秒」になり、**同じ master・同じ `start_at` ではない**ので `already_registered`（二重登録の防止）に当たらず、**行が 1 つ増えるだけ**で害は無い（どちらも同じ版を指す。最新は後の行）。防止の対象にしない。
-  - **予約の取り消し**（**仮置き**。操作 `master:cancel-schedule {sys_deploy.id}` / 画面）: `start_at` が**まだ到達していない** `sys_deploy` 行を**削除する**。`DELETE ... WHERE id = :id AND start_at > :now` の影響行数が 0 なら `schedule_already_started`（取り消しの直前に到達した。この場合は巻き戻しの操作からやり直す）。`sys_deploy_master`・版の DB・成果物は残す（別の予約や巻き戻しの対象になりうる）。`is_active` を 0 にする方式は採らない（`is_active` を見るかが未決のため）。取り消しの後に、巻き戻しを行う。取り消した予約を残したいときは、巻き戻しの後に同じ版を改めて予約する（R1）。**ロック・登録と同じ排他の中**で行う。
+  - **予約の取り消し**（**仮置き**。操作 `master:cancel-schedule {sys_deploy.id}` / 画面）: `start_at` が**まだ到達していない** `sys_deploy` 行を**削除する**。`DELETE ... WHERE id = :id AND start_at > :now` の影響行数が 0 なら `schedule_already_started`（取り消しの直前に到達した。この場合は巻き戻しの操作からやり直す）。`sys_deploy_master`・版の DB・成果物は残す（別の予約や巻き戻しの対象になりうる）。**取り消しは `is_active` を変えない**（行を削除する。止めるだけの緊急停止は別の操作＝次の項）。取り消しの後に、巻き戻しを行う。取り消した予約を残したいときは、巻き戻しの後に同じ版を改めて予約する（R1）。**ロック・登録と同じ排他の中**で行う。
     - **直前の取り消しを拒否する**（**仮置き**。`start_at_too_soon` と同じ型の保護）: **`start_at` が「現在 + 2 × `schedule_ttl`（既定 120 秒）」以内の行は、取り消しを拒否する**（`schedule_cancel_too_soon`）。理由: API は切り替え予定の一覧を TTL（60 秒）でキャッシュし、取り消し後の `forget` は失敗しうる（tool と api が同じ Redis かは未確認。8.3）。直前に取り消すと、API のキャッシュに取り消した行が残ったまま `start_at` に到達し、**取り消した版が最大 TTL の間配信される**。また、tool と api の時計のずれで、「到達していない」という判定自体も崩れる。保護の範囲外（`start_at` が十分先）の取り消しなら、TTL が経てば、キャッシュに取り消した行が残っていても `start_at` より前に切れる。
     - **取り消し後の `forget` の失敗は成功扱いにしない**（**仮置き**）: **run は `succeeded`** のまま、`summary.cache_invalidated = false` と警告（`schedule_cache_not_invalidated`）を実行記録と結果に残し、**呼び出し側（画面・CLI）に「再試行する、または `clear-cache` を実行する」案内を出す**。実行記録（`kind = cancel_schedule`）の `summary` にも残す。登録・巻き戻しの `forget` の失敗も、同じ警告を返す（登録自体は成功のまま）。
     - 「まだ一度も配信されていないので履歴の欠落は無い」という理由づけは、時計のずれで崩れうるので、**保護の範囲（上）の内側では使わない**。
-    - **取り消しも巻き戻しもできない窓**（**仮置き。許容**）: 予約の `start_at` が**現在 + 2 × `schedule_ttl`（120 秒）以内**になると、取り消しは拒否され（上）、巻き戻しは予約済みの行で拒否される（上）ので、**最大 120 秒、どちらもできない**。**緊急の手段は `is_active`（R39）の決定待ち**で、いまは無い。運用: ① 予約が**現在 + 2 × `schedule_ttl` より先**なら取り消せる（早めに判断する）② 窓の中に入ったら、**到達して配信が始まるのを待ってから巻き戻す**（`start_at` 到達の後は予約済みでなくなるので巻き戻せる）。R41 の注記。
+    - **取り消しも巻き戻しもできない窓**（**仮置き。許容**）: 予約の `start_at` が**現在 + 2 × `schedule_ttl`（120 秒）以内**になると、取り消しは拒否され（上）、巻き戻しは予約済みの行で拒否される（上）ので、**最大 120 秒、どちらもできない**。**緊急の手段は `is_active` を落とす操作（決定した R39。次の「緊急停止」）**。運用: ① 予約が**現在 + 2 × `schedule_ttl` より先**なら取り消せる（早めに判断する）② 窓の中に入ったら、**悪い版が配信される前に止めたいときは緊急停止**（`master:deactivate`。窓の中でもできる。止めた行は最新の選択から外れ、前の行が最新のまま）③ 緊急でなければ、**到達して配信が始まるのを待ってから巻き戻す**（`start_at` 到達の後は予約済みでなくなるので巻き戻せる）。R41 の注記。
+  - **緊急停止**（R39 の決定 A に基づく。**操作の名前・形は仮置き**: `master:deactivate {sys_deploy.id}` / 画面の「この行を止める」。再び有効にする `master:activate {sys_deploy.id}` / 画面の「再開」も**仮置き**）: 運営が**明示的に操作したときだけ** `sys_deploy.is_active` を 0 にする（activate は 1 に戻す）。**デプロイ・巻き戻し・予約の取り消しは `is_active` を自動では変えない**（3.3）。**排他のロックの中**で行う。
+    - **対象**: `start_at` が未到達でも到達済み（いまの版）でもよい。**窓の中（現在 + 2 × `schedule_ttl` 以内）の予約の行**を止められるのが目的（取り消しも巻き戻しもできない間の唯一の手段）。止めた行は行として残る（履歴・`sys_deploy_master`・版の DB・成果物も残る）。**同じ状態への操作は、更新はせず成功**（冪等。`already_in_state`。**ただし `forget` は行う**＝下）。行が無ければ `deploy_not_found`（仮称）。
+    - **検査**（**仮置き**）: **止めた後に、最新の選択（3.3）が空になる、または掃除済み（`mst_dropped_at` が NULL でない）の版に落ちるときは拒否**する（`deactivate_no_fallback`。仮称。配信が 299 になる止め方を防ぐ）。**止める行が最新でも予約でもない行**（選択に影響しない）は検査なしで通す。
+    - **再開（`master:activate`）の検査**（**仮置き**）: **再開で最新の選択（3.3）になる行の master が掃除済み**（`mst_dropped_at` が NULL でない、または DB が無い・不一致）のときは、**成果物から復元（6.6 の `version_db`）してから** `is_active = 1` にする（復元の規則・`schema_fingerprint` の一致は rollback の復元と同じ。4.8）。**復元できなければ拒否**（`activate_target_dropped`。仮称。更新しない）。理由（再現）: 悪い版 X を止める → X の `start_at` が過ぎる → 掃除（4.6）で X の DB が `DROP`（下の 4.6 は止めた行の master を保持対象にするので通常は起きないが、手動の `DROP` や N の変更などで起きうる）→ 検査なしで再開すると X が最新の選択になり、選んだ版の DB が掃除済みで 299 になる。再開しても最新の選択にならない行（より新しい有効な行がある・未来の行）は、検査なしで通す（未来の行は、到達するまで掃除されない。4.6 ②）。
+    - **実行記録**（**仮置き**）: `kind = deactivate`（**既存の kind 一覧への追加は `deactivate` の 1 つ**。`master:activate` も同じ kind で、`summary.is_active` に新しい値を残す）。phase は `lock`・`check`・`version_db`（**activate が復元するときだけ**。上）・`register`・`done`（deactivate は DB を作らない）。
+    - **`forget`**（上の取り消しと同じ扱い）: 更新の**後**に、`schedule` キー（8.3）を破棄する。止めたあとも、キャッシュには最大 `schedule_ttl`（60 秒）古い判断（止める前の一覧）が残るため。**`already_in_state`（すでにその状態）のときも `forget` を行う**（更新は無いが、前回 `forget` に失敗した後の**冪等な再試行で `forget` が効く**ようにするため）。**失敗は成功扱いにしない**: run は `succeeded` のまま、`summary.cache_invalidated = false` と警告（`schedule_cache_not_invalidated`）を残し、**「再試行する（同じ操作をもう一度実行すると `forget` だけ行われる）、または `clear-cache` を実行する」案内を出す**。`start_at` 直前の緊急停止で `forget` に失敗したときは、**最大 60 秒、止めた版が配信されうる**ことを案内に含める。
+    - **取り消し・巻き戻しとの関係**: 止めた行は、巻き戻しの「予約済み」の判定（`start_at` が現在より後の行）に**数えるまま**（行が残るため。巻き戻しは拒否される。先に取り消す、または `master:activate` で戻す）。取り消しは `is_active` に関わらず削除できる（窓の外）。**窓の中（現在 + 2 × `schedule_ttl` 以内）の未来の行を止めた場合は、取り消しもできず、巻き戻しも `rollback_blocked_by_scheduled` になる**ので、**窓の中は `start_at` の到達を待つ**（到達後は「予約済み」から外れ、巻き戻せる）。
 - 登録の**後**、API の「切り替え予定の一覧」のキャッシュを破棄する（`forget`。失敗しても登録は成功のまま。結果に `cache_invalidated = false` を返す。8.3）。mst のキャッシュは破棄しない。
 - **巻き戻しで戻し先の DB を復元する段階**（**仮置き**）: **`version_db` は rollback・build・import が共有する段階**（6.6）。rollback では、戻し先の版の DB が使えない（`mst_dropped_at` が NULL でない・DB が無い・不一致。R1）ときだけ、実行記録の phase を **`version_db`** にして成果物から復元する（6.6 の共通の手順。`lock` → `check` → `version_db` → `register` → `done`）。復元が無ければ `version_db` を通らない。
-- 登録で使う新しいエラーコード（仮称。`error_code` の最終形は db.md が正本。api.md はこの PR で db.md に揃える）: `deploy_locked`・`sheet_invalid`・`artifact_invalid`・`schema_mismatch`・`confirmed_key_modified`・`deploy_key_regression`・`reserved_key_forbidden`・`start_at_past`・`mst_database_name_too_long`・`mst_database_collision`・`base_database_mismatch`・`load_failed`・`rollback_target_unavailable`・`rollback_blocked_by_scheduled`・`schedule_already_started`・`schedule_cancel_too_soon`・`register_confirmed_after_error`（警告。4.7）・`register_unknown`（4.7）・`already_finalized`（成功。6.5.1）・`finalize_conflict`・`sheet_changed_since_build`・`follow_check_unavailable`（6.5.1）・`reference_unavailable`・`drop_forbidden`・`not_finalized`（final.json が無い。6.5.1）、および段階ごとの失敗の語（**仮称**。`register_failed`＝sys の登録の失敗、`store_failed`＝成果物の配置の失敗、`pull_failed`＝上流からの取得の失敗、`export_failed`＝成果物（NDJSON・SQLite）の書き出しの失敗。実行記録の `error_code` に入る。api.md の書き直しで確定）。
+- 登録で使う新しいエラーコード（仮称。`error_code` の最終形は db.md が正本。api.md はこの PR で db.md に揃える）: `deploy_locked`・`sheet_invalid`・`artifact_invalid`・`schema_mismatch`・`confirmed_key_modified`・`deploy_key_regression`・`reserved_key_forbidden`・`start_at_past`・`mst_database_name_too_long`・`mst_database_collision`・`artifact_dir_collision`（**仮称**。6.5.2）・`base_database_mismatch`・`load_failed`・`rollback_target_unavailable`・`rollback_blocked_by_scheduled`・`schedule_already_started`・`schedule_cancel_too_soon`・`register_confirmed_after_error`（警告。4.7）・`register_unknown`（4.7）・`already_finalized`（成功。6.5.1）・`finalize_conflict`・`sheet_changed_since_build`・`follow_check_unavailable`（6.5.1）・`reference_unavailable`・`drop_forbidden`・`not_finalized`（final.json が無い。6.5.1）、および段階ごとの失敗の語（**仮称**。`register_failed`＝sys の登録の失敗、`store_failed`＝成果物の配置の失敗、`pull_failed`＝上流からの取得の失敗、`export_failed`＝成果物（NDJSON・SQLite）の書き出しの失敗。実行記録の `error_code` に入る。api.md の書き直しで確定）。
 
 ## 4. 版ごとの mst DB（C4。R21・R22・R26）
 
@@ -175,7 +182,7 @@ LIMIT 1;
 - **`{APP_NAME}`**: アプリ名の設定値（`config('app.name')`。**決定**）。既定は `nexus`。
 - **`{env}`**: `APP_ENV`（`config('app.env')`。**決定**）。docker-compose の `db-master` には `${APP_NAME}-${APP_ENV}-master`・`${APP_NAME}-testing-master`・`${APP_NAME}-testing-tool-master` が同居している（`docker-compose.yml` の `DB_NAMES`。確認済み）。環境名が入るので、**local と testing が同じ MySQL に同居しても名前は衝突しない**。
 - **`{deploy_key}`**: 10 桁の `sys_deploy_master.deploy_key`。
-- **`{HASH}`**: 成果物の `hash`（6.5.2。SHA-256 の 16 進 64 文字）の**先頭 16 文字**（固定長。**仮置き**）。
+- **`{HASH}`**: 成果物の完全な `hash`（6.5.2。SHA-256 の 16 進 64 文字）の**先頭 16 文字**（固定長。**決定**。人の決定。2026-11-23「hash の長さは 16」。成果物のディレクトリ名の hash も同じ 16 文字＝下の「成果物のディレクトリ名との関係」）。
 - **接頭辞** `{APP_NAME}-{env}-master-`（末尾のハイフンを含む）は、基底 DB `{APP_NAME}-{env}-master`・他の環境の DB・`{APP_NAME}-testing-tool-master` と区別できる。**この接頭辞が付いた名前だけを、tool が `DROP` の対象にする**（4.6）。
 - **前提: 版の DB の名前は 1 つの sys に対して一意**（**仮置き**）。**同じ MySQL サーバー・同じ `APP_NAME`・同じ `APP_ENV`・同じ T・同じ hash で複数の環境（別の sys）が build すると、版の DB 名が同じになる**。後の環境は先の環境の DB を「孤児（sys に行が無い DB）」として中身の一致で**採用**でき、先の環境の `cleanup` が消すと後の環境の DB も消える。**同じ MySQL サーバーに同居する環境は、`{env}` または `APP_NAME` で名前を分ける運用**にする（環境名が違えば名前は衝突しない。同じ名前を共有する構成は取らない）。
 
@@ -183,9 +190,9 @@ LIMIT 1;
 `64 - (len(APP_NAME) + 1 + len(env) + len("-master-") + 10 + 1)` = `64 - (len(APP_NAME) + len(env) + 20)` = **`44 - len(APP_NAME) - len(env)`**。
 - 例: `nexus`（5）＋ `local`（5）なら **34**、`nexus` ＋ `qa`（2）なら **37**、`nexus` ＋ `production`（10）なら 29。**APP_NAME や env が長いほど短くなる**。
 - 完全な SHA-256（64 文字）はどの組み合わせでも入らない。
-- そこで、**APP_NAME と env の長さに依らず収まる固定長**として `HASH` = 先頭 **16 文字**にする（**仮置き**。32 でもよいが、`len(APP_NAME) + len(env)` が 12 を超えると 32 は入らない。16 なら **`len(APP_NAME) + len(env)` が 28 文字以内**で収まる）。**28 文字を超える設定は、tool が build・import の最初（排他の前）に `mst_database_name_too_long` で拒否**する（設定の誤りとして早く落とす）。
-- 衝突: 16 文字 = 64 ビット。同じ `deploy_key` の版が互いに衝突する確率は、n 個で約 n²/2⁶⁵（n = 1000 でも 10⁻¹³ 程度）で、実用上は起きない。**起きたとき（同じ名前の DB が既にある）**は次のとおり（**仮置き**）: sys の `sys_deploy_master.mst_database` でその名前の行を引き、**完全な hash を比べる**。同じ → 同じ成果物なので再利用（R1。DB が使える状態かは 6.6 で確かめる）。**同じ名前の DB が実在し、往復検査・スキーマ版だけが合わない（使えない）→ その DB は触らず（この run が作った名前でないので `DROP` しない。4.7）、HASH を 32 文字に伸ばした別名で新しく作る**（復元の循環を避ける。32 文字が入らない・32 文字の名前も既にあるなら `mst_database_collision` で止める。**仮置き**。使えない旧 DB は手動で確認する）。違う → 衝突。**HASH を 32 文字に伸ばして**作り直す（入る長さのときだけ。入らなければ `mst_database_collision` で止める）。sys に行が無い DB（孤児）→ 中身（スキーマ版・行の往復。6.6）が成果物と一致すれば**採用**、一致しなければ拒否。**採用した DB は、この run が作ったものではないので、以後の失敗・掃除で `DROP` しない**（4.7 の規則）。**以後 DB 名は `sys_deploy_master.mst_database` を正とし、hash から導出し直さない**（HASH の長さを後から変えても壊れない）。
-- **成果物のディレクトリ名との関係**: ディレクトリ `{deploy_key}_{hash}` は**完全な hash**（64 文字）を使う（**仮置き**。R24 は未決。現行のディレクトリ名も完全な hash）。DB 名だけ短縮する（DB 名は 64 文字の制約があるため）。揃えない。
+- そこで、**APP_NAME と env の長さに依らず収まる固定長**として `HASH` = 先頭 **16 文字**にする（**決定**）。**確定した制約**: `44 - len(APP_NAME) - len(env) ≥ 16`、すなわち **`len(APP_NAME) + len(env)` が 28 文字以内**。**28 文字を超える設定は、tool が build・import の最初（排他の前）に `mst_database_name_too_long` で拒否**する（設定の誤りとして早く落とす）。
+- 衝突: 16 文字 = 64 ビット。同じ `deploy_key` の版が互いに衝突する確率は、n 個で約 n²/2⁶⁵（n = 1000 でも 10⁻¹³ 程度）で、実用上は起きない。**起きたとき（同じ名前の DB が既にある）**は次のとおり（**仮置き**。**DB 名は 16 文字固定の決定を超えない**ので、**HASH を伸ばして別名にはしない**。「32 文字に伸ばす」案は撤回した）: sys の `sys_deploy_master.mst_database` でその名前の行を引き、**完全な hash（64 文字）を比べる**（先頭 16 文字だけの比較にしない）。同じ → 同じ成果物なので再利用（R1。DB が使える状態かは 6.6 で確かめる）。**同じ名前の DB が実在し、往復検査・スキーマ版だけが合わない（使えない）→ その DB は触らず（この run が作った名前でないので `DROP` しない。4.7）、`mst_database_collision` で止める**（使えない旧 DB は手動で確認する）。違う（先頭 16 文字が同じで完全な hash が別）→ 衝突。**`mst_database_collision` で止める**（別名にしない）。sys に行が無い DB（孤児）→ 中身（スキーマ版・行の往復。6.6）が成果物と一致すれば**採用**、一致しなければ拒否。**採用した DB は、この run が作ったものではないので、以後の失敗・掃除で `DROP` しない**（4.7 の規則）。**以後 DB 名は `sys_deploy_master.mst_database` を正とし、hash から導出し直さない**（HASH の長さを後から変えても壊れない）。
+- **成果物のディレクトリ名との関係**（**決定**。人の決定。2026-11-23）: ディレクトリ名 `{deploy_key}_{hash}` の hash も、完全な hash の**先頭 16 文字**（DB 名の HASH と同じ）。**完全な hash（64 文字）は `sys_deploy_master.hash`・`manifest.json`・I1 の再計算・`(deploy_key, hash)` の UNIQUE でそのまま使う**（先頭 16 文字だけの比較にしない）。**同じ `deploy_key` で先頭 16 文字が同じ、完全な hash が別**のとき（ディレクトリ名の衝突）は、別名にせず**止める**（`artifact_dir_collision`。**コード名・HTTP・終了コードは仮置き**。6.5.2）。DB 名の衝突は `mst_database_collision`。
 - 作業用の DB（6.6。hash が確定する前の中間。import の dry run の一時 DB も同じ）は `{APP_NAME}-{env}-master-work-{UTC の YYYYMMDDHHMMSS}-{ランダム 4 文字}`（**仮置き**。`len(APP_NAME) + len(env)` が 28 文字以内なら 64 文字以内）。完成したら版の DB に複製して作業用は捨てる。接頭辞は版の DB と同じなので、`DROP` の保護の対象に含まれる。**名前に作成時刻が入る**ので、異常終了で残った作業用 DB を、実行記録が無くても（dry run は記録しない）時刻で見つけられる（4.7）。
 
 ### 4.3 作り方（R26 の「作り方」。**仮置き**）
@@ -222,7 +229,7 @@ CREATE TABLE `nexus-local-master-2026120101-0f3c1a2b3c4d5e6f`.`mst_item`
 - 接続は既存の `mst` 接続（tool の `config/database.php`）を DDL 可能なユーザーで使い、api は読み取り専用のユーザーを使う（接続の設定だけで分ける）。
 
 ### 4.6 残す期間と掃除（R21。**仮置き**）
-- **消さない**: ① いまの版（`start_at <= 現在` の最新）② `start_at` が現在より後の版（予約済み）③ 直近 **N 版**（巻き戻し先。**N = 3 を初期値**とする。N は運用で決める＝**未決**のまま）④ 基底 DB。**N の数え方**: `sys_deploy` の行数ではなく、**`sys_deploy_master` を重複排除した版の数**で数える。1 つの master を指す `sys_deploy` 行は巻き戻し・再予約で複数になりうるので、各 master について「`start_at <= 現在` の `sys_deploy` 行の最大の `start_at`」を取り、その新しい順に N 個。
+- **消さない**: ① **いまの版（3.3 の最新の選択。`is_active` を見る）と、その直前に最新だった有効な版（フォールバック先。3.3 の並びで最新の選択の次に来る有効な行の master）**② `start_at` が現在より後の版（予約済み）③ 直近 **N 版**（巻き戻し先。**N = 3 を初期値**とする。N は運用で決める＝**未決**のまま）④ 基底 DB ⑤ **止めた行（`is_active = false` の `sys_deploy` 行）を指す版**（**仮置き**。R39 の緊急停止。再開・巻き戻し先になるため `DROP` しない）。**N の数え方**: `sys_deploy` の行数ではなく、**`sys_deploy_master` を重複排除した版の数**で数える。1 つの master を指す `sys_deploy` 行は巻き戻し・再予約で複数になりうるので、各 master について「**`is_active = true` で** `start_at <= 現在` の `sys_deploy` 行の最大の `start_at`」を取り、その新しい順に N 個。**止めた行は N の枠に数えない**（⑤ で別に保持する）。再現（これを防ぐ）: B が有効な最新で、B より新しい X1・X2・X3 が到達済みで全て停止中のとき、止めた行を枠に数えると B が N = 3 の枠の外になり、掃除で B の DB が `DROP` され、最新の選択（B）が掃除済みで 299 になる。**止めた行が未来から過去に変わったとき**（予約の行を止めたまま `start_at` が過ぎた）の扱い（再開の運用）: ② は `start_at > 現在` だけを見るが、⑤ が止めた行の版を保持するので、**到達後も先に消えない**。再開（3.6 の `master:activate`）は、その版の DB が残っていればそのまま、掃除済みなら成果物から復元して通す。
 - **消す**: 上の外にある版の DB。**DB だけ消し、`sys_deploy_master` の行と成果物は残す**（`mst_dropped_at` に日時を入れる）。**順序**（**仮置き**）: **`DROP DATABASE IF EXISTS` を先、`mst_dropped_at` の更新を後**にする。途中で止まっても（DROP の後・更新の前）、**再実行で冪等に完了する**（`IF EXISTS` なので 2 回目の DROP は何もせず、更新が済む）。逆の順（更新を先）にすると、止まったときに DB が残ったまま「消した」ことになり、掃除の対象から漏れる。消した版へ戻すときは、**成果物から DB を復元**する（3.6 の R1。DB 名は新しく付け直してよく、`mst_database` を更新する）。成果物の掃除は別の方針（成果物はバケットで保管し、当面消さない。**未決**）。
 - 掃除は**手動の操作**（`master:cleanup`。既定は `--dry-run`）で、定期実行は作らない（**仮置き**）。保持数と猶予は設定（`keep_version_count` = 3、`orphan_grace_hours` = 24。7.2）。
 - **`DROP DATABASE` の保護**（**仮置き**。この規則は 4.7 の失敗時の `DROP` にも掛かる）: 次を**すべて**満たす名前だけを `DROP` する。① **自環境の接頭辞 `{APP_NAME}-{env}-master-` が付いている**（基底 DB・他の環境・`{APP_NAME}-testing-tool-master` などを誤って消さない）② 基底 DB の名前と一致しない ③ 掃除（`master:cleanup`）の対象は、`mst_database` が**自環境の `sys_deploy_master` に存在する**もの、または 4.7 の孤児の条件に当たるもの。接頭辞が付いていない名前は、実行記録に書かれていても `DROP` しない（`drop_forbidden`）。
@@ -255,9 +262,9 @@ CREATE TABLE `nexus-local-master-2026120101-0f3c1a2b3c4d5e6f`.`mst_item`
 ## 5. `tol_master_deploy_run`（運営ツールの実行記録。C9）
 
 ### 5.1 目的
-1 回のデプロイ操作（build・import・巻き戻し・予約の取り消し・掃除・QA 完了）ごとに行を 1 つ書き、(1) 失敗・途中で止まったことを次の操作と画面で気づけるようにし、(2) 誰がいつ何をしたかの記録にし、(3) **孤児の DB を見つける**（4.7）。`tool` 接続（`tol_`）に置く。**仮置き**。旧設計の「sys と mst の食い違い（`inconsistent`）の検知」「キャッシュの全破棄の判定（M1）」の役目は無くなった（食い違いが起きない。mst のキャッシュは破棄しない）。`dry_run` は記録しない（import の dry run は一時 DB を作るが、実行記録は作らず、`created_database_list` は**メモリだけ**に持って `finally` で `DROP` する。異常終了で残った一時 DB は名前の時刻で掃除する。4.7）。
+1 回のデプロイ操作（build・import・巻き戻し・予約の取り消し・緊急停止・掃除・QA 完了）ごとに行を 1 つ書き、(1) 失敗・途中で止まったことを次の操作と画面で気づけるようにし、(2) 誰がいつ何をしたかの記録にし、(3) **孤児の DB を見つける**（4.7）。`tool` 接続（`tol_`）に置く。**仮置き**。旧設計の「sys と mst の食い違い（`inconsistent`）の検知」「キャッシュの全破棄の判定（M1）」の役目は無くなった（食い違いが起きない。mst のキャッシュは破棄しない）。`dry_run` は記録しない（import の dry run は一時 DB を作るが、実行記録は作らず、`created_database_list` は**メモリだけ**に持って `finally` で `DROP` する。異常終了で残った一時 DB は名前の時刻で掃除する。4.7）。
 
-**巻き戻し・予約の取り消し・掃除・QA 完了も、実行記録の `kind` で残す**（**仮置き**。R42「監査記録を実行記録の kind で持つ」）。誰がいつ何をしたかを 1 つの表で追えるようにし、掃除が作った・消した DB の名前も `summary` に残す。
+**巻き戻し・予約の取り消し・緊急停止・掃除・QA 完了も、実行記録の `kind` で残す**（**仮置き**。R42「監査記録を実行記録の kind で持つ」）。誰がいつ何をしたかを 1 つの表で追えるようにし、掃除が作った・消した DB の名前も `summary` に残す。
 
 ### 5.2 列
 接続は `tool`（`tool/database/migrations/tol/2026_01_01_000001_create_game_tables.php` の既存定義を書き換える。10.1）。★は旧設計からの変更。
@@ -265,14 +272,14 @@ CREATE TABLE `nexus-local-master-2026120101-0f3c1a2b3c4d5e6f`.`mst_item`
 | 列 | 型 | null | 既定・索引 | コメント |
 | --- | --- | --- | --- | --- |
 | id | `id()` | 不可 | PK | ID |
-| ★kind | enum(`build`,`import`,`rollback`,`cancel_schedule`,`cleanup`,`finalize`) | 不可 | index | 操作の種類。build（シートから畳んで成果物を作る）・import（上流の成果物を取り込む）・rollback（巻き戻し。3.6）・cancel_schedule（予約の取り消し。3.6）・cleanup（掃除。4.6・4.7）・finalize（QA 完了の印を付ける。6.5.1）。**仮置き**（R42） |
+| ★kind | enum(`build`,`import`,`rollback`,`cancel_schedule`,`deactivate`,`cleanup`,`finalize`) | 不可 | index | 操作の種類。build（シートから畳んで成果物を作る）・import（上流の成果物を取り込む）・rollback（巻き戻し。3.6）・cancel_schedule（予約の取り消し。3.6）・deactivate（緊急停止・再開。`is_active` の更新。3.6。**仮置き**）・cleanup（掃除。4.6・4.7）・finalize（QA 完了の印を付ける。6.5.1）。**仮置き**（R42） |
 | ★mode | enum(`explicit`,`fixed`) | 可 | | build のみ（他の kind は null）。T を環境の明示キーで決めた（explicit）か固定キー（fixed）か。import は null（旧 `real`/`fixed` を置き換え） |
-| deploy_key | bigInteger | 不可→可 | index | build は T、import・rollback・finalize は対象の成果物・版の deploy_key、cancel_schedule は取り消した行の deploy_key、cleanup は null。開始前に失敗したときは null |
+| deploy_key | bigInteger | 不可→可 | index | build は T、import・rollback・finalize は対象の成果物・版の deploy_key、cancel_schedule は取り消した行の deploy_key、**deactivate・activate は対象の行（止める・再開する `sys_deploy` 行）の deploy_key**、cleanup は null。開始前に失敗したときは null |
 | status | enum(`running`,`succeeded`,`failed`,`aborted`) | 不可 | index | ★`inconsistent` を外した（食い違いが無い） |
-| phase | enum | 不可 | | ★最後に着手した段階。build: `lock`・`read`・`validate`・`fold`・`work_db`・`artifact`・`version_db`・`store`・`register`・`done`。import: `lock`・`pull`・`verify`・`check`（DB を要しない検査）・`version_db`・`check_rows`（I5）・`store`・`register`・`done`。**rollback: `lock`・`check`・`version_db`（戻し先の DB を復元するときだけ。3.6 の R1）・`register`・`done`**。cancel_schedule: `lock`・`check`・`register`・`done`。finalize: `lock`・`check`（追従検出。6.5.1）・`register`（`final.json` の書き込み）・`done`。cleanup: `lock`・`check`・`drop`・`done`。enum の値は `version_db` を共有する。**版の DB を作る・復元する段階（`version_db`）は rollback・build・import が共有する**（build・import も R1 で既存 master の DB を復元し、import の I5 も A の DB を復元する。6.6・6.7）。**cancel_schedule・finalize・cleanup は DB を作らない**（**仮置き**）（`commit`・`invalidate` は外した） |
+| phase | enum | 不可 | | ★最後に着手した段階。build: `lock`・`read`・`validate`・`fold`・`work_db`・`artifact`・`version_db`・`store`・`register`・`done`。import: `lock`・`pull`・`verify`・`check`（DB を要しない検査）・`version_db`・`check_rows`（I5）・`store`・`register`・`done`。**rollback: `lock`・`check`・`version_db`（戻し先の DB を復元するときだけ。3.6 の R1）・`register`・`done`**。cancel_schedule: `lock`・`check`・`register`・`done`。deactivate: `lock`・`check`・`version_db`（**activate が復元するときだけ**。3.6）・`register`（`is_active` の更新と `forget`）・`done`。finalize: `lock`・`check`（追従検出。6.5.1）・`register`（`final.json` の書き込み）・`done`。cleanup: `lock`・`check`・`drop`・`done`。enum の値は `version_db` を共有する。**版の DB を作る・復元する段階（`version_db`）は rollback・build・import が共有する**（build・import も R1 で既存 master の DB を復元し、import の I5 も A の DB を復元する。6.6・6.7）。**cancel_schedule・deactivate・finalize・cleanup は DB を作らない**（**仮置き**）（`commit`・`invalidate` は外した） |
 | adm_account_id | unsignedBigInteger | 可 | | 実行した管理者。CLI は null |
 | app_env | string(32) | 不可 | | 実行時の `APP_ENV` |
-| master_hash | string(64) | 可 | | 成果物の hash（完全な 64 文字） |
+| master_hash | string(64) | 可 | | 成果物の hash（完全な 64 文字。ディレクトリ名・DB 名は先頭 16 文字） |
 | ★artifact_dir | string(128) | 可 | | 成果物のディレクトリ名 `{deploy_key}_{hash}` |
 | ★mst_database | string(64) | 可 | index | 作った版の DB 名。**DB を作る直前に書く**（孤児の追跡。4.7）。作業用 DB の名前は `summary.work_database` |
 | ★schema_fingerprint | string(64) | 可 | | 作った DB のスキーマ版 |
@@ -372,7 +379,7 @@ for 各 __l10n テーブル:
 ### 6.5 成果物（artifact。C6）
 
 #### 6.5.1 構成（**仮置き**）
-`{deploy_key}_{hash}/` ディレクトリ（`{deploy_key}` は 10 桁、`{hash}` は完全な 64 文字。**決定**はこの名前の規則と、成果物がマスター DB の中身・配信 SQLite・マニフェスト・hash を含むこと。ファイルの形は仮置き）:
+`{deploy_key}_{hash}/` ディレクトリ（`{deploy_key}` は 10 桁、`{hash}` は完全な hash の先頭 16 文字（決定）。**決定**はこの名前の規則と、成果物がマスター DB の中身・配信 SQLite・マニフェスト・hash を含むこと。ファイルの形は仮置き）:
 
 ```text
 {deploy_key}_{hash}/
@@ -393,11 +400,11 @@ for 各 __l10n テーブル:
   - **シートを読めない・認証情報が無い**場合は、既定では拒否（`follow_check_unavailable`）。**`--allow-unverified`**（**仮置き**）を付けると、**拒否ではなく警告で通す**。通したことは**実行記録に残す**（`summary.follow_check = {status: unverified, reason}`・`summary.allow_unverified = true`・`adm_account_id`。監査のため）。`--allow-unverified` が使えるのは「読めない」場合だけ（「読めて違う」は通せない）。`final.json` の中身は変えない（`unverified` の印は成果物に付けない。実行記録だけに残る）。`require_finalized`（7.2）が true の import 環境（review・production・staging の既定。**仮置き**）は、**`final.json` が無い成果物、または `final.json` の `deploy_key`・`hash` がマニフェストと違う成果物の import を拒否する**（`not_finalized`。6.7 の I1）。最終 hash の確定の仕組み・ゲートの置き場は**未決**（R28）で、`final.json` はその提案の 1 つ。
 - **`manifest.json`**: `format_version`・`deploy_key`・`hash`・`schema_fingerprint`・表ごとの `{name, row_count, data_sha256}`・グループごとの `{group, file_name, sqlite_sha256, file_size}`。出所（hash に含めない）: `built_env`・`built_at`（UTC）・`source_kind`・T・**`row_digest`**（畳み後の行ダイジェスト。R28 提案。`deploy_key` ごとに、その `deploy_key` で採った行の NDJSON を表・主キーの順に連結して SHA-256 を取る）。
 
-#### 6.5.2 hash（長さ・作り方。**仮置き**。R24 の長さは未決）
-- **`hash` = SHA-256（16 進 64 文字）**。入力は**データ＋スキーマ版**: `format_version`・`schema_fingerprint`・表ごとの `(name, row_count, data_sha256)` を、表名の順に並べた正規化 JSON。**`deploy_key`・時刻・配信 SQLite のバイト列を含めない**。理由: ① 同じ畳みなら同じ hash になる（R8）。SQLite のバイト列が毎回同じかに頼らずに済む ② `{deploy_key}_{hash}` の `deploy_key` と重複させない。
+#### 6.5.2 hash（長さ・作り方。**仮置き**。ディレクトリ名・DB 名に使う長さは先頭 16 文字で**決定**。R24 の本番のストレージの種類は未決）
+- **`hash` = SHA-256（16 進 64 文字。完全な hash）**。ディレクトリ名・DB 名には**先頭 16 文字**を使う（決定）。入力は**データ＋スキーマ版**: `format_version`・`schema_fingerprint`・表ごとの `(name, row_count, data_sha256)` を、表名の順に並べた正規化 JSON。**`deploy_key`・時刻・配信 SQLite のバイト列を含めない**。理由: ① 同じ畳みなら同じ hash になる（R8）。SQLite のバイト列が毎回同じかに頼らずに済む ② `{deploy_key}_{hash}` の `deploy_key` と重複させない。
 - **帰結（スキーマ版が入力に入っている）**: スキーマ更新だけで、**同じデータでも hash が変わる**。review・production への受け渡しの詰まり（4.8 の R34）と、指紋の計算が環境で食い違ったときの影響（4.4）を参照。**検証（I1）の hash の再計算は、マニフェストに記録された `schema_fingerprint` を入力にして行う**（自環境で計算し直さない）。
 - 同じ `{deploy_key}_{hash}` のディレクトリが**既にある**ときは、build は成果物のファイルを**作り直さず既存を使う**（同じデータなので。配信 SQLite のバイトが違う場合でも既存が正）。**ただし、これは成果物のファイルの話だけで、版の DB が有ることは意味しない**。登録の前に、版の DB が使える状態かを必ず確かめる（6.6 の `version_db`）。
-- 長さは現行（完全な 64 文字）のまま変えない（R24 は未決。DB 名は 4.2 のとおり先頭 16 文字だけ）。
+- **完全な hash（64 文字）は `sys_deploy_master.hash`・`manifest.json`・I1 の再計算・UNIQUE でそのまま使う**（短縮しない。決定）。**ディレクトリ名の衝突**: 同じ `{deploy_key}_{hash16}` のディレクトリが既にあるとき、`manifest.json` の完全な hash を比べる。**同じ → 既存を使う**（上）。**違う（先頭 16 文字が同じで完全な hash が別）→ 別名にせず `artifact_dir_collision` で止める**（**コード名・HTTP 500・終了コードは仮置き**。run は `failed`。build は phase `store`、import は phase `store`。既存のディレクトリは触らない）。確率は DB 名と同じ（約 n²/2⁶⁵）で実用上は起きない。
 - `sys_deploy_master_table.hash`・クライアントが比べる表ごとの hash は、**配信 SQLite のバイト列の SHA-256**（今のまま。クライアントの変更なし）。
 
 #### 6.5.3 ストレージの抽象化（**決定**: 抽象化・ローカルの置き場・git に入れない。実装は**仮置き**）
@@ -464,7 +471,7 @@ for 各 __l10n テーブル:
 ### 6.7 登録前の検査（import。R25・R28。**仮置き**）
 | # | 検査 | 失敗 |
 | --- | --- | --- |
-| I1 | `manifest.json` があり、`hash` が再計算した値と一致し（入力はマニフェストに記録された `schema_fingerprint`。6.5.2）、ディレクトリ名 `{deploy_key}_{hash}` と一致する。各ファイルの SHA-256 がマニフェストと一致する（改ざん・転送の欠損の検出）。`require_finalized` が true なら `final.json` がありマニフェストと一致する（`not_finalized`） | `artifact_invalid`・`not_finalized` |
+| I1 | `manifest.json` があり、`hash` が再計算した値と一致し（入力はマニフェストに記録された `schema_fingerprint`。6.5.2）、ディレクトリ名 `{deploy_key}_{hash}`（hash は完全な hash の先頭 16 文字）と一致する（`hash` の比較は完全な 64 文字。ディレクトリ名は先頭 16 文字との一致）。各ファイルの SHA-256 がマニフェストと一致する（改ざん・転送の欠損の検出）。`require_finalized` が true なら `final.json` がありマニフェストと一致する（`not_finalized`） | `artifact_invalid`・`not_finalized` |
 | I2 | **予約帯の成果物は import しない**（`deploy_key >= 7000000000`。環境が production・staging のとき。overview 8.2 の 2。**仮置き**） | `reserved_key_forbidden` |
 | I3 | **スキーマ版**: 成果物の `schema_fingerprint` == 自環境の基底 DB のスキーマ版（R26。**提案**） | `schema_mismatch` |
 | I4 | **参照版 A と `deploy_key` の前進**（**DB を要しない検査なので、`version_db` の前に行う**。**同じ `deploy_key` の別 hash の拒否は全 import 環境**、**前進の検査（`deploy_key_regression`）は production（`enforce_confirmed_rows`）だけ**）: **参照版 A = 登録済みの `sys_deploy_master` のうち `deploy_key` が最大のもの**（同じ `deploy_key` が複数なら `id` が最大。**`start_at` が最新の版ではない**。理由: ① 未来の予約の版を除外する意味が無い（確定済みの最大キーを守りたい）② **巻き戻しは `sys_deploy` の行を足すだけで master を増減しないので、巻き戻しで取り消した版も A に残る**＝取り消した版も確定済みとして扱う。**仮置き**）。K = A の `deploy_key`。成果物の `deploy_key` が K より**小さい**（かつ新しい master）なら拒否（`deploy_key_regression`。古い版へ戻すのは巻き戻し（3.6）で行う）。**同じ `deploy_key` の master が別の hash で既にある**なら、A に限らず拒否（`confirmed_key_modified`。3.6 の R3。**全 import 環境**。人の確認が要る＝R36）。同じ `(deploy_key, hash)` は R1 | 左記 |
@@ -716,12 +723,12 @@ erDiagram
         datetime start_at "いまの版になる日時（UTC）。切り替えの唯一の時刻"
         bigint sys_deploy_master_id
         bigint sys_deploy_asset_id
-        bool is_active "最新の選択で見るかは未決"
+        bool is_active "最新の選択で見る（決定。緊急停止専用。止めるのは master:deactivate だけ）"
     }
     sys_deploy_master {
         bigint id PK
         bigint deploy_key "UNIQUE(deploy_key, hash)"
-        string hash "成果物の hash（データ＋スキーマ版から。64 文字）"
+        string hash "成果物の hash（データ＋スキーマ版から。完全な 64 文字。ディレクトリ名・DB 名は先頭 16 文字）"
         string mst_database "UNIQUE。版の DB 名"
         string artifact_dir "deploy_key と hash のディレクトリ名"
         string schema_fingerprint "この版 DB の現在のスキーマ版"
@@ -754,7 +761,7 @@ erDiagram
     }
     tol_master_deploy_run {
         bigint id PK
-        string kind "build import rollback cancel_schedule cleanup finalize"
+        string kind "build import rollback cancel_schedule deactivate cleanup finalize"
         string mode "explicit か fixed（build のみ）"
         bigint deploy_key "build は T。import は成果物のキー"
         string status "running succeeded failed aborted"
@@ -808,7 +815,7 @@ erDiagram
 | `.claude/development.md` | 上の行に加え、**テスト用の 2 つ目の mst DB は、ボリュームの初回作成時だけ作られる**ので、既存の開発者環境は `docker compose down -v` で作り直す（8.6・10.1） |
 | **DB の命名の一般則（`{APP_NAME}-{env}-{役割}`。4.1）に伴う名前の変更**（別の実装・運用の作業。この PR の範囲外。**master 以外**） | 現行の名前（読んだ）: `docker-compose.yml` の `DB_NAMES` は `${APP_NAME}-${APP_ENV}-master`・`${APP_NAME}-testing-master`・`${APP_NAME}-testing-tool-master`（`db-master`）、`-system`・`-testing-system`・`-testing-tool-system`（`db-system`）、`-shard`・`-testing-shard`・`-testing-tool-shard`（シャード）、`-admin`・`-testing-admin`、`-tool`。api の `config/database.php` は `-master`・`-shard`・`-system`・**`-adm`**（admin の既定。`.env.example` は `-admin`）。tool の `config/database.php` は固定値の既定（`nexus-local-admin`・`nexus-local-tool`・`nexus-local-shard`・**`nexus-local-master`**・`nexus-local-system`）。`api/phpunit.xml` は `nexus-testing-*`。**変えるときの影響**: ① 各アプリの接続設定と `.env.example`（既定値を `{APP_NAME}-{APP_ENV}-{役割}` に）② `docker/mysql/init/create-databases.sh` と `DB_NAMES`（新しい名前の DB が作られる） ③ テスト用 DB 名（`phpunit.xml`・`{APP_NAME}-testing-…`）④ **既存の開発者環境の volume**（`create-databases.sh` は volume の初回作成時だけ動くので、名前を変えると `docker compose down -v` での作り直しか、手で `CREATE DATABASE` が要る。8.6・10.1 と同じ事情）⑤ 既存のデータ（名前を変えると別の DB になる）。**実装 PR で変えるのは master のうち tool の `mst` 接続の既定値（固定の `nexus-local-master` → `{APP_NAME}-{APP_ENV}-master`）だけ**（この設計の PR はドキュメントのみ） |
 | **コードのコメントの `db.md` 参照の追従**（実装 PR で直す。節番号は旧版と同じ番号を保ったが、**内容が変わった・消えた節への参照**は直す） | tool: `MasterDeployInventory`（8・14 行目。9.3）・`MasterSheetValidator`（29 行目。6.3）・`MasterDeployKeyPolicy`（10 行目。3.4 の 4 → 3.4）・`config/master_deploy.php`（11 行目。3.4 の 4 → 3.4、7.2 の設定の追加）・`MasterImportService`（277 行目）・`MasterDeployService`（14・58 行目。3.4・3.6 の R1〜R4 → R1〜R3、旧 8 節 M1）・`MasterCacheInvalidator`（27・111 行目。旧 8 節の M1・全破棄 → 8.4。クラスの大半が不要。10.4）・`MasterDeployRunner`（17 行目＝sequence.md 2〜6 節・api.md 4・11・12 節、176・209 行目＝sequence.md 2 節の手順 20、246・729 行目。旧 8 節・5.6・補償）・`MasterDeployTargetService`（14 行目。旧 8 節 M1）。api: `api/tests/Feature/Recording/RecordingDeployRegistrationTest.php`（14 行目。11.2）・`api/tests/Feature/Repositories/MasterCacheKeyContractTest.php`（`mst:{表}:all` を固定。8.4）・`_BaseMstRepository.php`（28 行目のコメント。8.4）。**行番号は 2026-11-23 時点（レビューの列挙）で、実装 PR の着手時に `grep "db.md"` で数え直す** |
-| **Nexus 側に決定・更新として残す**（次の Nexus の PR で直す一覧。M2） | ① **ADR 0007 の未決「版の DB 名の付け方と掃除」**: 命名 `{APP_NAME}-{env}-master-{deploy_key}-{HASH}` を決定として追記（HASH の長さは仮置き、最大長は `44 - len(APP_NAME) - len(env)`）。掃除は仮置きのまま ② **台帳**: R21（命名は決定。保持数 N・掃除は未決）・**R33 を決定済みに**（シートに行が無い表は空の表）・R19（キー `7777777777` は Q2 のまま決定。未決は録画用の mst を版の DB として作る方式の細部と、「何もしない」条件が `start_at` の予約の有無に変わること）・R38（権限の確認だけが残る。環境の同居は解消）・R25（I5 の限界の注記。14.4 の R37）の更新 ③ **overview**: 14.3 の 1（`hash` の UNIQUE は `(deploy_key, hash)`）・3（DB 名を引く列は `sys_deploy_master`。overview 4 節・ADR の「`sys_deploy` に DB 名を引く列が無い」の言い方）・4（trx と mst の JOIN は docker で成立しない＝確認済み）・5（hash が決まる前に DB 名が要る循環＝作業用 DB）の反映 ④ **glossary**: 「版ごとの DB」の命名 ⑤ 台帳の「版ごとの DB への変更」の区分に `MasterDeployInventory`・`MasterDeployTargetService`・`CheckMasterHash` を足す（10.4）⑥ `docs/workflow/recording.md`（録画の手順。11.2）⑦ **台帳の R34〜R45**（14.4。R33 は決定への格上げ）と **overview 14.3 の 8・9**（巻き戻しと予約の関係、hash にスキーマ版を含める帰結）⑧ **DB の命名の一般則**（`{APP_NAME}-{env}-{役割}`。4.1。ADR 0007 の命名の記述と glossary）。Nexus 側の別 PR |
+| **Nexus 側に決定・更新として残す**（次の Nexus の PR で直す一覧。M2） | ① **ADR 0007 の未決「版の DB 名の付け方と掃除」**: 命名 `{APP_NAME}-{env}-master-{deploy_key}-{HASH}` を決定として追記（HASH は先頭 16 文字で決定。最大長は `44 - len(APP_NAME) - len(env)` ≥ 16 → `len(APP_NAME) + len(env)` ≤ 28）。掃除は仮置きのまま ② **台帳**: R21（命名は決定。保持数 N・掃除は未決）・**R33 を決定済みに**（シートに行が無い表は空の表）・R19（キー `7777777777` は Q2 のまま決定。未決は録画用の mst を版の DB として作る方式の細部と、「何もしない」条件が `start_at` の予約の有無に変わること）・R38（権限の確認だけが残る。環境の同居は解消）・R25（I5 の限界の注記。14.4 の R37）の更新 ③ **overview**: 14.3 の 1（`hash` の UNIQUE は `(deploy_key, hash)`）・3（DB 名を引く列は `sys_deploy_master`。overview 4 節・ADR の「`sys_deploy` に DB 名を引く列が無い」の言い方）・4（trx と mst の JOIN は docker で成立しない＝確認済み）・5（hash が決まる前に DB 名が要る循環＝作業用 DB）の反映 ④ **glossary**: 「版ごとの DB」の命名 ⑤ 台帳の「版ごとの DB への変更」の区分に `MasterDeployInventory`・`MasterDeployTargetService`・`CheckMasterHash` を足す（10.4）⑥ `docs/workflow/recording.md`（録画の手順。11.2）⑦ **台帳の R34〜R45**（14.4。R33 は決定への格上げ）と **overview 14.3 の 8・9**（巻き戻しと予約の関係、hash にスキーマ版を含める帰結）⑧ **DB の命名の一般則**（`{APP_NAME}-{env}-{役割}`。4.1。ADR 0007 の命名の記述と glossary）。Nexus 側の別 PR |
 
 ## 14. 仮置き・未確認・未決・overview との関係
 
@@ -821,11 +828,11 @@ erDiagram
 ### 14.1 仮置き（AI の提案。人の確認で変わりうる）
 | # | 内容 | 場所 | R |
 | --- | --- | --- | --- |
-| P1 | 版の DB 名に入れる HASH は**固定長の先頭 16 文字**（命名自体は決定。最大長は `44 - len(APP_NAME) - len(env)`）。`len(APP_NAME) + len(env)` が 28 文字を超えたら拒否。成果物のディレクトリは完全な hash（64 文字）で揃えない。衝突時は完全な hash で比べ、32 文字に伸ばす | 4.2 | R24 |
+| P1 | （P1 は、版の DB 名の HASH とディレクトリ名の hash の長さが **決定（先頭 16 文字。2026-11-23）** になったので仮置きから外した。残る仮置き: `len(APP_NAME) + len(env)` が 28 文字を超えたら拒否（決定した 16 文字から導く）。衝突時（完全な hash が別）は別名にせず止める＝DB 名は `mst_database_collision`、ディレクトリ名は `artifact_dir_collision`（仮称）） | 4.2・6.5.2 | R24 |
 | P2 | **版の DB 名は `sys_deploy_master.mst_database` を正**とし、導出し直さない。`DROP` は自環境の接頭辞 `{APP_NAME}-{env}-master-` が付いた名前だけ。失敗時の `DROP` は「この run が新規に作った名前」だけ（採用した既存 DB・R1 で再利用した DB は消さない） | 3.1・4.2・4.6・4.7 | |
 | P3 | DB 名を引く列は `sys_deploy` でなく `sys_deploy_master` に置く。`artifact_dir`・`schema_fingerprint`・`source_kind`（`string(16)`。ENUM にしない）・`mst_dropped_at` を足す | 3.1 | |
 | P4 | `sys_deploy_master`・`sys_deploy_asset` の UNIQUE を `hash` 単独から `(deploy_key, hash)` に | 3.2 | Q4 |
-| P5 | 暫定の実装は `is_active` を**見る**（見るかは未決） | 3.3 | R39 |
+| P5 | （決定になったので仮置きから外した。`is_active` は最新の選択で**見る**。R39 の決定 A。3.3。緊急停止専用の運用・`master:deactivate` は P57） | 3.3・3.6 | R39 |
 | P6 | 登録は sys の 1 トランザクション。他の `sys_deploy` を無効にしない。登録の前に「版の DB が存在し、スキーマ版・往復検査が合う」ことを確かめる（成果物の有無ではなく DB の状態） | 3.6・6.6 | |
 | P7 | 巻き戻しは**新しい `sys_deploy` 行を `start_at = max(現在, 直前の最新行の start_at) + 1 秒` で入れる**（同秒で戻し先が負けるのを避ける。R43）。**予約済みの未来の行があれば拒否**し、予約の取り消し（未到達の `sys_deploy` 行の削除。`master:cancel-schedule`）を先に要求する。**取り消しは `start_at` が現在 + 2×`schedule_ttl` 以内なら拒否**し、`forget` の失敗は警告として返す（R41） | 3.6 | R41・R43 |
 | P8 | `start_at`: build は既定が現在、import は必須。省略（「すぐ」）はサーバーが現在を入れる。production は明示の過去を拒否（許容幅 60 秒は現在に丸める）。近すぎる・後続の予約があれば警告。JST 併記は表示だけ | 3.6・7.2 | R35 |
@@ -839,7 +846,7 @@ erDiagram
 | P16 | tool の基底 DB 名が `{APP_NAME}-{APP_ENV}-master` と一致しなければ `base_database_mismatch` で拒否。tool の既定値（固定の `nexus-local-master`）は実装 PR で直す | 4.1 | |
 | P17 | `tol_master_deploy_run` の変更（kind・mode・mst_database・created_database_list ほか。`inconsistent`・M1 を外す） | 5 | |
 | P18 | 成果物の構成（NDJSON・`schema.json`・SQLite・`manifest.json`）。値は文字列・`created_at`/`updated_at` は固定値 `1970-01-01 00:00:00`・圧縮なし。NDJSON の正規化（`ATTR_STRINGIFY_FETCHES`・`json_encode` のフラグ・LF・JSON 型は文字列のまま） | 6.5.1 | |
-| P19 | hash は**データ＋スキーマ版**から（`deploy_key`・SQLite のバイト列を含めない）。完全な 64 文字 | 6.5.2 | R24 |
+| P19 | hash は**データ＋スキーマ版**から（`deploy_key`・SQLite のバイト列を含めない）。完全な 64 文字（ディレクトリ名・DB 名は先頭 16 文字。決定） | 6.5.2 | R24 |
 | P20 | disk の名前（`master_artifact`・`master_artifact_upstream`・`asset_artifact`）、`manifest.json` を最後に書く完成の印、pull の形 | 6.5.3 | R27 |
 | P21 | `.gitkeep` を置く（`masterdata`・`asset`）。現行 `{hash}/` は作り直しで足りる | 6.5.4 | R31 |
 | P22 | build は作業用 DB → 成果物（一時）→ 版の DB の確定 → 成果物の配置 → 登録の順。往復検査 | 6.6 | |
@@ -854,9 +861,9 @@ erDiagram
 | P31 | 録画: キーは決定（Q2）。「何もしない」条件は「`start_at` が未来の行（予約済み）があれば何もしない（または警告）」。録画用の mst を版の DB として作る方式（候補 a・b）は未決。暫定は列の追加に追従するだけ | 11.2 | R19 |
 | P32 | 旧設計から残る仮置き: 読むタブは `mst_` 始まり、`is_active` の扱い、l10n の `deploy_key` の穴埋め、内容検査は採用行だけ、`id` の大文字小文字違いの拒否、予約帯 `7000000000`、9 桁の変換の担当・時期 | 6・7・9 | |
 | P33 | `sys_deploy_asset_id` は同じ `(deploy_key, hash)` の asset 行を使い、無ければ作る。同じ master・同じ `start_at` の二重登録は既存の行を返す（`already_registered`） | 3.6 | |
-| P34 | 同名の DB が実在し使えないときは、触らず、HASH を 32 文字に伸ばした別名で作る（入らなければ `mst_database_collision`） | 4.2 | |
+| P34 | 同名の DB が実在し使えないとき、または完全な hash が別のときは、触らず `mst_database_collision` で止める。ディレクトリ名の衝突は `artifact_dir_collision`（仮称）で止める（HASH を 32 文字に伸ばす案は撤回。決定の 16 文字を超えるため） | 4.2・6.5.2 | |
 | P35 | 作業用 DB の名前に作成時刻を入れ、dry run・異常終了の残りを名前の時刻で掃除する。一時の場所は `.tmp/` に作り、run の終わりと掃除で消す。sys の COMMIT の成否が不明なときは、sys に行が無いことを確かめるまで `DROP` しない | 4.2・4.7 | |
-| P36 | 実行記録の `kind` を build・import・rollback・cancel_schedule・cleanup・finalize に広げ、監査記録を 1 つの表で持つ | 5 | R42 |
+| P36 | 実行記録の `kind` を build・import・rollback・cancel_schedule・deactivate・cleanup・finalize に広げ、監査記録を 1 つの表で持つ | 5 | R42 |
 | P37 | `final.json`（QA 完了の印。hash に含めない）と `require_finalized`。cleanup の設定（`keep_version_count`・`orphan_grace_hours`） | 6.5.1・7.2 | R28 |
 | P38 | 版の DB への投入は、DDL の後に 1 つのトランザクション（500 行ずつ）。I4・I6 は `version_db` の前、I5 は後 | 6.6・6.7 | |
 | P39 | `mst:migrate-versions` は api の書き込み規約（Repository・`executeWithTransaction()`）で `schema_fingerprint` を更新し、api 側にも同名のロックを持つ。基底 DB の指紋は画面の対象表示では 60 秒キャッシュし、build・import ではその場で計算する | 4.4・4.8 | R26 |
@@ -867,7 +874,7 @@ erDiagram
 | P44 | `finalize` は追従検出の一致を前提にする（違えば `sheet_changed_since_build`）。シートを読めないときは拒否が既定で、`--allow-unverified`（警告で通し、実行記録に残す）の有無を置く。`verify-sheet` と `finalize --dry-run` は同じ処理で、実行記録は作らない。画面の `follow_check` は直近の finalize の run の `summary.follow_check` から出す（dry run の結果は出ない） | 6.5.1・6.7・5.2 | R28・R45 |
 | P45 | 掃除は `DROP DATABASE IF EXISTS` を先、`mst_dropped_at` の更新を後（再実行で冪等） | 4.6 | |
 | P46 | 巻き戻しの連続実行は行が増えるだけで許容（`already_registered` に当たらない）。「予約済み」の判定から「`start_at <= 現在 + 60 秒` かつ戻し先と同じ master」の行を除く | 3.6 | R43 |
-| P47 | 近い予約（120 秒以内）は取り消しも巻き戻しもできない窓が最大 120 秒ある。緊急の手段は `is_active`（R39）の決定待ち。運用で待つ、または予約が現在 + 2×TTL より先なら取り消す | 3.6 | R41 |
+| P47 | 近い予約（120 秒以内）は取り消しも巻き戻しもできない窓が最大 120 秒ある。緊急の手段は `is_active` を落とす操作（決定した R39。`master:deactivate`）。運用: 緊急停止、または待つ、または予約が現在 + 2×TTL より先なら取り消す | 3.6 | R41・R39 |
 | P48 | A の復元（I5）は、作った DB の更新が済んだ時点で `created_database_list` から外し、後続の失敗でも `DROP` しない。更新が失敗したら DROP して `reference_unavailable`。A の更新は登録の 1 トランザクションの例外 | 3.6・6.6・6.7 | |
 | P49 | `resolve-unknown` (b) はツールが sys を再確認し、「sys に行が無い」かつ「その run の `created_database_list` にある名前」に限る。新しい run・`kind` は足さず既存の run を更新する | 4.7 | R44 |
 | P50 | import の `store` は `final.json` を `manifest.json` より前にコピーする | 6.6 | R28 |
@@ -877,8 +884,9 @@ erDiagram
 | P54 | 旧キー `sys:sys_deploy:latest_downloadable` を廃止し、新キー `sys:sys_deploy:schedule` に（初回に旧キーを消す）。`MasterCacheKeyContractTest`・`clearCache()` の追従。`DeployRepositoryAdapter` が `CurrentMasterVersion` を仲介 | 8.3・8.4・10.4 | R22 |
 | P55 | Runner の名前は仮称（`MasterDeployRunner` を作り直し。build/import の分割は仮置き）。CLI は新規（`master:*` は未実装）。「廃止」は HTTP の `POST /master-import/deploy` に限る | 10.4・13 | R29 |
 | P56 | DB の命名の一般則 `{APP_NAME}-{env}-{役割}` は**決定**（方針）。master 以外の名前の変更は別作業（範囲外）。`DROP` の保護の接頭辞・環境の同居の衝突回避・`base_database_mismatch` の単純化は、この規則から導く（仮置き） | 4.1・13 | R47 |
+| P57 | **緊急停止**（R39 の決定を具体化した仮置き。再開は掃除済みなら復元してから通し、復元できなければ `activate_target_dropped`（仮称）。`already_in_state` でも `forget` を行う。掃除は止めた行の版を保持し、N の枠に数えない＝4.6）: 操作 `master:deactivate {sys_deploy.id}`・`master:activate {sys_deploy.id}`（名前・形は仮置き）。`is_active` を自動では変えない。排他のロックの中。止めた後に最新が空・掃除済みになるときは拒否（`deactivate_no_fallback`）。実行記録 `kind = deactivate`（phase: lock・check・register・done）。止めたあと `schedule` キーを `forget`（失敗は警告 `schedule_cache_not_invalidated`） | 3.3・3.6・5 | R39 |
 
-（**決定になって仮置きから外したもの**: 「シートに行が無い表は空の表」（R33）・版の DB の命名・trx から mst への JOIN をやめて二段引きにする（8.5）。）
+（**決定になって仮置きから外したもの**: 「シートに行が無い表は空の表」（R33）・版の DB の命名・版の DB 名の HASH と成果物のディレクトリ名の hash は先頭 16 文字（P1 の一部・P19 の長さ。2026-11-23）・`is_active` を最新の選択で見る（P5。R39）・trx から mst への JOIN をやめて二段引きにする（8.5）。）
 
 ### 14.2 未確認（確かめていない）
 - **MySQL・TiDB の版**: `EXCEPT`（8.0.31 以降。14.0）が使えるか。`schema_fingerprint` が MySQL の版・TiDB の違いで食い違わないか（4.4）。TiDB で `CREATE TABLE LIKE` が同じ結果になるか（4.3）。
@@ -916,14 +924,16 @@ erDiagram
 | R36 | 同じ `deploy_key` で別 hash の扱い（build は許可・**import は全環境で拒否**。前進と I5 だけ production）。overview 9 節の未決（Q11 の範囲）を閉じる。**環境設定に依らず import 全体で拒否することの人の確認が要る** | 3.6・6.7 のとおり |
 | R37 | R25 の限界: 確定済みの行がシートから黙って消えるのは DB の比較で検出できない。`row_digest` で補うか | 検出しない。`row_digest` は R28 で |
 | R38 | **権限の確認だけが残る**: tool に `CREATE DATABASE` を与え、api は読み取り専用にする権限の分離（本番）。環境の同居は解消（命名に env を入れた。確認済み） | 4.5 のとおり。インフラの確認 |
-| R39 | `is_active` を最新の選択で見るか（台帳に既出の未決。暫定の実装は見る） | 見る |
+| R39 | **決定済み**（人。2026-11-23。A）: `is_active` を最新の選択で**見る**。位置づけは緊急停止専用（具体化は仮置き: 自動では変えない・`master:deactivate`／`activate`・止めたあと `forget`。P57）。台帳を決定に直す | 3.3・3.6 のとおり |
 | R40 | 版の DB の保持数 N（R21 の続き）と、成果物（バケット）の保管・掃除の方針 | N = 3（`sys_deploy_master` の重複排除後で数える）。成果物は消さない |
-| R41 | **予約の取り消し**（`master:cancel-schedule`。未到達の `sys_deploy` 行の削除）と、巻き戻しが予約済みの未来の行で拒否される規則の確認（3.6）。`is_active` の決定（R39）に依存しない形。**直前（現在 + 2×`schedule_ttl` 以内）の取り消しは拒否**し、`forget` の失敗は警告で返す | 3.6 のとおり |
-| R42 | **監査記録を実行記録の `kind` で持つ**（rollback・cancel_schedule・cleanup・finalize を `tol_master_deploy_run` に残す。作った・消した DB の名前も） | 5 のとおり（仮置き） |
+| R41 | **予約の取り消し**（`master:cancel-schedule`。未到達の `sys_deploy` 行の削除）と、巻き戻しが予約済みの未来の行で拒否される規則の確認（3.6）。`is_active`（R39）に依存しない形。**直前（現在 + 2×`schedule_ttl` 以内）の取り消しは拒否**し、`forget` の失敗は警告で返す | 3.6 のとおり |
+| R42 | **監査記録を実行記録の `kind` で持つ**（rollback・cancel_schedule・deactivate・cleanup・finalize を `tol_master_deploy_run` に残す。作った・消した DB の名前も） | 5 のとおり（仮置き） |
 | R43 | **巻き戻しの `start_at` が直前の最新行と同じ秒だと、同点の規則で戻し先が負けて黙って無効になる**。`start_at = max(現在, 直前の最新行の start_at) + 1 秒` にする | 3.6 のとおり（仮置き） |
 | R44 | **`register_unknown` の人手の片付け**（`master:resolve-unknown {run_id}`）の操作と、放置したときの DB の残り方（4.7） | 4.7 のとおり（仮置き） |
 | R45 | **`master:finalize` は追従検出の一致を前提にするか**（db.md は前提にすると決めた。api.md・sequence.md の食い違いを揃える）と、シートを読めないときの `--allow-unverified` の有無 | 前提にする・`--allow-unverified` あり（読めない場合だけ）・実行記録に残す（6.5.1） |
-| R41 の注記 | 近い予約（現在 + 2×`schedule_ttl` 以内）は取り消しも巻き戻しもできない窓が最大 120 秒。`is_active`（R39）の決定待ち | 3.6 のとおり（運用で待つ） |
+| R41 の注記 | 近い予約（現在 + 2×`schedule_ttl` 以内）は取り消しも巻き戻しもできない窓が最大 120 秒。**緊急の手段は `is_active` を落とす操作（決定した R39。`master:deactivate`）** | 3.6 のとおり（緊急停止、または運用で待つ） |
+| R21 の注記 | 版の DB 名の HASH は先頭 **16 文字で決定**（2026-11-23。ディレクトリ名の hash も同じ 16 文字で決定。R24 の注記）。最大長の式 `44 - len(APP_NAME) - len(env) ≥ 16`（`len(APP_NAME) + len(env)` ≤ 28）は確定した制約。衝突時は別名にせず止める（仮置き） | 4.2 のとおり |
+| R24 の注記 | **決定**（人。2026-11-23）: 成果物のディレクトリ名の hash も、DB 名の HASH と同じく完全な hash の先頭 16 文字。完全な hash（64 文字）は `sys_deploy_master.hash`・`manifest.json`・I1・UNIQUE でそのまま使う。先頭 16 文字の衝突は別名にせず止める（`mst_database_collision`・`artifact_dir_collision`＝仮称）。R24 の未決は本番のストレージの種類だけ | 4.2・6.5.2 のとおり |
 | R46 | **`require_finalized` の既定**。R28 が未決の間は false、運用開始時に true にする案（仮置きは true のまま） | 7.2（true）。論点として 14.2 |
 | R47 | **master 以外の DB の名前**（`{APP_NAME}-{env}-system`・`{APP_NAME}-{env}-transaction` などの具体名、シャードの番号の付け方、testing 環境の名前、admin の `-adm`/`-admin` の食い違い）。一般則は決定、名前の変更は別の実装・運用の作業（範囲外。13 節） | 一般則のみ決定。具体名は未決（14.2） |
 | R28 の細部 | `final.json`（QA 完了の印。成果物のディレクトリ。hash に含めない）・`require_finalized`・`master:finalize`・`master:verify-sheet` を提案として足した。ゲートの置き場・最終 hash の確定方法は未決のまま | 6.5.1・6.7 のとおり（提案） |

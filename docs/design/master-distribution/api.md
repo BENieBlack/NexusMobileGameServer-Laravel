@@ -12,12 +12,12 @@
 
 | 対象 | 変更 |
 | --- | --- |
-| 運営ツールの操作 | 旧 `POST /master-import/deploy`（1 操作）を、**build**（シート → 成果物と版の DB）と **import**（成果物 → 版の DB）の 2 つに分ける。**QA 完了**（`finalize`。**提案**）・**巻き戻し**（`rollback`）・**予約の取り消し**（`cancel-schedule`）・**掃除**（`cleanup`）を足す。`target` は版の一覧・予約・警告を返す形に直す。`execute`・`export` は廃止のまま（S3-16） |
+| 運営ツールの操作 | 旧 `POST /master-import/deploy`（1 操作）を、**build**（シート → 成果物と版の DB）と **import**（成果物 → 版の DB）の 2 つに分ける。**QA 完了**（`finalize`。**提案**）・**巻き戻し**（`rollback`）・**予約の取り消し**（`cancel-schedule`）・**緊急停止**（`deactivate`・再開 `activate`。`is_active` を落とす・戻す。**仮置き**。R39 の決定）・**掃除**（`cleanup`）を足す。`target` は版の一覧・予約・警告を返す形に直す。`execute`・`export` は廃止のまま（S3-16） |
 | T（畳みの上限） | **リクエストで渡さない**。環境設定で明示する（7.2。決定: D10）。日付による採番はしない（決定。LD で確定したキー V を持ち回る） |
 | `start_at` | build は任意（省略 = 現在）、import は入力欄が必須で、省略（「すぐ」）は現在（db.md 3.6） |
 | キャッシュ | `clear-cache` は mst を触らず、**schedule キーの破棄だけ**に縮める（9 節の判断） |
-| 排他 | 旧どおり `MasterDeployLock`（`GET_LOCK`）。build・import・finalize・rollback・cancel-schedule・cleanup が同じロックで直列になる |
-| CLI | **tool に `app/Console/Commands/` は無く、`master:*` は 1 つも実装されていない**（CLI は新規。台帳の S3-14 は保留中）。`master:build`・`master:import`・`master:finalize`・`master:verify-sheet`・`master:rollback`・`master:cancel-schedule`・`master:cleanup`・`master:resolve-unknown`（tool）、`mst:migrate-versions`（api）を作る（10 節）。**廃止するのは HTTP の `POST /master-import/deploy` ルートだけ**（旧 `master:deploy` コマンドは存在しない） |
+| 排他 | 旧どおり `MasterDeployLock`（`GET_LOCK`）。build・import・finalize・rollback・cancel-schedule・deactivate・activate・cleanup が同じロックで直列になる |
+| CLI | **tool に `app/Console/Commands/` は無く、`master:*` は 1 つも実装されていない**（CLI は新規。台帳の S3-14 は保留中）。`master:build`・`master:import`・`master:finalize`・`master:verify-sheet`・`master:rollback`・`master:cancel-schedule`・`master:deactivate`・`master:activate`（緊急停止・再開。**仮置き**）・`master:cleanup`・`master:resolve-unknown`（tool）、`mst:migrate-versions`（api）を作る（10 節）。**廃止するのは HTTP の `POST /master-import/deploy` ルートだけ**（旧 `master:deploy` コマンドは存在しない） |
 | ゲーム API | 公開エンドポイント・Post・Response の項目は**変えない**（Nexus 決定 D4・F8・F9）。内部だけ変わる: 「いまの版」の選び方・リクエスト冒頭での版の固定と接続の差し替え・schedule キャッシュ・mst のキャッシュキー・`CheckMasterHash`（12 節） |
 
 ## 2. 運営ツールの共通事項
@@ -36,7 +36,7 @@
 | build・finalize・verify-sheet・`all-sheets`・`spreadsheets`・`sheets`・`preview`（シートを読む・見る操作） | 可 | **拒否**（`role_forbidden`。シートを持たない） |
 | import | **拒否**（`role_forbidden`） | 可 |
 | artifact-list | 可（`source=own`。QA の finalize の入力の選択） | 可（`source=upstream`。**import の主な入力**） |
-| rollback・cancel-schedule・cleanup・target・clear-cache | 可 | 可 |
+| rollback・cancel-schedule・**deactivate・activate**（緊急停止・再開。**仮置き**）・cleanup・target・clear-cache | 可 | 可 |
 
 ## 3. エンドポイントの一覧
 
@@ -51,6 +51,7 @@
 | `POST /master-import/finalize` | QA 完了（8 節。**提案**） | 新 |
 | `POST /master-import/rollback` | 巻き戻し（9.1 節） | 新 |
 | `POST /master-import/cancel-schedule` | 予約の取り消し（9.2 節） | 新 |
+| `POST /master-import/deactivate`・`/activate` | 緊急停止・再開（9.6 節。`is_active`。**仮置き**） | 新 |
 | `POST /master-import/cleanup` | 版の DB の掃除（9.3 節） | 新 |
 | `POST /master-import/clear-cache` | schedule キーの破棄（9.4 節） | 縮める |
 | `POST /master-import/deploy` | 旧 1 操作 | **廃止**（404。S3-16。build・import に置き換わる） |
@@ -69,13 +70,14 @@
 | role | string | 不可 | `build` か `import`（7.2 `MASTER_DEPLOY_ROLE`）。未設定は `blocked` に出す |
 | mode | string | 可 | build の環境のみ。`fixed`（固定キー）か `explicit`（明示キー）。import は null（db.md 5.2 の `mode` と同じ） |
 | deploy_key | int | 可 | build の環境の **T**（`fixed_key` か `explicit_key`）。import は null（成果物のキーを使う） |
-| blocked | object | 可 | **いま操作できない理由**。`{ code, message }`。コードは `role_not_configured`・`fixed_key_forbidden`・`fixed_key_invalid`・`deploy_key_not_configured`・`reserved_key_forbidden`（`explicit_key` が予約帯）・`base_database_mismatch`・`mst_database_name_too_long`・`upstream_not_configured`（import で上流の disk が無い）。無ければ null。blocked でも rollback・cancel-schedule・target は使える（**仮置き**: 設定の誤りは build・import だけを止める） |
+| blocked | object | 可 | **いま操作できない理由**。`{ code, message }`。コードは `role_not_configured`・`fixed_key_forbidden`・`fixed_key_invalid`・`deploy_key_not_configured`・`reserved_key_forbidden`（`explicit_key` が予約帯）・`base_database_mismatch`・`mst_database_name_too_long`・`upstream_not_configured`（import で上流の disk が無い）。無ければ null。blocked でも rollback・cancel-schedule・deactivate・activate・target は使える（**仮置き**: 設定の誤りは build・import だけを止める） |
 | spreadsheet_dir_configured | bool | 不可 | `TOL_GOOGLE_SPREADSHEET_DIR` と認証情報があるか。import の環境は常に false でよい（読まない） |
 | base_database | object | 不可 | `{ name, schema_fingerprint }`。基底 DB（雛形。db.md 4.1）の名前と現行のスキーマ版（db.md 4.4）。**スキーマ版は短い TTL（60 秒）でキャッシュした値**（db.md 4.4。tool の既定のキャッシュ。キー `tool:master:schema_fingerprint:{基底 DB 名}`）なので、画面を開くたびに全表を読み直さない |
 | running | bool | 不可 | いま他の操作が実行中か（ロックが取れないか） |
 | now | string | 不可 | サーバーの現在時刻（UTC）。画面が `start_at` の過去・近すぎを事前に示すため |
-| current_version | object | 可 | いまの版（db.md 3.3 と同じ決め方）。`sys_deploy_id`・`sys_deploy_master_id`・`deploy_key`・`hash`・`artifact_dir`・`mst_database`・`start_at`。無ければ null（`no_current_version` を `warning_list` に） |
-| scheduled_list | array | 不可 | **予約済み**（`start_at` が現在より後の `sys_deploy` 行）。`sys_deploy_id`・`sys_deploy_master_id`・`deploy_key`・`hash`・`start_at`。`start_at` の昇順 |
+| current_version | object | 可 | いまの版（db.md 3.3 と同じ決め方）。`sys_deploy_id`・`sys_deploy_master_id`・`deploy_key`・`hash`・`artifact_dir`・`mst_database`・`start_at`・**`is_active`**（いまの版は止められていない行なので常に true。**`is_active` が false の行は最新の選択から外れる**。db.md 3.3）。無ければ null（`no_current_version` を `warning_list` に） |
+| scheduled_list | array | 不可 | **予約済み**（`start_at` が現在より後の `sys_deploy` 行。**止めた行（`is_active = false`）も含める**。巻き戻しの「予約済み」の判定に数えるため。db.md 3.6）。`sys_deploy_id`・`sys_deploy_master_id`・`deploy_key`・`hash`・`start_at`・**`is_active`**（false なら、緊急停止で止めた行。画面は「止めた行」と表示し、「再開」（9.6）を出す）。`start_at` の昇順 |
+| inactive_list | array | 不可 | **止めた行**（`is_active = false` の `sys_deploy` 行。到達済み・未到達を問わない）。`sys_deploy_id`・`sys_deploy_master_id`・`deploy_key`・`hash`・`start_at`。緊急停止の履歴の確認用（**仮置き**） |
 | version_list | array | 不可 | 版（`sys_deploy_master`）の一覧。新しい順。`sys_deploy_master_id`・`deploy_key`・`hash`・`artifact_dir`・`mst_database`・`source_kind`・`schema_fingerprint`・`schema_matches`（現行の基底 DB と一致するか）・`mst_dropped_at`・`last_start_at`（その版を指す `sys_deploy` 行の `start_at <= 現在` の最大。無ければ null）・`is_current`（いまの版か）・`rollback_state`（`ok`・`needs_restore`（DB 掃除済み。成果物から復元できる）・`unavailable`（復元もできない）・`schema_mismatch`・`blocked_by_scheduled`。**`blocked_by_scheduled` は、その版を戻し先とした場合の判定**: `start_at > 現在` の行のうち、**`start_at <= 現在 + `start_at_past_grace`（60 秒）かつ戻し先と同じ master を指す行は数えない**（db.md 3.6。巻き戻し直後のやり直しを止めない。戻し先と別の版を指す近い予約は数える）。**`is_current` とは独立**: いまの版は `is_current = true` で、画面は戻すボタンを出さない。API は拒否せず警告で通す。9.1）。巻き戻し先の候補を画面が選べるようにする |
 | last_run | object | 可 | 直近の `tol_master_deploy_run`（`id`・`kind`・`status`・`phase`・`deploy_key`・`artifact_dir`・`started_at`・`finished_at`・`error_code`・`error_message`）。無ければ null |
 | follow_check | object | 可 | **追従検出の直近の結果**（R28。**提案**）。`status`（`not_checked`・`match`・`changed`・`unverified`。db.md 6.7）・`checked_at`・`artifact_dir`・`changed_deploy_key_list`・`reason`（`unverified` のとき。シートを読めなかった理由。例 `sheet_not_configured`・`sheet_read_failed`）・`allow_unverified`（`--allow-unverified` で通した run か）。**画面を開くたびにシートは読まない**。出所は**直近の `kind = finalize` の実行記録の `summary.follow_check`**（`dry_run` は実行記録を書かない（db.md 5.1）ので、`dry_run`・`master:verify-sheet` の結果は出ない。それは操作の応答で直接見る）。finalize の run が無ければ `not_checked`。QA の build 環境だけ。それ以外は null |
@@ -94,6 +96,7 @@
 | `sheet_changed_since_build` | `follow_check.status = changed`（R28。QA の build 環境だけ） |
 | `follow_check_unverified` | `follow_check.status = unverified`（シートを読めずに `--allow-unverified` で finalize した。**追従を確かめていない**。実行記録に残っている）。**`follow_check_unavailable` は target の警告にしない**（target はシートを読まないので、読めるかを知らない。finalize の操作時の拒否だけ。13.1） |
 | `scheduled_exists` | `scheduled_list` が 1 件以上（情報。巻き戻しは取り消しが先） |
+| `inactive_exists` | `inactive_list` が 1 件以上（情報。**止めたままの行がある**ことを忘れないため。再開は 9.6。**仮置き**） |
 
 エラー: ログインしていなければ今までどおりのリダイレクト。
 
@@ -133,7 +136,7 @@ build の環境（develop・LD・QA）で、**シートの読み込み → 検�
 | run_id | int | 可 | `tol_master_deploy_run.id`。dry_run は null |
 | deploy.mode | string | 不可 | `fixed` / `explicit` |
 | deploy.deploy_key | int | 不可 | T（成果物の `deploy_key`） |
-| deploy.hash | string | 可 | 成果物の hash（64 文字）。dry_run は畳み後の内容から計算できないので null |
+| deploy.hash | string | 可 | 成果物の完全な hash（64 文字。ディレクトリ名 `artifact_dir`・DB 名には先頭 16 文字を使う。db.md 4.2）。dry_run は畳み後の内容から計算できないので null |
 | deploy.artifact_dir | string | 可 | `{deploy_key}_{hash}`。dry_run は null |
 | deploy.mst_database | string | 可 | 版の DB 名（4.2 の命名）。dry_run は null |
 | deploy.sys_deploy_master_id | int | 可 | 登録または再利用した master。dry_run は null |
@@ -349,6 +352,21 @@ Response: `status`・`message`・`run_id`・`code`（`resolved`）・`resolved`�
 
 エラー: `deploy_locked`・`run_not_found`（404。その run が無い、または `error_code` が `register_unknown` でない）・`sys_unreadable`（503。sys を読めない）・`drop_forbidden`（(b) の条件不一致・保護の規則）・`drop_failed`（500。`DROP` に失敗。run は `register_unknown` のまま。再実行できる）・`internal_error`。更新リソース: 対象の `tol_master_deploy_run`（`summary`・(a) は `status`）、(b) は版の DB（`DROP`）、(a) は `sys:sys_deploy:schedule`。**冪等**: 既に `summary.resolved` がある run への 2 回目は、何もせず成功コード `already_resolved` を返す。
 
+### 9.6 POST /master-import/deactivate・POST /master-import/activate（緊急停止・再開。db.md 3.3・3.6）
+**R39 は決定（人。2026-11-23。A）: `is_active` を最新の選択で見る。位置づけは緊急停止専用**。以下の操作の名前・形（URL・CLI・応答）は**仮置き**（決定は「見る」まで）。運営が**明示的に操作したときだけ** `sys_deploy.is_active` を 0（`deactivate`）／1（`activate`）にする。**build・import・rollback・cancel-schedule は `is_active` を自動では変えない**。目的は、予約の `start_at` の直前（現在 + 2 × `schedule_ttl` ＝ 120 秒以内）の「取り消しも巻き戻しもできない窓」（P47）で、悪い版が配信される直前に止められる**唯一の手段**にすること。窓の中でも使える。
+
+| 項目 | 型 | 必須 | 検証 | 意味 |
+| --- | --- | --- | --- | --- |
+| sys_deploy_id | int | 必須 | `integer\|min:1` | 止める（再開する）`sys_deploy.id`（`target.scheduled_list`・`current_version`・`inactive_list` から選ぶ） |
+
+- **判定の順序**: ① 行が無い → `deploy_not_found`（404）② すでにその状態（deactivate で `is_active = false`、activate で true）→ **更新はせず成功**（`already_in_state`。冪等。**`forget` は行う**＝下。③ ③' は通らない）③ `deactivate` のみ: **止めた後に最新の選択が空になる、または掃除済み（`mst_dropped_at`）の版に落ちる** → `deactivate_no_fallback`（409。配信が 299 になる止め方を防ぐ。選択に影響しない行は検査なしで通す）③' `activate` のみ: **再開で最新の選択になる行の master が掃除済み**（`mst_dropped_at`・DB が無い・不一致）→ **成果物から復元（phase `version_db`。db.md 6.6）してから**有効にする。**復元できなければ** `activate_target_dropped`（409。**仮称**。更新しない。`schema_mismatch` で復元できないときも同じ）。再開しても最新の選択にならない行は検査なしで通す ④ `UPDATE`。
+- **`forget`**: 更新の**後**に `schedule` キーを破棄する（db.md 3.3・8.3。止めたあとも、キャッシュに最大 60 秒古い判断が残るため）。**失敗は成功扱いにしない**（取り消しと同じ）: 操作は成功（HTTP 200）で、`cache.invalidated = false` と警告 `schedule_cache_not_invalidated` を返し、「再試行する、または `clear-cache`（9.4）を実行する」と、**最大 60 秒、止めた版が配信されうる**ことを案内する。**`already_in_state` のときも `forget` を行う**（更新は無いが、前回 `forget` に失敗した後に**同じ操作をもう一度実行すると `forget` だけ行われる**。案内の「再試行」はこれ）。
+- 止めた行は残り、`scheduled_list` に出続ける（`start_at > 現在` なら巻き戻しは `rollback_blocked_by_scheduled`。先に取り消す、または再開する）。**窓の中（現在 + 2 × `schedule_ttl` 以内）の未来の行を止めたときは、取り消しもできず巻き戻しも拒否されるので、`start_at` の到達を待つ**（到達後は予約済みから外れ、巻き戻せる）。画面・CLI はこの案内を出す。
+
+Response: `status`・`message`・`run_id`・`code`・`deploy`（`sys_deploy_id`・`sys_deploy_master_id`・`deploy_key`・`start_at`・`is_active`）・`current_version_after`（止めた・再開した後の最新の選択。無ければ null）・`restored`（activate が成果物から復元したか。復元したときだけ true。他は false）・`cache.invalidated`・`warning_list`。**`already_in_state` のときの出方**: HTTP 200・`status = success`・**`code = already_in_state`**（通常の成功は `code = null`）・`message` は「すでにその状態」・`deploy.is_active` は現在値・`cache.invalidated`・`warning_list` は**この操作での `forget` の結果**（失敗なら `schedule_cache_not_invalidated`）・`run_id` は新しい run（`kind = deactivate`。`summary.already_in_state = true`）。CLI の終了コードは 0。
+
+エラー: `deploy_not_found`（404）・`deactivate_no_fallback`（409）・`activate_target_dropped`（409。仮称）・`deploy_locked`・`internal_error`（role は両方可なので `role_forbidden` は無い。2 節）。更新リソース: `sys_deploy.is_active`、`tol_master_deploy_run`（`kind = deactivate`。activate も同じ kind で `summary.is_active` に新しい値。phase は `lock`・`check`・`version_db`（activate が復元するときだけ）・`register`（= `UPDATE` と `forget`）・`done`）、`deploy_key` 列は対象行の deploy_key、`sys:sys_deploy:schedule`（破棄）。
+
 ## 10. CLI
 
 tool 側（`tool/app/Console/Commands/` は**まだ無い**。CLI は新規で、台帳の S3-14 は保留中。**仮置き**。名前は S3 で決めてよい）。画面と同じ部品（`MasterDeployRunner` など。db.md 10.4）を呼ぶ。`adm_account_id` は null で記録する。
@@ -361,6 +379,7 @@ tool 側（`tool/app/Console/Commands/` は**まだ無い**。CLI は新規で�
 | `php artisan master:verify-sheet {artifact_dir}` | なし（読み取り専用） | 8 節の追従検出だけ（`finalize --dry-run` と同じ処理）。db.md 6.7 の名前を残す |
 | `php artisan master:rollback {sys_deploy_master_id}` | `--dry-run` | 9.1 |
 | `php artisan master:cancel-schedule {sys_deploy_id}` | なし | 9.2 |
+| `php artisan master:deactivate {sys_deploy_id}`・`master:activate {sys_deploy_id}` | なし | 9.6（緊急停止・再開。**仮置き**。db.md 3.6） |
 | `php artisan master:resolve-unknown {run_id}` | なし | 9.5（`register_unknown` の片付け。db.md 4.7） |
 | `php artisan master:cleanup` | **`--execute`**（付けないと dry run） | 9.3 |
 
@@ -388,9 +407,9 @@ api 側:
 
 ### 11.1 排他
 - 旧のとおり **MySQL の名前付きロック**（`GET_LOCK`）を `sys` 接続で取る（`MasterDeployLock`。名前は `nexus_master_deploy:{sys の DB 名}`、64 文字を超えたらハッシュで縮める。**タイムアウト 0**。`finally` で `RELEASE_LOCK`）。プロセスが落ちて接続が切れれば自動で外れる。
-- **ロックの対象の操作**: build・import・finalize（dry_run を除く）・rollback・cancel-schedule・cleanup（dry_run を除く）・`master:resolve-unknown`・`mst:migrate-versions`（db.md 6.6）。**ロックを取らない**: build の `dry_run`・finalize の `dry_run`・verify-sheet・rollback の `dry_run`・cleanup の `dry_run`・target・artifact-list・clear-cache。**import の `dry_run` はロックを取る**（一時の DB を作るため。7 節）。
+- **ロックの対象の操作**: build・import・finalize（dry_run を除く）・rollback・cancel-schedule・deactivate・activate・cleanup（dry_run を除く）・`master:resolve-unknown`・`mst:migrate-versions`（db.md 6.6）。**ロックを取らない**: build の `dry_run`・finalize の `dry_run`・verify-sheet・rollback の `dry_run`・cleanup の `dry_run`・target・artifact-list・clear-cache。**import の `dry_run` はロックを取る**（一時の DB を作るため。7 節）。
 - ロックを取る順序: **環境設定の検査（role・本番ガード。build・import はさらに `base_database_mismatch`・`mst_database_name_too_long`）→ ロック → `tol_master_deploy_run` の `running` を作る（phase `lock`）→ 本処理**。ロックが取れて `running` の行が残っていれば `aborted` に直す（前のプロセスが落ちた跡）。**`dry_run` は実行記録を書かない**（db.md 5.1）。
-- **操作ごとの実行記録の `kind` と phase**（db.md 5.2・12.1）: build = `lock`・`read`・`validate`・`fold`・`work_db`・`artifact`・`version_db`・`store`・`register`・`done`。import = `lock`・`pull`・`verify`・`check`・`version_db`・`check_rows`・`store`・`register`・`done`。**rollback = `lock`・`check`・`version_db`（復元するときだけ）・`register`・`done`**。cancel_schedule・finalize = `lock`・`check`・`register`・`done`。cleanup = `lock`・`check`・`drop`・`done`。`master:resolve-unknown` は**新しい run を作らず、既存の run を更新する**（`kind` は足さない）。`failed`・`aborted` で `mst_database` が残るものは孤児の候補（**`register_unknown` かつ `summary.resolved` が無い run は除く**。db.md 4.7）。
+- **操作ごとの実行記録の `kind` と phase**（db.md 5.2・12.1）: build = `lock`・`read`・`validate`・`fold`・`work_db`・`artifact`・`version_db`・`store`・`register`・`done`。import = `lock`・`pull`・`verify`・`check`・`version_db`・`check_rows`・`store`・`register`・`done`。**rollback = `lock`・`check`・`version_db`（復元するときだけ）・`register`・`done`**。cancel_schedule・finalize = `lock`・`check`・`register`・`done`。**deactivate（activate も同じ kind）= `lock`・`check`・`version_db`（activate が復元するときだけ）・`register`・`done`**。cleanup = `lock`・`check`・`drop`・`done`。`master:resolve-unknown` は**新しい run を作らず、既存の run を更新する**（`kind` は足さない）。`failed`・`aborted` で `mst_database` が残るものは孤児の候補（**`register_unknown` かつ `summary.resolved` が無い run は除く**。db.md 4.7）。
 - **ロックは、build ではシートの読み込みから sys の登録・schedule キーの破棄まで持つ**（読み込みの間に別の操作が入ると、畳みの入力と登録の前提（予約の有無など）がずれるため。db.md 3.6）。
 - 同時に動く他の書き込み（開発のシーダー・`make seed`）は排他しない（開発者が避ける。**仮置き**）。
 - **登録は sys の 1 トランザクション**（db.md 3.6）。mst の DB への書き込みは登録の前に済んでいて、版の DB は以後書き換えない。旧設計の「mst と sys にまたがる補償・`inconsistent`」は無い。失敗しても孤児の DB が残るだけで配信には影響しない（4.7 のとおり、この run が作ったものだけをベストエフォートで `DROP` する）。
@@ -404,7 +423,7 @@ build は Google API の呼び出しを全タブ分行い、import は成果物�
 
 | 場所 | 変更 |
 | --- | --- |
-| 「いまの版」の選び方（`SysDeployRepository`・`SysDeploy`） | `start_at <= 現在` の行のうち **`start_at` が最新**、同点は **`deploy_key` が大きい方**、それも同じなら **`id` が大きい方**（決定。db.md 3.3）。**`is_active` は暫定「見る」**（見るかは**未決**。R39）。本番（`APP_ENV=production`）は `deploy_key >= 7000000000`（`DeployKeyConst::RESERVED_FLOOR`）を選ばない（決定。Q7）。`SysDeploy::selectLatestDownloadable()`（static）も同じ並び・同じガードにそろえて、テストで固定する（呼び出し元は無いが削除しない。規約）。`selectByDeployKey()` の `orderByDesc('id')`・`parseDeployKey()` の `count` の 2 桁は**実装済み**（S3-1・#31） |
+| 「いまの版」の選び方（`SysDeployRepository`・`SysDeploy`） | `start_at <= 現在` の行のうち **`start_at` が最新**、同点は **`deploy_key` が大きい方**、それも同じなら **`id` が大きい方**（決定。db.md 3.3）。**`is_active` は見る**（**決定**。R39。緊急停止専用。止めるのは `master:deactivate` だけ。db.md 3.3・3.6。条件は 1 か所にまとめる）。本番（`APP_ENV=production`）は `deploy_key >= 7000000000`（`DeployKeyConst::RESERVED_FLOOR`）を選ばない（決定。Q7）。`SysDeploy::selectLatestDownloadable()`（static）も同じ並び・同じガードにそろえて、テストで固定する（呼び出し元は無いが削除しない。規約）。`selectByDeployKey()` の `orderByDesc('id')`・`parseDeployKey()` の `count` の 2 桁は**実装済み**（S3-1・#31） |
 | 版の固定と mst 接続（**仮置き**。R22。db.md 8.1） | ミドルウェア `ResolveMasterVersion`（仮称）が**リクエストの冒頭**で `CurrentMasterVersion`（リクエスト単位の `scoped` サービス）に版を決めさせ、`mst` 接続の `database` を、決めた版の `sys_deploy_master.mst_database` に差し替えて `DB::purge('mst')` する。接続名・モデル・Repository の記述は変えない。**リクエストの途中で `start_at` を過ぎても、そのリクエストは同じ版を使い続ける** |
 | 版が無いとき | `start_at` が未来の行しか無い・本番で予約帯しか無い・選んだ版の DB が掃除済み（`mst_dropped_at` が NULL でない）→ **HTTP 299 の `error_code` 99999**（`SystemDataException::deploy()`。`GameErrorCode::INTERNAL_ERROR`。ログに残す）。**基底 DB・古い版にフォールバックしない**。形は変えない |
 | `/auth/version`（`VersionService`） | **判定は変えない**。「最新の `sys_deploy.id`」は `CurrentMasterVersion` の版の `id`。応答の `master.hash`・`master.tables`・`sys_deploy_id`・`latest_deploy_key` は、その版の `deployMaster`・`sys_deploy_master_table` から組む（形は同じ）。mst の表は読まないので、このルートでは接続の差し替えは起きない（版は解決する。**mst を読まないルートでミドルウェアを外すか**は db.md 8.1 の**未確認**を引き継ぐ） |
@@ -441,7 +460,8 @@ build は Google API の呼び出しを全タブ分行い、import は成果物�
 | `start_at_past` | 422 | 2 | build・import | `reject_past_start_at` が true（production）で、明示の `start_at` が許容幅 `start_at_past_grace`（60 秒）を超えて過去（許容幅以内は現在に丸めて通す。db.md 3.6。I6） | なし（**DB を作る前**。ロックの後） |
 | `load_failed` | 500 | 1 | build・import・rollback | 作業用 DB・版の DB への投入で DB が拒否（型・NOT NULL・`uk_*`）、不正な UTF-8、往復検査の不一致。メッセージに表名と DB の文言（旧 `apply_failed` の置き換え） | 投入のトランザクションを `ROLLBACK`。この run が作った DB を `DROP`。sys は変えない |
 | `export_failed` | 500 | 1 | build | 成果物（NDJSON・SQLite・`schema.json`・マニフェスト）の書き出しに失敗（db.md 3.6 の仮称。旧 `export_failed` と同名で、意味は「成果物の書き出し」に変わる） | この run が作った DB を `DROP`。sys は変えない |
-| `mst_database_collision` | 500 | 1 | build・import・rollback | 同じ名前の DB があり、完全な hash が違う・32 文字に伸ばしても入らない・孤児の中身が合わない（db.md 4.2） | なし（この run が作った DB のみ `DROP`） |
+| `mst_database_collision` | 500 | 1 | build・import・rollback | 同じ名前の DB があり、完全な hash（64 文字）が違う・同じ名前の DB が使えない・孤児の中身が合わない（db.md 4.2。**DB 名の HASH は 16 文字で決定**なので、伸ばした別名にはせず止める） | なし（この run が作った DB のみ `DROP`） |
+| `artifact_dir_collision` | 500 | 1 | build・import | 同じ `{deploy_key}_{hash16}` のディレクトリが既にあり、`manifest.json` の完全な hash（64 文字）が違う（先頭 16 文字だけが同じ。db.md 6.5.2。**コード名・HTTP・終了コードは仮置き**）。別名にせず止める | なし（既存のディレクトリは触らない。この run が作った DB のみ `DROP`） |
 | `artifact_not_found` | 404 | 2 | import・finalize | 指定の `artifact_dir` が上流（または自環境）に無い・`manifest.json` が無い（未完成） | なし |
 | `artifact_invalid` | 422 | 2 | import・finalize | I1: `manifest.json` の `hash` の再計算・ディレクトリ名・各ファイルの SHA-256 が合わない | なし（DB を作る前） |
 | `not_finalized` | 422 | 2 | import | **提案**（8 節）。`require_finalized` の環境で、`final.json` が無い、または `deploy_key`・`hash` がマニフェストと違う（I1。db.md 6.5.1） | なし（DB を作る前） |
@@ -462,6 +482,9 @@ build は Google API の呼び出しを全タブ分行い、import は成果物�
 | `rollback_target_unavailable` | 422 | 4 | rollback | 戻し先の DB が使えず、成果物から復元もできない | なし |
 | `schedule_not_found` | 404 | 4 | cancel-schedule | 指定の `sys_deploy` が無い | なし |
 | `schedule_already_started` | 409 | 4 | cancel-schedule | `start_at` が到達している（行が `start_at <= 現在`、または `DELETE` が 0 件） | なし |
+| `deploy_not_found` | 404 | 4 | deactivate・activate | 指定の `sys_deploy` が無い（**仮称**。db.md 3.6） | なし |
+| `activate_target_dropped` | 409 | 4 | activate | 再開で最新の選択になる行の master が掃除済みで、成果物から復元もできない（`schema_mismatch` を含む）（**仮称**。db.md 3.6） | なし（更新しない。復元で作った DB は `DROP`） |
+| `deactivate_no_fallback` | 409 | 4 | deactivate | 止めた後の最新の選択が空、または掃除済み（`mst_dropped_at`）の版になる（**仮称**。db.md 3.6） | なし（更新しない） |
 | `schedule_cancel_too_soon` | 409 | 4 | cancel-schedule | `start_at` が**現在 + 2 × `schedule_ttl`（120 秒）以内**で、まだ到達していない（db.md 3.6。API のキャッシュに取り消した行が残ったまま到達するのを防ぐ）。メッセージは「到達した後に巻き戻しで戻してください」 | なし（行を削除しない） |
 | `drop_forbidden` | 403 | 4 | cleanup・resolve-unknown | `DROP` の保護（接頭辞・基底 DB でない。db.md 4.6）に当たる名前が対象にある。resolve-unknown では、sys に同じ `mst_database` の行がある、または `created_database_list` に無い名前 | なし（実行しない） |
 | `run_not_found` | 404 | 4 | resolve-unknown | その run が無い、または `error_code` が `register_unknown` でない（**api.md の仮置き**） | なし |
@@ -478,7 +501,8 @@ build は Google API の呼び出しを全タブ分行い、import は成果物�
 | `already_resolved` | 成功コード | resolve-unknown | 既に `summary.resolved` がある（冪等。**api.md の仮置き**） |
 | `register_confirmed_after_error` | 警告 | build・import・rollback | COMMIT 処理中のエラーの後、読み直したら登録済み（run は `succeeded`。db.md 4.7） |
 | `already_registered` | 警告 | build・import・rollback | 同じ master・同じ `start_at` の行が既にあり、既存を返した（`is_new = false`。db.md 3.6） |
-| `schedule_cache_not_invalidated` | 警告 | 登録・取り消し・resolve-unknown (a) | schedule キーの `forget` の失敗（操作は成功。db.md 3.6） |
+| `already_in_state` | 成功コード | deactivate・activate | すでにその状態。更新はしないが **`forget` は行う**（冪等な再試行で `forget` が効く。応答の `code`。9.6。**仮称**。db.md 3.6） |
+| `schedule_cache_not_invalidated` | 警告 | 登録・取り消し・緊急停止・再開・resolve-unknown (a) | schedule キーの `forget` の失敗（操作は成功。db.md 3.6） |
 | `follow_check_unverified` | 警告 | finalize | シートを読めず `allow_unverified` で通した（**api.md の仮置き**。db.md 6.5.1 は「警告」のみ） |
 | `start_at_too_soon`・`start_at_shadowed` | 警告 | build・import | db.md 3.6 |
 
@@ -519,7 +543,7 @@ build は Google API の呼び出しを全タブ分行い、import は成果物�
 
 ### 14.3 未決
 - **R28**（QA 完了の操作・最終 hash の確定・追従検出のゲートの置き場。8 節は提案）。`final.json` の置き場（成果物のディレクトリか、実行記録・sys か）。
-- **R39** `is_active` を見るか（暫定は見る。9.1 は依存しない形）。**R24** hash の長さ・本番のストレージの種類（15 節の本番の disk）。**R27** pull 方式の可否。**R32** NN の付け方（サーバーは形を検査するだけ）。**R19** 録画の版の DB の作り方（10 節の用途）。**R20** 切り替え瞬間のクライアント（API の形は変えない）。
+- **R24** 本番のストレージの種類（hash の長さは**決定**: DB 名の HASH もディレクトリ名の hash も完全な hash の先頭 16 文字。完全な hash は `sys_deploy_master.hash`・`manifest.json` などでそのまま使う。db.md 4.2・6.5.2）・本番のストレージの種類（15 節の本番の disk）。（R39 は決定済み: `is_active` を見る。9.6）**R27** pull 方式の可否。**R32** NN の付け方（サーバーは形を検査するだけ）。**R19** 録画の版の DB の作り方（10 節の用途）。**R20** 切り替え瞬間のクライアント（API の形は変えない）。
 - 保持数 N と成果物の掃除（R40）。
 
 ### 14.4 Nexus との関係
@@ -528,14 +552,15 @@ build は Google API の呼び出しを全タブ分行い、import は成果物�
 
 ### 14.5 db.md との関係
 **db.md の最終形に従う**。前の版で挙げた不備（follow_check の出所＝`summary.follow_check`・巻き戻しの二重登録と予約判定の例外・近い予約の窓（P47）・復元の phase（`version_db`）・`register_confirmed_after_error`・`verify-sheet` と `finalize --dry-run` が同じ処理・基底 DB の指紋のキャッシュ）は db.md に**反映済み**で、この文書は従った（R42・R43 も反映済み）。db.md の決定待ちとして残る論点:
-- **近い予約の窓（P47）**: 120 秒以内の予約は取り消しも巻き戻しもできない（最大 120 秒）。緊急の手段は `is_active`（R39）の決定待ち。
+- **近い予約の窓（P47）**: 120 秒以内の予約は取り消しも巻き戻しもできない（最大 120 秒）。**緊急の手段は `is_active` を落とす操作（決定した R39。9.6 の `deactivate`。窓の中でも使える）**。
 - **`require_finalized` の既定**（R46。15 節）。
 - **`--allow-unverified` を画面の API でも許すか**（8 節。未決）。
 - **resolve-unknown の (a)(b) を人が選ぶ入力を持つか**: db.md 4.7 は「人が確認してどちらかにする」。この文書は、ツールが sys を再確認して自動判定する仮置き（誤判断で登録済みの DB を消さないため。A13）。
 
 ### 14.6 新しい未決（台帳に足す候補）
 - R28 の細部: `final.json` を production 以外の import にも掛けるか・同じ `deploy_key` で複数の成果物を finalize したときの扱い（review が取り込み済みなら R3 で拒否される）。
-- 緊急の巻き戻し（近い予約があるとき。db.md P47）。R39 の決定に依存。
+- 緊急の巻き戻し（近い予約があるとき。db.md P47）。**R39 の決定（`is_active` を見る）により、緊急停止（9.6）で止められる**。巻き戻しそのものは窓の中ではできないまま。
+- **R39 の具体化（仮置き。決定は「見る」まで）**: `master:deactivate`／`activate` の名前・形・検査（`deactivate_no_fallback`）・`inactive_list`。db.md P57。
 - R46（`require_finalized` の既定）。R44（`register_unknown` の人手の片付け。9.5）・R45（`finalize` は追従検出の一致を前提にする）は db.md の決定に従った。
 
 ## 15. 環境設定
@@ -572,12 +597,12 @@ db.md 7.2 の `tool/config/master_deploy.php` を使う（キーは db.md のと
 
 ## 16. 画面（`resources/js/Pages/MasterImport/Index.vue`）の作り直し（要点）
 - **role で画面を切り替える**（`target.role`）。build の環境: 「検証（dry run）」「build」「QA 完了（検証 → 確定）」。import の環境: 上流の成果物の一覧（`artifact-list`）から選び、`start_at`（UTC 入力・JST 併記・「すぐ」のチェック）を入れて「検証（dry run）」「取り込む」。**旧のシートの選択（左右 2 つの一覧と「全て追加」）・「インポート」「エクスポート」のボタンはやめる**（build は全シートを読む。シートの一覧は「読まれるタブ・読まれないタブ」の確認用に残す）。
-- 上部に**対象の表示**（`target`）: 環境名・role・T（build）・基底 DB の指紋・いまの版・**予約済みの版（`start_at` を JST 併記）と「取り消し」ボタン**・直近の run の状態。`blocked` があれば build・import は押せない。`warning_list` は目立つ色で出す。
+- 上部に**対象の表示**（`target`）: 環境名・role・T（build）・基底 DB の指紋・いまの版・**予約済みの版（`start_at` を JST 併記）と「取り消し」「止める（緊急停止）」ボタン**（止めた行は「再開」ボタン）・直近の run の状態。`blocked` があれば build・import は押せない。`warning_list` は目立つ色で出す。
 - **版の一覧**（`version_list`）: 巻き戻し先の候補の表と「この版に戻す」ボタン。`rollback_state` が `blocked_by_scheduled` のときは、ボタンの代わりに「先に予約を取り消してください」を出す。
 - **掃除**: 「掃除（dry run）」で対象を見せ、確認してから実行。
 - 確認ダイアログ: 環境名・操作・T（または成果物）・`start_at`（UTC と JST）を再掲する（誤操作の防止）。
 - 結果の表示: 表ごとの件数の表、`error_list`（`sheet`・`row`・`code`・`message`。総件数と、20 件で切ったことの表示）、`warning_list`、dry run の `inventory`。
-- **画面に書く説明文**（運営向け。旧の③を直す）: ① 古い行は消さず、新しいキーの行を足す。② 削除は `__deleted` を `TRUE` にした行（`id` と `deploy_key` だけでよい）。`is_active` を無効にしても消えない。③ `deploy_key` は 10 桁必須。**環境の T より大きい `deploy_key` の行は畳みに入らない**（効かせたいなら T を上げて build する）。**時刻による切り替えは `start_at` で行う**（採番が追いつくまで効かせる仕組みは無い）。④ 言語だけを消すことはできない（親ごと消す）。⑤ 「検証（dry run）」が成功しても、型・NOT NULL・`uk_*` の衝突はデプロイで初めて分かり、`load_failed`（版の DB を作らない）になりうる。⑥ **確定済み（production に出た）版の行の変更は、新しい `deploy_key` で入れる**（production の取り込みが検査する）。⑦ シートに行が無い表は、版の DB で空になる。
+- **画面に書く説明文**（運営向け。旧の③を直す）: ① 古い行は消さず、新しいキーの行を足す。② 削除は `__deleted` を `TRUE` にした行（`id` と `deploy_key` だけでよい）。`is_active` を無効にしても消えない（A 列の `is_active` はシートの行の話で、`sys_deploy.is_active`（緊急停止。9.6）とは別）。③ `deploy_key` は 10 桁必須。**環境の T より大きい `deploy_key` の行は畳みに入らない**（効かせたいなら T を上げて build する）。**時刻による切り替えは `start_at` で行う**（採番が追いつくまで効かせる仕組みは無い）。④ 言語だけを消すことはできない（親ごと消す）。⑤ 「検証（dry run）」が成功しても、型・NOT NULL・`uk_*` の衝突はデプロイで初めて分かり、`load_failed`（版の DB を作らない）になりうる。⑥ **確定済み（production に出た）版の行の変更は、新しい `deploy_key` で入れる**（production の取り込みが検査する）。⑦ シートに行が無い表は、版の DB で空になる。
 
 ## 17. 内部の分担（tool のクラス。名前は仮置き。db.md 10.4 と同じ区分）
 | クラス | 責務 |
@@ -585,7 +610,7 @@ db.md 7.2 の `tool/config/master_deploy.php` を使う（キーは db.md のと
 | `MasterImportController`（既存を作り直し） | 上の各エンドポイント。入力の検査・`MasterDeployRunException` の HTTP への変換。`execute`・`export`・`deploy` は削除 |
 | `MasterDeployTargetService`（作り直し） | `target`（版の一覧・予約・警告・追従検出の直近の結果）・`artifact-list` |
 | `MasterDeployRunner`（既存を作り直す。db.md 10.4） | build・import の順序・排他・実行記録（db.md 6.6）。画面・CLI から呼ぶ。**build と import の Runner を分けるか 1 つにするかは実装 PR で決める**（`MasterBuildRunner`・`MasterImportRunner` に分ける案は仮称。台帳は新名を決めていない） |
-| `MasterVersionAdmin`（新。仮称） | rollback・cancel-schedule・cleanup・finalize・resolve-unknown（短い操作。ロック・run の記録は共通） |
+| `MasterVersionAdmin`（新。仮称） | rollback・cancel-schedule・deactivate・activate・cleanup・finalize・resolve-unknown（短い操作。ロック・run の記録は共通） |
 | `MasterDeployService`（作り直し） | 登録（db.md 3.6 の R1〜R3。1 つの sys トランザクション） |
 | `MasterVersionDatabase`（新。仮称） | 版の DB の作成・復元・`DROP` の保護・往復検査（db.md 4.2・4.3・4.6・6.6 の `version_db`） |
 | `MasterArtifactStore`（新。仮称） | 成果物の書き込み・pull・`manifest.json` を最後に書く（db.md 6.5.3） |
