@@ -28,6 +28,30 @@ class MasterDeployRunException extends RuntimeException
 
     public const INTERNAL_ERROR = 'internal_error';
 
+    // ---- 版ごとの mst DB 設計（db.md 3.6・13.1 のエラー表）。build が使う ----
+
+    public const ROLE_FORBIDDEN = 'role_forbidden';
+
+    public const BASE_DATABASE_MISMATCH = 'base_database_mismatch';
+
+    public const MST_DATABASE_NAME_TOO_LONG = 'mst_database_name_too_long';
+
+    public const START_AT_PAST = 'start_at_past';
+
+    public const LOAD_FAILED = 'load_failed';
+
+    public const MST_DATABASE_COLLISION = 'mst_database_collision';
+
+    public const ARTIFACT_DIR_COLLISION = 'artifact_dir_collision';
+
+    public const STORE_FAILED = 'store_failed';
+
+    public const REGISTER_FAILED = 'register_failed';
+
+    public const REGISTER_UNKNOWN = 'register_unknown';
+
+    public const DROP_FORBIDDEN = 'drop_forbidden';
+
     /**
      * @param  array<int, array<string, mixed>>  $errorList
      * @param  array<string, mixed>  $extra  error_total・error_count_by_code・compensated など、レスポンスへそのまま足す項目

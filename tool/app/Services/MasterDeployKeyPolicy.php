@@ -25,6 +25,7 @@ class MasterDeployKeyPolicy
         private readonly array $forbiddenEnvs,
         private readonly int $reservedFloor,
         private readonly string $appEnv,
+        private readonly mixed $explicitKey = null,
     ) {}
 
     /**
@@ -55,6 +56,7 @@ class MasterDeployKeyPolicy
             array_map(fn ($e) => strtolower(trim((string) $e)), (array) config('master_deploy.fixed_key_forbidden_envs')),
             (int) config('master_deploy.reserved_floor'),
             strtolower(trim((string) config('app.env'))),
+            config('master_deploy.explicit_key'),
         );
     }
 
@@ -76,6 +78,55 @@ class MasterDeployKeyPolicy
         }
 
         return $this->fixedKey;
+    }
+
+    /**
+     * build の T を決める（db.md 7.2）。fixed_key（予約キー）か explicit_key（本物の形 YYYYMMDDNN）のどちらか 1 つが必須。
+     * 排他の前に呼ぶ。fixed_key の検査（許可リスト・本番ガード）は resolveFixedKey に任せる。
+     *
+     * @return array{mode: 'fixed'|'explicit', deploy_key: int}
+     *
+     * @throws MasterDeployKeyException fixed_key_invalid・fixed_key_forbidden・deploy_key_not_configured・reserved_key_forbidden
+     */
+    public function resolveBuildKey(): array
+    {
+        $fixed = $this->resolveFixedKey();
+        $hasExplicit = $this->explicitKey !== null;
+        if ($fixed !== null && $hasExplicit) {
+            throw MasterDeployKeyException::deployKeyNotConfigured('fixed_key と explicit_key が両方あります');
+        }
+        if ($fixed !== null) {
+            return ['mode' => 'fixed', 'deploy_key' => $fixed];
+        }
+        if (! $hasExplicit) {
+            throw MasterDeployKeyException::deployKeyNotConfigured('fixed_key も explicit_key もありません');
+        }
+        if (! is_int($this->explicitKey)) {
+            throw MasterDeployKeyException::deployKeyNotConfigured('explicit_key が数値ではありません');
+        }
+        $this->assertRealKey($this->explicitKey);
+        if (! self::isRealKeyShape($this->explicitKey)) {
+            throw MasterDeployKeyException::deployKeyNotConfigured('explicit_key が YYYYMMDDNN の形ではありません');
+        }
+
+        return ['mode' => 'explicit', 'deploy_key' => $this->explicitKey];
+    }
+
+    /**
+     * 本物の形 YYYYMMDDNN か（2026010101〜2999123199。NN は 01〜99。月日は暦として正しいこと）
+     */
+    public static function isRealKeyShape(int $key): bool
+    {
+        if ($key < 2026010101 || $key > 2999123199) {
+            return false;
+        }
+        $nn = $key % 100;
+        $date = intdiv($key, 100);
+        $year = intdiv($date, 10000);
+        $month = intdiv($date % 10000, 100);
+        $day = $date % 100;
+
+        return $nn >= 1 && checkdate($month, $day, $year);
     }
 
     /**

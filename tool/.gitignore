@@ -23,5 +23,8 @@ Homestead.json
 Homestead.yaml
 Thumbs.db
 /storage/app/credentials/
-/public/masterdata/*.sqlite
-/public/masterdata/**/*.sqlite
+# 成果物は git に入れない（db.md 6.5.4）
+/public/masterdata/*
+!/public/masterdata/.gitkeep
+/public/asset/*
+!/public/asset/.gitkeep
