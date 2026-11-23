@@ -41,6 +41,19 @@ class MasterDeployLock
         return (int) $row->acquired === 1;
     }
 
+    /**
+     * 誰も持っていなければ true（読み取りだけ。ロックは取らない。target の running 判定用）
+     */
+    public function isFree(): bool
+    {
+        $row = DB::connection('sys')->selectOne('SELECT IS_FREE_LOCK(?) AS is_free', [$this->name()]);
+        if ($row === null || $row->is_free === null) {
+            throw new RuntimeException('IS_FREE_LOCK がエラーを返しました');
+        }
+
+        return (int) $row->is_free === 1;
+    }
+
     public function release(): void
     {
         $row = DB::connection('sys')->selectOne('SELECT RELEASE_LOCK(?) AS released', [$this->name()]);

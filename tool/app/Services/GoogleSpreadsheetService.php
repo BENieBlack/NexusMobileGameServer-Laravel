@@ -44,6 +44,14 @@ class GoogleSpreadsheetService
      */
     public function isConfigured(): bool
     {
+        return self::checkConfigured();
+    }
+
+    /**
+     * 設定が有効か確認する（認証クライアントを作らずに呼べる。未設定のとき new できない画面・API 用）
+     */
+    public static function checkConfigured(): bool
+    {
         $folderId = config('services.google_spreadsheet.folder_id');
         if (empty($folderId)) {
             return false;

@@ -54,6 +54,9 @@ Route::middleware('auth')->group(function () {
         Route::get('/spreadsheets', [MasterImportController::class, 'spreadsheets'])->name('spreadsheets');
         Route::get('/sheets', [MasterImportController::class, 'sheets'])->name('sheets');
         Route::get('/preview', [MasterImportController::class, 'preview'])->name('preview');
+        Route::get('/target', [MasterImportController::class, 'target'])->name('target');
+        Route::post('/deploy', [MasterImportController::class, 'deploy'])->name('deploy');
+        Route::post('/clear-cache', [MasterImportController::class, 'clearCache'])->name('clear-cache');
         Route::post('/execute', [MasterImportController::class, 'execute'])->name('execute');
         Route::post('/export', [MasterImportController::class, 'export'])->name('export');
     });

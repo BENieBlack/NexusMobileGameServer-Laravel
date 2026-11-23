@@ -74,4 +74,17 @@ class MasterDeployLockTest extends TestCase
 
         DB::connection('sys_other')->selectOne('SELECT RELEASE_LOCK(?) AS r', [$lock->name()]);
     }
+
+    #[Test]
+    public function is_freeは読むだけでロックを取らず_他の接続が持っていればfalse(): void
+    {
+        $lock = new MasterDeployLock;
+        $this->assertTrue($lock->isFree());
+        // 読んだだけなので、他の接続はまだ取れる
+        $this->assertTrue($this->otherHolds($lock->name()));
+        $this->assertFalse($lock->isFree());
+
+        DB::connection('sys_other')->selectOne('SELECT RELEASE_LOCK(?) AS r', [$lock->name()]);
+        $this->assertTrue($lock->isFree());
+    }
 }
