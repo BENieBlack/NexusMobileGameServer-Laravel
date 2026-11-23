@@ -650,7 +650,7 @@ sys の変更は新しいファイルで `ALTER TABLE`（列の追加は NULL �
 | `MasterOverlayFolder`（畳み。S3-8） | **再利用** | 変更なし（6.4） |
 | `GoogleSpreadsheetService`（S3-7） | **再利用** | build だけが使う |
 | `MasterDeployLock`（S3-12a） | **再利用** | build・import・巻き戻し・掃除で使う。ロック名は sys の DB 名から作る（今のまま） |
-| `MasterImportService`（S3-6 まで） | **再利用（一部）** | 行の変換（`normalizeRarity`・空文字の NULL 化など）と ID の検査（`ID_RULES`・`validateIds`）は残す。`import()`（TRUNCATE + INSERT）と `reflect()`（差分反映。S3-6, #40）は**不要**。投入は新しいローダー（4.3・6.6）に置き換える |
+| `MasterImportService`（S3-6 まで） | **再利用（一部）** | 行の変換（`normalizeRarity`・空文字の NULL 化など）と ID 規則の定義（`ID_RULES`。検査は `MasterSheetValidator` が読む）は残す。`import()`（TRUNCATE + INSERT）と `reflect()`（差分反映。S3-6, #40）と、それ専用の `validateIds` などは**削除済み**。投入は新しいローダー（4.3・6.6）に置き換える |
 | `MasterDataExporter`（S3-5） | **再利用（変更あり）** | SQLite の書き出し（主キー昇順・型の対応）は残す。読み取り元を作業用 DB・版の DB にし、出力を `master_artifact` の disk 経由に、ディレクトリ名を `{deploy_key}_{hash}` に変える。行データ（NDJSON）の書き出しを足す |
 | `MasterDeployKeyPolicy`（S3-9。台帳は未定） | **再利用（一部）** | **使う**: `resolveFixedKey`・`isReservedBand`・`isRejectedReservedKey`・`assertNotRejectedReservedKey`（V04・本番ガード・I2）、`assertRealKey`（`explicit_key` と成果物の `deploy_key` の予約帯の検査）。**使わない**: 採番の結果の検査としての役割（採番が無い）。`explicit_key`・`role` の検査を足す |
 | `MasterDeployInventory`（9 桁の棚卸し。台帳に記載なし） | **再利用** | 変更なし（9 節） |

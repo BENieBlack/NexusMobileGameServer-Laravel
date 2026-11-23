@@ -18,12 +18,12 @@ use ReflectionClass;
  * - `$collectWarnings` が true のとき、採られなかった行（T より大きい・畳みで負ける）の V10・V11 を警告に集める（止めない）
  *
  * 入力は GoogleSpreadsheetService::assembleMasterTabs() の戻り値。表の列（V02・V09）と rarity 列の型（V10）は DB を読む側が渡す。
- * ID_RULES・UNIQUE_COLUMN_GROUPS などの定義は MasterImportService の private 定数を読み取る（複製しない。
+ * ID_RULES・UNIQUE_COLUMN_GROUPS などの定義は MasterImportService の定数を読み取る（複製しない。
  * 定義の正本は MasterImportService。テストが同じ定義を通る）。
  */
 class MasterSheetValidator
 {
-    /** error_list に出す最大件数（MasterImportService::MAX_REPORTED_ERRORS と同じ） */
+    /** error_list に出す最大件数 */
     public const MAX_REPORTED = 20;
 
     /** 9 桁相当の旧予約キー（変換せず拒否する。db.md 9.2） */
@@ -351,7 +351,7 @@ class MasterSheetValidator
             foreach ($groupColumns as $column) {
                 $value = $columns[$column] ?? '';
                 $text = is_scalar($value) ? trim((string) $value) : '';
-                // 数値は '1' と '01' を同じ値とみなす。空は既定値 0（MasterImportService::validateUniqueColumnGroups と同じ）
+                // 数値は '1' と '01' を同じ値とみなす。空は既定値 0
                 if (in_array($column, $numeric, true)) {
                     $parts[] = $text === '' ? '0' : (is_numeric($text) ? (string) (int) $text : $text);
                 } else {
@@ -371,7 +371,7 @@ class MasterSheetValidator
     }
 
     /**
-     * MasterImportService の private 定数を読む（定義の複製を避ける）
+     * MasterImportService の定数を読む（定義の複製を避ける）
      *
      * @return array<int|string, mixed>
      */

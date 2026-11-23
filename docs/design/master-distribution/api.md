@@ -55,7 +55,7 @@
 | `POST /master-import/cleanup` | 版の DB の掃除（9.3 節） | 新 |
 | `POST /master-import/clear-cache` | schedule キーの破棄（9.4 節） | 縮める |
 | `POST /master-import/deploy` | 旧 1 操作 | **廃止**（404。S3-16。build・import に置き換わる） |
-| `POST /master-import/execute`・`/export` | 旧の取り込み・書き出し | **廃止**（404。S3-16。`TRUNCATE` する方式は残さない。`MasterImportService::import()`・`reflect()` はルートから呼ばない。実装は行の変換・ID の検査の部品として残している。db.md 10.4） |
+| `POST /master-import/execute`・`/export` | 旧の取り込み・書き出し | **廃止**（404。S3-16。`TRUNCATE` する方式は残さない。`MasterImportService::import()`・`reflect()` は削除済み。`MasterImportService` は行の変換と ID 規則の定義だけを持つ。db.md 10.4） |
 
 - `all-sheets`・`spreadsheets`・`sheets`・`preview` は**維持**（一覧・内容の確認。build の環境だけで使う。import の環境では `role_forbidden`）。`preview` は列に `deploy_key`・`__deleted` が含まれたらそのまま表示する。`is_mst` は「build が読むタブか」の表示に使う（db.md 6.1）。
 - 旧 URL（`deploy`）を build に残す（互換）案は採らない（画面とテストだけが呼ぶ内部の口なので、残す意味が無い。**仮置き**）。
@@ -616,6 +616,6 @@ db.md 7.2 の `tool/config/master_deploy.php` を使う（キーは db.md のと
 | `MasterVersionDatabase`（新。仮称） | 版の DB の作成・復元・`DROP` の保護・往復検査（db.md 4.2・4.3・4.6・6.6 の `version_db`） |
 | `MasterArtifactStore`（新。仮称） | 成果物の書き込み・pull・`manifest.json` を最後に書く（db.md 6.5.3） |
 | `MasterCacheInvalidator`（小さく作り直す） | schedule キーの `forget` だけ（9.4） |
-| 再利用 | `GoogleSpreadsheetService`・`MasterSheetValidator`・`MasterOverlayFolder`・`MasterDeployLock`・`MasterDeployKeyPolicy`（一部）・`MasterDeployInventory`・`MasterDataExporter`（読み取り元と出力先を変える）・`MasterImportService` の行変換・ID の検査（db.md 10.4） |
+| 再利用 | `GoogleSpreadsheetService`・`MasterSheetValidator`・`MasterOverlayFolder`・`MasterDeployLock`・`MasterDeployKeyPolicy`（一部）・`MasterDeployInventory`・`MasterDataExporter`（読み取り元と出力先を変える）・`MasterImportService` の行変換・ID 規則の定義（db.md 10.4） |
 
 api 側の変更の置き場: `SysDeployRepository`・`SysDeploy`・`DeployRepositoryAdapter`・`CurrentMasterVersion`・`ResolveMasterVersion`・`CheckMasterHash`・`_BaseMstRepository`・`RewardTrackMilestoneRepositoryAdapter`（12 節）。実装の順序は db.md 10.5。
