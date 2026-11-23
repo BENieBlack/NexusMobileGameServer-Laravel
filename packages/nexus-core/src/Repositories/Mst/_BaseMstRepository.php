@@ -4,6 +4,7 @@ namespace Nexus\Core\Repositories\Mst;
 
 use Illuminate\Cache\RedisStore;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Nexus\Core\Models\Mst\_BaseMst;
 use Nexus\Core\Repositories\_BaseRepository;
 use Nexus\Core\Support\CustomCollection;
@@ -25,7 +26,9 @@ abstract class _BaseMstRepository extends _BaseRepository implements _BaseMstRep
     /**
      * キャッシュキーのプレフィックス
      *
-     * キー形式（`mst:{テーブル名}:all`）は運営ツールの MasterCacheInvalidator（tool/app/Services）が同じ文字列で破棄する。変えるときは両方。
+     * キー形式は `mst:{DB名}:{テーブル名}:all`（DB名 = その版の mst DB。設計: docs/design/master-distribution/db.md 8.4）。
+     * 版の DB は作成後に書き換えないので、このキーの中身は永久に正しく、破棄は要らない（版が変われば別のキーを引く）。
+     * 組み立ては buildCacheKey()。運営ツールの MasterCacheInvalidator と同じ文字列を持つ契約は MasterCacheKeyContractTest（api / tool）が固定している。変えるときは両方。
      */
     protected string $cachePrefix = 'mst';
 
@@ -53,7 +56,7 @@ abstract class _BaseMstRepository extends _BaseRepository implements _BaseMstRep
 
         $modelInstance = new $this->modelClass;
         $tableName = $modelInstance->getTable();
-        $cacheKey = "{$this->cachePrefix}:{$tableName}:all";
+        $cacheKey = $this->buildCacheKey($tableName);
 
         // Laravel Cacheを使ってキャッシュから取得、なければDBから取得してキャッシュに保存
         $cached = Cache::store($this->cacheDriver)->remember(
@@ -160,9 +163,23 @@ abstract class _BaseMstRepository extends _BaseRepository implements _BaseMstRep
         // Redisキャッシュをクリア
         $modelInstance = new $this->modelClass;
         $tableName = $modelInstance->getTable();
-        $cacheKey = "{$this->cachePrefix}:{$tableName}:all";
+        $cacheKey = $this->buildCacheKey($tableName);
 
         Cache::store($this->cacheDriver)->forget($cacheKey);
+    }
+
+    /**
+     * 全件キャッシュの Redis キーを組み立てる（`mst:{DB名}:{テーブル名}:all`）
+     *
+     * DB名は、いま実際に繋がっている mst の database（getDatabaseName）から取る。
+     * 版の解決の仕組みに依存せず、読む先の DB とキーが必ず一致する。
+     * getDatabaseName() は設定値を返すだけで、接続は開かない。
+     */
+    protected function buildCacheKey(string $tableName): string
+    {
+        $databaseName = DB::connection($this->connection)->getDatabaseName();
+
+        return "{$this->cachePrefix}:{$databaseName}:{$tableName}:all";
     }
 
     /**

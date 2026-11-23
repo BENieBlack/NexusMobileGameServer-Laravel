@@ -52,14 +52,15 @@ class HomeSnapshotTest extends TestCase
         ['player' => $player, 'token' => $token] = $this->signUpPlayer();
         $connection = $this->playerConnection($player->id);
 
+        // 時刻は基本シードの版の start_at（2026-02-22）より後にする。それより前だと「いまの版」が無く 299 になる
         // 25分前に最後に回復した、スタミナ1（300秒で1ポイント回復するので、5ポイント分の自然回復）
-        ClockUtility::setNow('2026-01-15 10:25:00');
+        ClockUtility::setNow('2026-03-15 10:25:00');
         DB::connection($connection)->table('trx_stamina')->updateOrInsert(
             ['sys_player_id' => $player->id, 'type' => 'normal'],
             [
                 'current_stamina' => 1,
                 'recovery_rate_multiplier' => 1.00,
-                'last_recovery_at' => '2026-01-15 10:00:00',
+                'last_recovery_at' => '2026-03-15 10:00:00',
                 'is_delete' => false,
             ]
         );
@@ -70,13 +71,13 @@ class HomeSnapshotTest extends TestCase
         $normal = collect($response->json('trx_stamina_list'))->firstWhere('type', 'normal');
         $this->assertNotNull($normal);
         $this->assertGreaterThan(1, $normal['current_stamina']);
-        $this->assertGreaterThan('2026-01-15 10:00:00', $normal['last_recovery_at']);
+        $this->assertGreaterThan('2026-03-15 10:00:00', $normal['last_recovery_at']);
 
         // DBは、保存したときの値のまま（自然回復の分は保存しない）
         $stored = DB::connection($connection)->table('trx_stamina')
             ->where('sys_player_id', $player->id)->where('type', 'normal')->first();
         $this->assertSame(1, (int) $stored->current_stamina);
-        $this->assertSame('2026-01-15 10:00:00', (string) $stored->last_recovery_at);
+        $this->assertSame('2026-03-15 10:00:00', (string) $stored->last_recovery_at);
     }
 
     /**

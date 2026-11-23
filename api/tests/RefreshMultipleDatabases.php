@@ -4,6 +4,7 @@ namespace Tests;
 
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Foundation\Testing\DatabaseTransactionsManager;
+use Illuminate\Support\Facades\DB;
 
 trait RefreshMultipleDatabases
 {
@@ -150,6 +151,32 @@ trait RefreshMultipleDatabases
 
             static::$migrationsRunForProcess = true;
         }
+
+        $this->restoreBaselineDeploy();
+    }
+
+    /**
+     * 基底 DB を指す「いまの版」が無ければ、基本シードの版を入れ直す
+     *
+     * HTTP のリクエストは頭で「いまの版」を決めて mst を切り替え、版が無いと 299 になる（db.md 8.1）。
+     * トランザクションで包めないテストが tearDown で sys_deploy を空にすると、同じプロセスの後続のテストが
+     * 全部 299 になるので、毎回ここで確かめる（SysDeploySeeder は truncate なので、トランザクションの外＝テストの開始前に流す）。
+     */
+    protected function restoreBaselineDeploy(): void
+    {
+        $sys = DB::connection('sys');
+
+        // 基底 DB を指す版が有効（is_active・掃除済みでない）かで判定する。別の版だけ残っている状態も復元の対象
+        $hasBaseline = $sys->table('sys_deploy as d')
+            ->join('sys_deploy_master as m', 'm.id', '=', 'd.sys_deploy_master_id')
+            ->where('d.is_active', true)
+            ->whereNull('m.mst_dropped_at')
+            ->where('m.mst_database', (string) config('database.connections.mst.database'))
+            ->exists();
+
+        if (! $hasBaseline) {
+            $this->seedSystemData();
+        }
     }
 
     /**
@@ -245,6 +272,70 @@ trait RefreshMultipleDatabases
                 : $path,
             $absolute
         ));
+    }
+
+    /**
+     * 版の切り替えのテスト用の 2 つ目の mst DB の名前
+     *
+     * docker-compose.yml の db-master の DB_NAMES と同じ固定の名前（版の DB の命名規則
+     * `{APP_NAME}-{env}-master-{deploy_key}-{HASH 16 文字}` に合わせた例。設計: docs/design/master-distribution/db.md 8.6）。
+     */
+    protected function altMstDatabaseName(): string
+    {
+        return config('app.name').'-testing-master-2026010101-0000000000000000';
+    }
+
+    /**
+     * 2 つ目の mst DB を指す接続 mst_alt を登録し、スキーマを最新にして返す
+     *
+     * mst_alt は mst 接続の設定の database 違い。全テストのマイグレーション（runMigrations）には入れず、
+     * 使うテストだけがここで流す（DB が無い既存の開発者環境で、他のテストを巻き込んで落とさないため）。
+     * スキーマはマイグレーションの指紋が変わったときと、表が無いときだけ作り直す。
+     * DB が無いときは、作り方を添えて失敗させる。
+     */
+    protected function ensureAltMstMigrated(): string
+    {
+        $database = $this->altMstDatabaseName();
+
+        config(['database.connections.mst_alt' => array_merge(
+            (array) config('database.connections.mst'),
+            ['database' => $database],
+        )]);
+        DB::purge('mst_alt');
+
+        try {
+            DB::connection('mst_alt')->getPdo();
+        } catch (\Throwable $e) {
+            $this->fail(
+                "2 つ目の mst DB（{$database}）がありません。docker compose down -v で DB を作り直すか、"
+                .'手で CREATE DATABASE してください（.claude/development.md の「テスト用の 2 つ目の mst DB」）。'
+                .$e->getMessage()
+            );
+        }
+
+        $baseDir = base_path('storage/framework/testing');
+        if (! is_dir($baseDir)) {
+            mkdir($baseDir, 0755, true);
+        }
+        $flagFile = $baseDir.'/.migrated-alt';
+        $fingerprint = $this->migrationFingerprint();
+        clearstatcache(true, $flagFile);
+
+        $upToDate = file_exists($flagFile)
+            && file_get_contents($flagFile) === $fingerprint
+            && DB::connection('mst_alt')->getSchemaBuilder()->hasTable('mst_config');
+
+        if (! $upToDate) {
+            $this->artisan('migrate:fresh', [
+                '--database' => 'mst_alt',
+                '--path' => $this->migrationPaths('mst'),
+                '--force' => true,
+            ]);
+            $this->app[Kernel::class]->setArtisan(null);
+            file_put_contents($flagFile, $fingerprint);
+        }
+
+        return $database;
     }
 
     /**

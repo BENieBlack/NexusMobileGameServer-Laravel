@@ -11,10 +11,10 @@ use Throwable;
  * マスター配信のあとに API 側の Redis キャッシュを破棄する（設計: docs/design/master-distribution/db.md 8 節）
  *
  * キー文字列は api 側のコードが決めており、ここは同じ文字列を持つ。変えるときは両方を直す。
- * 対応: `{cachePrefix}:{テーブル名}:{キー}` を組む packages/nexus-core の `_BaseMstRepository`（cachePrefix = mst、キーは all）と
+ * 対応: `{cachePrefix}:{テーブル名}:{キー}` を組む packages/nexus-core の `_BaseMstRepository`（cachePrefix = mst、キーは DB名 + all）と
  * `_BaseSysRepository::buildCacheKey()`（cachePrefix = sys。キーは SysDeployRepository が渡す）。
- * - mst の全件: `mst:{テーブル名}:all`（packages/nexus-core の `_BaseMstRepository`）
- * - sys_deploy: `sys:sys_deploy:latest_downloadable` / `sys:sys_deploy:deploy_key:{キー}` /
+ * - mst の全件: `mst:{DB名}:{テーブル名}:all`（packages/nexus-core の `_BaseMstRepository`。段階 3 で mst 側は不要になる）
+ * - sys_deploy: `sys:sys_deploy:schedule`（旧 `sys:sys_deploy:latest_downloadable` も消す）/ `sys:sys_deploy:deploy_key:{キー}` /
  *   `sys:sys_deploy:id:{id}`（api の `SysDeployRepository`）
  *
  * 破棄の失敗（Redis に届かない等の例外）は止めず、失敗したキーを返す。
@@ -22,16 +22,28 @@ use Throwable;
  */
 class MasterCacheInvalidator
 {
+    /** 旧キー（廃止。api は読まない）。切り替えの初回に Redis に残るぶんを消すため、破棄の対象には残す */
     public const SYS_DEPLOY_LATEST_KEY = 'sys:sys_deploy:latest_downloadable';
+
+    /** 切り替え予定の一覧（api の SysDeployRepository::scheduleCacheKey。db.md 8.3） */
+    public const SYS_DEPLOY_SCHEDULE_KEY = 'sys:sys_deploy:schedule';
 
     /** 実行記録の phase のうち「sys の COMMIT 前後より先へ進んだ」もの（db.md 8 節 M1） */
     public const COMMIT_REACHED_PHASES = ['commit', 'invalidate', 'done'];
 
     public function __construct(private readonly ?Repository $cache = null) {}
 
-    public static function mstAllKey(string $table): string
+    /**
+     * mst の全件キャッシュのキー（`mst:{DB名}:{テーブル名}:all`）
+     *
+     * 段階 3 で作り直す（版の DB は作成後に書き換えないので mst 側の破棄は不要になる。db.md 8.4・10.4）。
+     * それまでの暫定: DB名を省くと tool の mst 接続（基底 DB）の名前を使う。
+     */
+    public static function mstAllKey(string $table, ?string $database = null): string
     {
-        return "mst:{$table}:all";
+        $database ??= DB::connection('mst')->getDatabaseName();
+
+        return "mst:{$database}:{$table}:all";
     }
 
     public static function sysDeployDeployKeyKey(int $deployKey): string
@@ -209,7 +221,7 @@ class MasterCacheInvalidator
      */
     public function buildKeyList(array $mstTableList, array $deployKeyList, array $sysDeployIdList): array
     {
-        $keyList = [self::SYS_DEPLOY_LATEST_KEY];
+        $keyList = [self::SYS_DEPLOY_SCHEDULE_KEY, self::SYS_DEPLOY_LATEST_KEY];
         foreach (array_unique($deployKeyList) as $deployKey) {
             $keyList[] = self::sysDeployDeployKeyKey($deployKey);
         }

@@ -68,7 +68,7 @@ Wallet 側と `trx_item` 側に分岐します。
 コマンドが移すはずだった行を先にプレイヤー側が移すことになり、
 コマンドの件数が実態と合わなくなります。
 
-キャッシュキーは `mst:{テーブル名}:all` です（`mst_item` なら `mst:mst_item:all`）。
+キャッシュキーは `mst:{DB名}:{テーブル名}:all` です（`mst_item` なら `mst:{いまの版の mst DB 名}:mst_item:all`）。
 現状これを消す artisan コマンドは無いため、tinker から実行します。
 
 ## 運用の選び方
@@ -162,7 +162,7 @@ docker compose exec api-php php artisan wallet:migrate-items --item=gold
 ここで初めてゲーム側が `is_wallet` を見るようになります。
 
 ```bash
-docker compose exec api-php php artisan tinker --execute="\Illuminate\Support\Facades\Cache::store('redis')->forget('mst:mst_item:all');"
+docker compose exec api-php php artisan tinker --execute="\Illuminate\Support\Facades\Cache::store('redis')->forget('mst:{いまの版の mst DB 名}:mst_item:all');"
 ```
 
 `_BaseMstRepository::clearAllCaches()` でも消えますが、こちらは

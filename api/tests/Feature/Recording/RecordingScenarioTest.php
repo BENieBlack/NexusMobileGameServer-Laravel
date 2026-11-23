@@ -334,6 +334,7 @@ class RecordingScenarioTest extends RecordingTestCase
         config(['recording.masterdata_dir' => $this->masterDataDir.'/missing']);
 
         $this->expectException(\RuntimeException::class);
+        $this->prepareRecordingDatabase();
         $this->app->make(RecordingDeploySeeder::class)->run();
     }
 

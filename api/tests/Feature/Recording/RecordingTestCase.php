@@ -3,6 +3,10 @@
 namespace Tests\Feature\Recording;
 
 use App\Models\Mst\MstPlayerLevel;
+use Database\Seeders\Recording\RecordingMasterExporter;
+use Database\Seeders\Recording\RecordingSeeder;
+use Database\Seeders\Recording\Scenarios\RecordingDeploySeeder;
+use Illuminate\Database\Connection;
 use Illuminate\Support\Facades\DB;
 use Tests\RefreshMultipleDatabases;
 use Tests\TestCase;
@@ -30,8 +34,14 @@ abstract class RecordingTestCase extends TestCase
         config(['recording.masterdata_dir' => $this->masterDataDir]);
     }
 
+    /** @var array<string, true> */
+    private array $recordingDatabases = [];
+
     protected function tearDown(): void
     {
+        foreach (array_keys($this->recordingDatabases) as $name) {
+            $this->ddlConnection()->statement('DROP DATABASE IF EXISTS `'.$name.'`');
+        }
         $this->removeDirectory($this->masterDataDir);
 
         parent::tearDown();
@@ -72,7 +82,43 @@ abstract class RecordingTestCase extends TestCase
      */
     protected function runSeeder(string $seeder): void
     {
+        // RecordingSeeder（全シナリオ）も、中で RecordingDeploySeeder を流す
+        if (in_array($seeder, [RecordingDeploySeeder::class, RecordingSeeder::class], true)) {
+            $this->prepareRecordingDatabase();
+        }
+
         $this->artisan('db:seed', ['--class' => $seeder, '--force' => true])->assertExitCode(0);
+    }
+
+    /**
+     * DDL 用の接続（mst と同じ設定の別接続）。mst はテストのトランザクションの中で、CREATE / DROP DATABASE の
+     * 暗黙コミットで巻き戻しが効かなくなるため、別の接続で流す
+     */
+    private function ddlConnection(): Connection
+    {
+        config(['database.connections.mst_ddl' => config('database.connections.mst')]);
+
+        return DB::connection('mst_ddl');
+    }
+
+    /**
+     * RecordingDeploySeeder が登録しようとする版の mst DB を、流す前に実在させる
+     *
+     * シーダーは版の DB が実在しないと何も書かずに中止する（R19 未決）。同じ mst から同じ hash の名前を
+     * 一時ディレクトリへの書き出しで求め、空の DB を作る（テストの終わりに消す）。
+     * 空の DB で足りるのは、シーダーが存在確認しか見ないため。
+     */
+    protected function prepareRecordingDatabase(): void
+    {
+        $seeder = new RecordingDeploySeeder;
+        $tmp = $this->masterDataDir.'/_probe';
+        mkdir($tmp, 0755, true);
+        $hash = (new RecordingMasterExporter($tmp))->export($seeder->masterGroups())['hash'];
+        $this->removeDirectory($tmp);
+
+        $name = RecordingDeploySeeder::mstDatabaseName($hash);
+        $this->ddlConnection()->statement('CREATE DATABASE IF NOT EXISTS `'.$name.'`');
+        $this->recordingDatabases[$name] = true;
     }
 
     protected function countAgreements(bool $markedOnly): int

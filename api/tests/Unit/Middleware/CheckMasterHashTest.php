@@ -6,7 +6,7 @@ use App\Http\Middleware\CheckMasterHash;
 use App\Models\Sys\SysDeploy;
 use App\Models\Sys\SysDeployMaster;
 use App\Models\Sys\SysDeployMasterTable;
-use App\Repositories\Sys\SysDeployRepository;
+use App\Persistence\CurrentMasterVersion;
 use Illuminate\Http\Request;
 use Mockery;
 use PHPUnit\Framework\Attributes\Test;
@@ -14,10 +14,12 @@ use Tests\TestCase;
 
 /**
  * CheckMasterHashミドルウェアのテスト
+ *
+ * 比較する版は、リクエスト冒頭で固定した CurrentMasterVersion から取る（$next の後で引き直さない。db.md 8.1）
  */
 class CheckMasterHashTest extends TestCase
 {
-    private SysDeployRepository $sysDeployRepository;
+    private CurrentMasterVersion $currentMasterVersion;
 
     private CheckMasterHash $middleware;
 
@@ -25,8 +27,8 @@ class CheckMasterHashTest extends TestCase
     {
         parent::setUp();
 
-        $this->sysDeployRepository = Mockery::mock(SysDeployRepository::class);
-        $this->middleware = new CheckMasterHash($this->sysDeployRepository);
+        $this->currentMasterVersion = Mockery::mock(CurrentMasterVersion::class);
+        $this->middleware = new CheckMasterHash($this->currentMasterVersion);
     }
 
     protected function tearDown(): void
@@ -38,8 +40,8 @@ class CheckMasterHashTest extends TestCase
     #[Test]
     public function ハッシュが一致する場合は更新通知を付けない(): void
     {
-        $this->sysDeployRepository
-            ->shouldReceive('selectLatestDownloadable')
+        $this->currentMasterVersion
+            ->shouldReceive('current')
             ->once()
             ->andReturn($this->makeDeploy('master-hash'));
 
@@ -54,8 +56,8 @@ class CheckMasterHashTest extends TestCase
     #[Test]
     public function ハッシュが不一致の場合は更新要求ヘッダーを付ける(): void
     {
-        $this->sysDeployRepository
-            ->shouldReceive('selectLatestDownloadable')
+        $this->currentMasterVersion
+            ->shouldReceive('current')
             ->once()
             ->andReturn($this->makeDeploy('latest-hash'));
 
@@ -70,7 +72,7 @@ class CheckMasterHashTest extends TestCase
     #[Test]
     public function ヘッダー未指定時はレスポンスを変更しない(): void
     {
-        $this->sysDeployRepository->shouldReceive('selectLatestDownloadable')->never();
+        $this->currentMasterVersion->shouldReceive('current')->never();
 
         $request = Request::create('/test', 'GET');
         $response = $this->middleware->handle($request, fn () => response()->json(['success' => true]));
@@ -81,8 +83,8 @@ class CheckMasterHashTest extends TestCase
     #[Test]
     public function jso_n以外のレスポンスにも更新要求ヘッダーを付ける(): void
     {
-        $this->sysDeployRepository
-            ->shouldReceive('selectLatestDownloadable')
+        $this->currentMasterVersion
+            ->shouldReceive('current')
             ->once()
             ->andReturn($this->makeDeploy('latest-hash'));
 
@@ -99,8 +101,8 @@ class CheckMasterHashTest extends TestCase
     #[Test]
     public function マスター確認に失敗しても元のレスポンスを返す(): void
     {
-        $this->sysDeployRepository
-            ->shouldReceive('selectLatestDownloadable')
+        $this->currentMasterVersion
+            ->shouldReceive('current')
             ->once()
             ->andThrow(new \RuntimeException('database unavailable'));
 

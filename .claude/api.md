@@ -22,6 +22,7 @@
 | 全API（先頭に追加） | `CheckMasterHash` | 後述。`X-Master-Hash` が古ければレスポンスヘッダーで知らせる |
 | メンテ除外以外のすべて | `maintenance` | メンテ中は 503。除外ルート・除外IPは `api/config/maintenance.php` |
 | `maintenance` のグループ内すべて（`POST /auth/version` を含む。`GET /auth/version`・`/maintenance/status`・`admin/*`・`/broadcasting/auth`・`/up` は除く） | `platform`（`ResolvePlatform`） | `X-Platform`（`Apple` / `Google`。完全一致）を検証して `ApiSession::getPlatform()` に載せる。欠落・不正値は HTTP 299 + `GameErrorCode::INVALID_PLATFORM`（99003）。順序は `maintenance` → `platform` → 署名・認証 |
+| `maintenance` のグループ内すべて（`platform` の次） | `master.version`（`ResolveMasterVersion`） | リクエスト頭で「いまの版」（start_at 基準の最新。`CurrentMasterVersion`）を固定し、`mst` 接続の database をその版の `mst_database` に切り替える。版が無い・掃除済みは HTTP 299。`CheckMasterHash` も固定した版の hash と比べる。設計は Nexus 側の master-distribution の db.md 8 節 |
 | ログイン後のAPI | `auth.token` + `idempotency` | アクセストークン検証と二重送信防止 |
 | `/auth/sign_up` | `client.signature` + `throttle.signup` | クライアント署名検証とレート制限 |
 | `/auth/sign_in`, `/auth/refresh_token`, `/account/transfer_code/transfer`, `/account/external/transfer` | `throttle.auth:{名前}` | 認証試行のレート制限（引き継ぎコードはコードごとにも数える） |

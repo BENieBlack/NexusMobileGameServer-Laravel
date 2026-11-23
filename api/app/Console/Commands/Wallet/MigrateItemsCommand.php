@@ -3,6 +3,8 @@
 namespace App\Console\Commands\Wallet;
 
 use App\Domain\Item\Support\WalletItemMigrator;
+use App\Exceptions\GameException;
+use App\Persistence\CurrentMasterVersion;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
@@ -71,6 +73,16 @@ class MigrateItemsCommand extends Command
 
         if ($isDryRun) {
             $this->warn('[DRY RUN モード] 実際には移しません');
+        }
+
+        // CLI はミドルウェアを通らず、mst は基底 DB のまま。ここは運用中の「いまの版」の mst_item を読みたいので、
+        // 明示的にいまの版へ切り替える（db.md 8.2。実装時に確認する仮置き）
+        try {
+            app(CurrentMasterVersion::class)->applyMstConnection();
+        } catch (GameException $e) {
+            $this->error('いまのマスターの版を解決できません: '.$e->getMessage());
+
+            return self::FAILURE;
         }
 
         $walletItemIds = $this->resolveTargetItemIds(

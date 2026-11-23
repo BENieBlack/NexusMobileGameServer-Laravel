@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Services\MasterCacheInvalidator;
+use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\Test;
 use Redis;
 use Tests\TestCase;
@@ -55,8 +56,9 @@ class MasterCacheKeyContractTest extends TestCase
     public function 破棄がapiの書く実キーを消し_関係のないキーは残す(): void
     {
         $physicalKeyList = [
-            'mst:mst_item:all',
-            'mst:mst_item__l10n:all',
+            'mst:nexus-testing-master:mst_item:all',
+            'mst:nexus-testing-master:mst_item__l10n:all',
+            'sys:sys_deploy:schedule',
             'sys:sys_deploy:latest_downloadable',
             'sys:sys_deploy:deploy_key:2026010101',
             'sys:sys_deploy:id:7',
@@ -64,21 +66,26 @@ class MasterCacheKeyContractTest extends TestCase
         foreach ($physicalKeyList as $key) {
             $this->raw->set(self::PHYSICAL_PREFIX.$key, 'x');
         }
-        $this->raw->set(self::PHYSICAL_PREFIX.'mst:mst_other:all', 'x');
+        $this->raw->set(self::PHYSICAL_PREFIX.'mst:nexus-testing-master:mst_other:all', 'x');
 
+        // tool の mst 接続（基底 DB）の名前を使うので、api のテストの基底 DB と同じ名前の接続で組む
+        config(['database.connections.mst.database' => 'nexus-testing-master']);
+        DB::purge('mst');
         $result = (new MasterCacheInvalidator)->invalidate(['mst_item', 'mst_item__l10n'], [2026010101], [7]);
 
         $this->assertTrue($result['invalidated']);
         foreach ($physicalKeyList as $key) {
             $this->assertSame(0, $this->raw->exists(self::PHYSICAL_PREFIX.$key), $key);
         }
-        $this->assertSame(1, $this->raw->exists(self::PHYSICAL_PREFIX.'mst:mst_other:all'));
+        $this->assertSame(1, $this->raw->exists(self::PHYSICAL_PREFIX.'mst:nexus-testing-master:mst_other:all'));
     }
 
     #[Test]
     public function 固定文字列が組み立て関数と一致する(): void
     {
-        $this->assertSame('mst:mst_item:all', MasterCacheInvalidator::mstAllKey('mst_item'));
+        $this->assertSame('mst:nexus-testing-master:mst_item:all', MasterCacheInvalidator::mstAllKey('mst_item', 'nexus-testing-master'));
+        // api の SysDeployRepository::scheduleCacheKey() と同じ文字列（api 側の契約テストが固定）
+        $this->assertSame('sys:sys_deploy:schedule', MasterCacheInvalidator::SYS_DEPLOY_SCHEDULE_KEY);
         $this->assertSame('sys:sys_deploy:latest_downloadable', MasterCacheInvalidator::SYS_DEPLOY_LATEST_KEY);
         $this->assertSame('sys:sys_deploy:deploy_key:2026010101', MasterCacheInvalidator::sysDeployDeployKeyKey(2026010101));
         $this->assertSame('sys:sys_deploy:id:7', MasterCacheInvalidator::sysDeployIdKey(7));
