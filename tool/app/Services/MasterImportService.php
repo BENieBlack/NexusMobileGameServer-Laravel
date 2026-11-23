@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
@@ -17,7 +18,8 @@ use RuntimeException;
  * - シート名 = mstテーブル名 として対応付ける
  *   例: シート名「mst_item」→ テーブル「mst_item」
  * - 1行目はヘッダ（カラム名）として使用
- * - 既存レコードは全て削除してから再INSERT（truncate & insert）
+ * - import(): 既存レコードは全て削除してから再INSERT（truncate & insert。廃止予定。S3-16）
+ * - reflect(): トランザクション内の差分反映（INSERT・変更行のみ DELETE+INSERT・DELETE）。コミットは呼び出し側
  * - deploy_key は現在のUnixタイムスタンプを使用
  * - rarity / bonus_rarity は列の実際の型で扱いを変える（ENUM は文字列のまま、整数列は数値へ変換）。
  *   不正な値は TRUNCATE の前に検出してエラーにする
@@ -116,85 +118,22 @@ class MasterImportService
      */
     public function import(string $tableName, array $headers, array $rows): array
     {
-        $this->validateTableName($tableName);
-
-        $existingColumns = $this->getTableColumns($tableName);
+        $prepared = $this->prepareRecords($tableName, $headers, $rows);
+        $existingColumns = $prepared['existingColumns'];
+        $skipped = $prepared['skipped'];
+        $errors = $prepared['errors'];
         $now = now()->format('Y-m-d H:i:s');
 
-        // テーブルに存在するヘッダのみ絞り込む（自動設定カラムは除外）
-        $validHeaders = array_filter(
-            $headers,
-            fn (string $h) => in_array($h, $existingColumns, true)
-                && ! in_array($h, self::AUTO_SET_COLUMNS, true),
-        );
-
-        if (empty($validHeaders)) {
-            throw new RuntimeException(
-                "テーブル {$tableName} に対応するカラムがスプレッドシートに見つかりません。"
-            );
-        }
-
-        // id 列の検証は TRUNCATE の前に済ませる（失敗しても既存の行を残す）
-        $this->validateIds($tableName, $headers, $rows);
-        $this->validateUniqueColumnGroups($tableName, $rows);
-
         $insertData = [];
-        $skipped = 0;
-        $errors = [];
-
-        // NULLableなカラムを取得（空文字をNULLに変換する対象）
-        $nullableColumns = $this->getNullableColumns($tableName);
-
-        // rarity 系カラムの型（ENUM / 整数）を実際の定義から判定する
-        $rarityColumns = $this->getRarityColumns($tableName, array_values($validHeaders));
-        $rarityErrors = [];
-
-        foreach ($rows as $index => $row) {
-            try {
-                $record = [];
-                foreach ($validHeaders as $header) {
-                    $value = $row[$header] ?? '';
-                    // NULLableカラムのみ空文字をNULLに変換。NOT NULLカラムは空文字のまま
-                    $converted = ($value === '' && in_array($header, $nullableColumns, true))
-                        ? null
-                        : $value;
-
-                    // rarity 系カラムは型に合わせて検証・変換する（不正な値は InvalidArgumentException）
-                    if (isset($rarityColumns[$header]) && $converted !== null) {
-                        $converted = $this->normalizeRarity($header, $converted, $rarityColumns[$header]);
-                    }
-
-                    $record[$header] = $converted;
-                }
-
-                // created_at / updated_at を自動設定
-                if (in_array('created_at', $existingColumns, true)) {
-                    $record['created_at'] = $now;
-                }
-                if (in_array('updated_at', $existingColumns, true)) {
-                    $record['updated_at'] = $now;
-                }
-
-                $insertData[] = $record;
-            } catch (InvalidArgumentException $e) {
-                $rarityErrors[] = '行 '.($index + 2).': '.$e->getMessage();
-            } catch (\Throwable $e) {
-                $errors[] = '行 '.($index + 2).': '.$e->getMessage();
-                $skipped++;
+        foreach ($prepared['records'] as $record) {
+            // created_at / updated_at を自動設定
+            if (in_array('created_at', $existingColumns, true)) {
+                $record['created_at'] = $now;
             }
-        }
-
-        // レアリティが不正なまま進むと、TRUNCATE の後の INSERT で失敗して既存の行が全て消える。
-        // TRUNCATE より前に、全行を検証した結果をまとめてエラーにする
-        if ($rarityErrors !== []) {
-            $shown = array_slice($rarityErrors, 0, self::MAX_REPORTED_ERRORS);
-            $more = count($rarityErrors) - count($shown);
-
-            throw new RuntimeException(
-                "テーブル {$tableName} のレアリティが不正なため、取り込みを中止しました（既存のデータは変更していません）。\n"
-                .implode("\n", $shown)
-                .($more > 0 ? "\n…ほか {$more} 件" : '')
-            );
+            if (in_array('updated_at', $existingColumns, true)) {
+                $record['updated_at'] = $now;
+            }
+            $insertData[] = $record;
         }
 
         if (empty($insertData)) {
@@ -236,6 +175,411 @@ class MasterImportService
             'skipped' => $skipped,
             'errors' => $errors,
         ];
+    }
+
+    /**
+     * 検証と値の変換をして、mst に入れる行（created_at・updated_at を除く）を作る。DB には書かない
+     *
+     * @param  array<int, string>  $headers
+     * @param  array<int, array<string, mixed>>  $rows
+     * @return array{
+     *   existingColumns: array<int, string>,
+     *   headers: array<int, string>,
+     *   records: array<int, array<string, mixed>>,
+     *   skipped: int,
+     *   errors: array<int, string>
+     * }
+     */
+    private function prepareRecords(string $tableName, array $headers, array $rows): array
+    {
+        $this->validateTableName($tableName);
+
+        $existingColumns = $this->getTableColumns($tableName);
+
+        // テーブルに存在するヘッダのみ絞り込む（自動設定カラムは除外）
+        $validHeaders = array_values(array_filter(
+            $headers,
+            fn (string $h) => in_array($h, $existingColumns, true)
+                && ! in_array($h, self::AUTO_SET_COLUMNS, true),
+        ));
+
+        if (empty($validHeaders)) {
+            throw new RuntimeException(
+                "テーブル {$tableName} に対応するカラムがスプレッドシートに見つかりません。"
+            );
+        }
+
+        // id 列の検証は書き込みの前に済ませる（失敗しても既存の行を残す）
+        $this->validateIds($tableName, $headers, $rows);
+        $this->validateUniqueColumnGroups($tableName, $rows);
+
+        $records = [];
+        $skipped = 0;
+        $errors = [];
+
+        // NULLableなカラムを取得（空文字をNULLに変換する対象）
+        $nullableColumns = $this->getNullableColumns($tableName);
+
+        // rarity 系カラムの型（ENUM / 整数）を実際の定義から判定する
+        $rarityColumns = $this->getRarityColumns($tableName, $validHeaders);
+        $rarityErrors = [];
+
+        foreach ($rows as $index => $row) {
+            try {
+                $record = [];
+                foreach ($validHeaders as $header) {
+                    $value = $row[$header] ?? '';
+                    // NULLableカラムのみ空文字をNULLに変換。NOT NULLカラムは空文字のまま
+                    $converted = ($value === '' && in_array($header, $nullableColumns, true))
+                        ? null
+                        : $value;
+
+                    // rarity 系カラムは型に合わせて検証・変換する（不正な値は InvalidArgumentException）
+                    if (isset($rarityColumns[$header]) && $converted !== null) {
+                        $converted = $this->normalizeRarity($header, $converted, $rarityColumns[$header]);
+                    }
+
+                    $record[$header] = $converted;
+                }
+
+                $records[] = $record;
+            } catch (InvalidArgumentException $e) {
+                $rarityErrors[] = '行 '.($index + 2).': '.$e->getMessage();
+            } catch (\Throwable $e) {
+                $errors[] = '行 '.($index + 2).': '.$e->getMessage();
+                $skipped++;
+            }
+        }
+
+        // レアリティが不正なまま進むと、書き込みの途中で失敗する。
+        // 書き込みより前に、全行を検証した結果をまとめてエラーにする
+        if ($rarityErrors !== []) {
+            $shown = array_slice($rarityErrors, 0, self::MAX_REPORTED_ERRORS);
+            $more = count($rarityErrors) - count($shown);
+
+            throw new RuntimeException(
+                "テーブル {$tableName} のレアリティが不正なため、取り込みを中止しました（既存のデータは変更していません）。\n"
+                .implode("\n", $shown)
+                .($more > 0 ? "\n…ほか {$more} 件" : '')
+            );
+        }
+
+        return [
+            'existingColumns' => $existingColumns,
+            'headers' => $validHeaders,
+            'records' => $records,
+            'skipped' => $skipped,
+            'errors' => $errors,
+        ];
+    }
+
+    /**
+     * 採用行を mst へ差分反映する（db.md 6.5）。コミットは呼び出し側が行う
+     *
+     * - 置き換えの対象は行が 1 行以上ある表だけ（行が 0 の表は触らず、結果にも出さない）
+     * - 先に全表を検証し、書き込みはその後。dry_run = false のときは mst 接続で beginTransaction し、
+     *   全表を反映して**開いたまま返す**。途中で失敗したら rollBack して例外を投げる
+     * - 呼び出し側は、返した connection を MasterDataExporter::withConnection() に渡して書き出し、
+     *   commit() か rollBack() を呼ぶ（dry_run = true のときはトランザクションを開かないので不要）
+     * - dry_run = true は同じ比較をして、書かずに件数だけ返す
+     *
+     * @param  array<string, array{headers: array<int, string>, rows: array<int, array<string, mixed>>}>  $tables  表名 => シート
+     * @return array{
+     *   connection: ConnectionInterface,
+     *   tables: array<string, array{inserted: int, updated: int, deleted: int, unchanged: int}>
+     * }
+     */
+    public function reflect(array $tables, bool $dryRun = false): array
+    {
+        $connection = DB::connection('mst');
+
+        $prepared = [];
+        foreach ($tables as $tableName => $sheet) {
+            if ($sheet['rows'] === []) {
+                continue;
+            }
+            $prepared[$tableName] = $this->prepareRecords($tableName, $sheet['headers'], $sheet['rows']);
+            // 主キー列の有無・シート内の主キー重複も、書き込みの前（検証段）で検査する
+            $this->validatePrimaryKey($connection, $tableName, $prepared[$tableName]);
+        }
+
+        $counts = [];
+        if ($dryRun) {
+            foreach ($prepared as $tableName => $p) {
+                $counts[$tableName] = $this->reflectTable($connection, $tableName, $p, true);
+            }
+
+            return ['connection' => $connection, 'tables' => $counts];
+        }
+
+        $connection->beginTransaction();
+        try {
+            foreach ($prepared as $tableName => $p) {
+                $counts[$tableName] = $this->reflectTable($connection, $tableName, $p, false);
+            }
+        } catch (\Throwable $e) {
+            try {
+                $connection->rollBack();
+            } catch (\Throwable) {
+                // rollBack の失敗で元の例外を隠さない
+            }
+            throw $e;
+        }
+
+        // ログの失敗でトランザクションを開いたまま漏らさないよう、try の外で例外を握りつぶす
+        try {
+            Log::info('マスター差分反映（未コミット）', ['tables' => $counts]);
+        } catch (\Throwable) {
+        }
+
+        return ['connection' => $connection, 'tables' => $counts];
+    }
+
+    /**
+     * 主キー列がシートにあるか、シート内で主キー（rowKey）が重複していないかを検査する
+     *
+     * @param  array{headers: array<int, string>, records: array<int, array<string, mixed>>}  $p
+     *
+     * @throws RuntimeException
+     */
+    private function validatePrimaryKey(ConnectionInterface $connection, string $tableName, array $p): void
+    {
+        $primaryKey = $this->getPrimaryKeyColumns($connection, $tableName);
+        if ($primaryKey === [] || array_diff($primaryKey, $p['headers']) !== []) {
+            throw new RuntimeException(
+                "テーブル {$tableName} の主キー（".implode('・', $primaryKey ?: ['なし']).'）がシートにありません。'
+            );
+        }
+        $seen = [];
+        foreach ($p['records'] as $record) {
+            $key = $this->rowKey($record, $primaryKey);
+            if (isset($seen[$key])) {
+                throw new RuntimeException("テーブル {$tableName} の主キーが重複しています: ".str_replace("\0", ':', $key));
+            }
+            $seen[$key] = true;
+        }
+    }
+
+    /**
+     * 1 表を差分反映する
+     *
+     * @param  array{existingColumns: array<int, string>, headers: array<int, string>, records: array<int, array<string, mixed>>}  $p
+     * @return array{inserted: int, updated: int, deleted: int, unchanged: int}
+     */
+    private function reflectTable(ConnectionInterface $connection, string $tableName, array $p, bool $dryRun): array
+    {
+        $primaryKey = $this->getPrimaryKeyColumns($connection, $tableName);
+        if ($primaryKey === [] || array_diff($primaryKey, $p['headers']) !== []) {
+            throw new RuntimeException(
+                "テーブル {$tableName} の主キー（".implode('・', $primaryKey ?: ['なし']).'）がシートにありません。'
+            );
+        }
+        $nullable = $this->getNullableColumns($tableName);
+        $numeric = $this->getNumericColumns($connection, $tableName);
+
+        $existing = [];
+        foreach ($connection->table($tableName)->get() as $row) {
+            $row = (array) $row;
+            $existing[$this->rowKey($row, $primaryKey)] = $row;
+        }
+
+        $toInsert = [];
+        $toDelete = [];
+        $seen = [];
+        $unchanged = 0;
+        $updated = 0;
+        foreach ($p['records'] as $record) {
+            $key = $this->rowKey($record, $primaryKey);
+            if (isset($seen[$key])) {
+                throw new RuntimeException("テーブル {$tableName} の主キーが重複しています: ".str_replace("\0", ':', $key));
+            }
+            $seen[$key] = true;
+
+            if (! isset($existing[$key])) {
+                $toInsert[] = $record;
+
+                continue;
+            }
+            if ($this->sameRow($record, $existing[$key], $nullable, $numeric)) {
+                $unchanged++;
+
+                continue;
+            }
+            // 違う行は DELETE して INSERT（シートに無い列は既定値に戻る）
+            $updated++;
+            $toDelete[] = $existing[$key];
+            $toInsert[] = $record;
+        }
+        foreach ($existing as $key => $row) {
+            if (! isset($seen[$key])) {
+                $toDelete[] = $row;
+            }
+        }
+        $deleted = count($toDelete) - $updated;
+        $inserted = count($toInsert) - $updated;
+
+        if (! $dryRun) {
+            // UNIQUE 制約との衝突を避けるため、DELETE を先に行う
+            $this->deleteRows($connection, $tableName, $primaryKey, $toDelete);
+
+            $now = now()->format('Y-m-d H:i:s');
+            foreach ($toInsert as &$record) {
+                if (in_array('created_at', $p['existingColumns'], true)) {
+                    $record['created_at'] = $now;
+                }
+                if (in_array('updated_at', $p['existingColumns'], true)) {
+                    $record['updated_at'] = $now;
+                }
+            }
+            unset($record);
+            foreach (array_chunk($toInsert, 500) as $chunk) {
+                $connection->table($tableName)->insert($chunk);
+            }
+        }
+
+        return ['inserted' => $inserted, 'updated' => $updated, 'deleted' => $deleted, 'unchanged' => $unchanged];
+    }
+
+    /**
+     * 主キー列（複合も）。SHOW COLUMNS の Key = PRI の順
+     *
+     * @return array<int, string>
+     */
+    private function getPrimaryKeyColumns(ConnectionInterface $connection, string $tableName): array
+    {
+        $columns = [];
+        foreach ($connection->select("SHOW COLUMNS FROM `{$tableName}`") as $row) {
+            if ($row->Key === 'PRI') {
+                $columns[] = $row->Field;
+            }
+        }
+
+        return $columns;
+    }
+
+    /**
+     * 行の鍵。DB の照合順序（大文字小文字を区別しない）に合わせて mb_strtolower で正規化する。
+     * ただし DB の照合順序と完全には一致しない（アクセントの有無を同一視する照合順序や、末尾空白の扱いなど）。
+     * 一致しない場合は、DB 側で同じ主キーとみなされる行を別の行として INSERT し、主キー重複で失敗しうる（ロールバックされる）
+     *
+     * @param  array<string, mixed>  $row
+     * @param  array<int, string>  $primaryKey
+     */
+    private function rowKey(array $row, array $primaryKey): string
+    {
+        $parts = [];
+        foreach ($primaryKey as $column) {
+            $value = $row[$column] ?? '';
+            $parts[] = mb_strtolower(is_scalar($value) ? (string) $value : '');
+        }
+
+        return implode("\0", $parts);
+    }
+
+    /**
+     * シートの行と既存行が同じか。比べるのはシートが持つ列だけ（created_at・updated_at は含まない）
+     *
+     * 数値型の列（int 系・decimal・float など）だけ、数値として比べる（'1.5' と '1.50'、'+1' と 1）。
+     * 桁あふれを避けるため float にせず、10 進の文字列として正規化する。
+     * それ以外の列（VARCHAR・TEXT・日時など）は文字列の厳密比較（'007' と '7'、'1.0' と '1' は違う）。
+     * NULL 可の列では NULL と空文字を同じとみなす。日時の書式差などで「違う」と誤判定しても、余計に更新するだけ（安全側）
+     *
+     * @param  array<string, mixed>  $record
+     * @param  array<string, mixed>  $existing
+     * @param  array<int, string>  $nullable
+     * @param  array<int, string>  $numeric  数値型の列名
+     */
+    private function sameRow(array $record, array $existing, array $nullable, array $numeric): bool
+    {
+        foreach ($record as $column => $value) {
+            if (! array_key_exists($column, $existing)) {
+                return false;
+            }
+            $old = $existing[$column];
+            if (in_array($column, $nullable, true)) {
+                $value = $value === '' ? null : $value;
+                $old = $old === '' ? null : $old;
+            }
+            if ($value === null || $old === null) {
+                if ($value !== $old) {
+                    return false;
+                }
+
+                continue;
+            }
+            if (in_array($column, $numeric, true)) {
+                $a = $this->normalizeForCompare($value);
+                $b = $this->normalizeForCompare($old);
+            } else {
+                $a = is_scalar($value) ? (string) $value : '';
+                $b = is_scalar($old) ? (string) $old : '';
+            }
+            if ($a !== $b) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * 数値型（int 系・decimal・numeric・float・double）の列名
+     *
+     * @return array<int, string>
+     */
+    private function getNumericColumns(ConnectionInterface $connection, string $tableName): array
+    {
+        $columns = [];
+        foreach ($connection->select("SHOW COLUMNS FROM `{$tableName}`") as $row) {
+            if (preg_match('/^(tiny|small|medium|big)?int\b|^(decimal|numeric|float|double)\b/', strtolower((string) $row->Type)) === 1) {
+                $columns[] = $row->Field;
+            }
+        }
+
+        return $columns;
+    }
+
+    private function normalizeForCompare(mixed $value): string
+    {
+        if (is_bool($value)) {
+            return $value ? '1' : '0';
+        }
+        $text = is_scalar($value) ? trim((string) $value) : '';
+        if (preg_match('/^([+-]?)(\d+)(?:\.(\d+))?$/', $text, $m) !== 1) {
+            return (string) (is_scalar($value) ? $value : '');
+        }
+        $int = ltrim($m[2], '0');
+        $frac = rtrim($m[3] ?? '', '0');
+        $number = ($int === '' ? '0' : $int).($frac === '' ? '' : '.'.$frac);
+        $sign = ($m[1] === '-' && $number !== '0') ? '-' : '';
+
+        return '#'.$sign.$number;
+    }
+
+    /**
+     * 主キーで行を DELETE する（200 件ずつ）
+     *
+     * @param  array<int, string>  $primaryKey
+     * @param  array<int, array<string, mixed>>  $rows  既存行
+     */
+    private function deleteRows(ConnectionInterface $connection, string $tableName, array $primaryKey, array $rows): void
+    {
+        foreach (array_chunk($rows, 200) as $chunk) {
+            if (count($primaryKey) === 1) {
+                $connection->table($tableName)->whereIn($primaryKey[0], array_column($chunk, $primaryKey[0]))->delete();
+
+                continue;
+            }
+            $connection->table($tableName)->where(function ($query) use ($chunk, $primaryKey) {
+                foreach ($chunk as $row) {
+                    $query->orWhere(function ($q) use ($row, $primaryKey) {
+                        foreach ($primaryKey as $column) {
+                            $q->where($column, $row[$column]);
+                        }
+                    });
+                }
+            })->delete();
+        }
     }
 
     /**
