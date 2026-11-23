@@ -12,7 +12,7 @@ use Throwable;
  *
  * 既存の register() は MasterImportController 経由の旧経路（廃止は S3-16）。
  * 新しい経路は allocateRealKey()（採番。db.md 3.4）・registerDeploy()（登録 R1〜R4。db.md 3.6）・
- * compensate()（mst のコミット失敗時の補償。sequence.md 5.4）で、MasterDeployRunner（S3-12b）が呼ぶ。
+ * compensate()（mst のコミット失敗時と、sys の COMMIT 失敗＝成否不明のときの補償。sequence.md 5.4）で、MasterDeployRunner（S3-12b）が呼ぶ。
  */
 class MasterDeployService
 {
@@ -74,8 +74,9 @@ class MasterDeployService
      * }  $exportResult
      * @param  int  $deployKey  本物は allocateRealKey() の結果、固定は MasterDeployKeyPolicy::resolveFixedKey() の結果
      * @param  bool  $isFixed  固定キーのモードか
-     * @param  (callable(): void)|null  $beforeCommit  sys のトランザクションの中で、登録の後・COMMIT の前に呼ぶ（Runner が実行記録の phase を commit にする。
-     *                                                 db.md 8 節 M1。例外はトランザクションごとロールバックされ register_failed になる）
+     * @param  (callable(array<string, mixed>): void)|null  $beforeCommit  sys のトランザクションの中で、登録の後・COMMIT の前に呼ぶ（引数は登録の結果。Runner が実行記録の phase を commit にし、
+     *                                                                     COMMIT が成否不明で失敗したときの補償のために結果をメモリに持つ。
+     *                                                                     db.md 8 節 M1。例外はトランザクションごとロールバックされ register_failed になる）
      * @return array{
      *   sys_deploy_master_id: int,
      *   sys_deploy_id: int,
@@ -88,7 +89,7 @@ class MasterDeployService
      * }
      *
      * 注意: sys の COMMIT 自体の失敗は成否不明（sequence.md 5.4）。register_failed を「ロールバック済み」と
-     * 決め打ちせず、Runner（S3-12b）で区別する（previous に元の例外が入る）。
+     * 決め打ちせず、Runner が $beforeCommit を通ったかで区別する（previous に元の例外が入る）。
      *
      * @throws MasterDeployKeyException reserved_key_forbidden・fixed_key_invalid・deploy_key_conflict・register_failed
      */
@@ -109,7 +110,7 @@ class MasterDeployService
                 function () use ($exportResult, $deployKey, $isFixed, $now, $beforeCommit): array {
                     $result = $this->registerInTransaction($exportResult, $deployKey, $isFixed, $now);
                     if ($beforeCommit !== null) {
-                        $beforeCommit();
+                        $beforeCommit($result);
                     }
 
                     return $result;
