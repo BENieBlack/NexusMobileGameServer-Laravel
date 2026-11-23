@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use Illuminate\Database\ConnectionInterface;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use RuntimeException;
@@ -14,9 +16,30 @@ class MasterDataExporter
 {
     private string $outputDir;
 
+    private ?ConnectionInterface $connection = null;
+
     public function __construct()
     {
         $this->outputDir = public_path('masterdata');
+    }
+
+    /**
+     * mst の読み取りに使う接続を差し替えた複製を返す(トランザクション内の接続で読むときに使う)。
+     *
+     * コンストラクタ引数にしないのは、コンテナが ConnectionInterface(= 既定接続)を自動注入し、
+     * 既定で mst ではなく admin を読んでしまうため。省略時は mst 接続。
+     */
+    public function withConnection(ConnectionInterface $connection): static
+    {
+        $clone = clone $this;
+        $clone->connection = $connection;
+
+        return $clone;
+    }
+
+    private function connection(): ConnectionInterface
+    {
+        return $this->connection ?? DB::connection('mst');
     }
 
     /**
@@ -38,10 +61,7 @@ class MasterDataExporter
         $stagingDir = $this->outputDir.'/.tmp_'.uniqid('', true);
         mkdir($stagingDir, 0755, true);
 
-        $tableNames = array_map(
-            static fn ($row) => array_values((array) $row)[0],
-            DB::connection('mst')->select("SHOW TABLES LIKE 'mst_%'")
-        );
+        $tableNames = $this->listTableNames();
         $tableGroupArray = $this->groupTables($tableNames);
         $tableResultArray = [];
 
@@ -84,6 +104,23 @@ class MasterDataExporter
         ];
     }
 
+    /**
+     * mst_% のテーブル名をバイト順（照合順序に依らない）で返す。
+     * SHOW TABLES の返す順は環境で変わりうるため、ここで固定する。
+     *
+     * @return array<int, string>
+     */
+    protected function listTableNames(): array
+    {
+        $tableNames = array_map(
+            static fn ($row) => array_values((array) $row)[0],
+            $this->connection()->select("SHOW TABLES LIKE 'mst_%'")
+        );
+        sort($tableNames, SORT_STRING);
+
+        return $tableNames;
+    }
+
     /** @param array<int, string> $tableNameArray
      * @return array<string, array<int, string>>
      */
@@ -96,6 +133,13 @@ class MasterDataExporter
                 : $tableName;
             $groupTableArray[$groupName][] = $tableName;
         }
+
+        // マニフェストハッシュはグループの並びに依るので、グループ名のバイト順に固定する
+        ksort($groupTableArray, SORT_STRING);
+        foreach ($groupTableArray as &$tableArray) {
+            sort($tableArray, SORT_STRING);
+        }
+        unset($tableArray);
 
         return $groupTableArray;
     }
@@ -113,9 +157,12 @@ class MasterDataExporter
             $sqlite->beginTransaction();
 
             foreach ($tableNameArray as $tableName) {
-                $columns = DB::connection('mst')->select("SHOW COLUMNS FROM `{$tableName}`");
+                $columns = $this->connection()->select("SHOW COLUMNS FROM `{$tableName}`");
                 $sqlite->exec($this->buildCreateTableSql($tableName, $columns));
-                $rowCollection = DB::connection('mst')->table($tableName)->get();
+                $rowCollection = $this->orderByPrimaryKey(
+                    $this->connection()->table($tableName),
+                    $columns
+                )->get();
 
                 if ($rowCollection->isEmpty()) {
                     continue;
@@ -126,6 +173,7 @@ class MasterDataExporter
                 $placeholderSql = implode(', ', array_fill(0, count($columnArray), '?'));
                 $statement = $sqlite->prepare("INSERT INTO `{$tableName}` ({$columnSql}) VALUES ({$placeholderSql})");
 
+                // bigint は列を INTEGER 親和性で作るので、PDO が int で渡した値は整数のまま保存される(キャストは不要)
                 foreach ($rowCollection as $row) {
                     $statement->execute(array_values((array) $row));
                 }
@@ -151,6 +199,35 @@ class MasterDataExporter
             }
             throw new RuntimeException('SQLiteエクスポートに失敗しました: '.$exception->getMessage(), 0, $exception);
         }
+    }
+
+    /**
+     * 行を主キー列(複合も)の昇順で読む。文字列列は BINARY で照合順序に依らない並びにする。
+     * 複合キーは SHOW COLUMNS のテーブル列順(buildCreateTableSql の PRIMARY KEY と同じ)。
+     * 数値列は BINARY にすると文字列順("10" < "9")になるため、そのまま数値順にする。
+     * 主キーが無いテーブルは全列で並べる。
+     *
+     * @param  array<int, object>  $columns
+     */
+    private function orderByPrimaryKey(Builder $query, array $columns): Builder
+    {
+        $keyColumnArray = [];
+        $allColumnArray = [];
+        foreach ($columns as $column) {
+            $column = (array) $column;
+            $allColumnArray[] = $column;
+            if ($column['Key'] === 'PRI') {
+                $keyColumnArray[] = $column;
+            }
+        }
+
+        foreach ($keyColumnArray ?: $allColumnArray as $column) {
+            $name = str_replace('`', '``', $column['Field']);
+            $isNumeric = (bool) preg_match('/^(int|bigint|tinyint|smallint|mediumint|decimal|float|double|numeric)/', strtolower($column['Type']));
+            $query->orderByRaw($isNumeric ? "`{$name}` ASC" : "BINARY `{$name}` ASC");
+        }
+
+        return $query;
     }
 
     /** @param array<int, object> $columns */
