@@ -109,6 +109,13 @@ jobs:
         options: >-
           --health-cmd="mysqladmin ping -h localhost -uroot -proot"
           --health-interval=10s --health-timeout=5s --health-retries=10
+      # MasterCacheKeyContractTest が使う（api のテストジョブと同じ Redis）
+      redis:
+        image: redis:8.4
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s --health-timeout=5s --health-retries=10
 
     env:
       DB_ADMIN_HOST: 127.0.0.1
@@ -127,6 +134,9 @@ jobs:
       DB_MASTER_HOST: 127.0.0.1
       DB_MASTER_PORT: 33070
       DB_MASTER_DATABASE: nexus-testing-tool-master
+      # phpunit.xml の Docker 用ホスト名（redis）を上書きする
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: 6379
 
     steps:
       - uses: actions/checkout@v7
