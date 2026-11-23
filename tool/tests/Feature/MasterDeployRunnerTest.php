@@ -190,7 +190,7 @@ class MasterDeployRunnerTest extends TestCase
         $this->deploy->shouldReceive('registerDeploy')->once()->andReturnUsing(function ($export, $deployKey, $fixed, $now, $beforeCommit) use ($key) {
             // phase = commit は sys の COMMIT の前（登録の後）に入る
             $this->assertSame('register', $this->run1()->phase);
-            $beforeCommit();
+            $beforeCommit($this->registration(true, $key));
             $this->assertSame('commit', $this->run1()->phase);
             $this->assertSame($key, $deployKey);
 
@@ -530,27 +530,28 @@ class MasterDeployRunnerTest extends TestCase
     }
 
     #[Test]
-    public function mstのcommitが失敗したらinconsistentを記録する_補償は12bで(): void
+    public function mstのcommitが失敗したら補償してinconsistentを記録する(): void
     {
         $this->deploy->shouldReceive('allocateRealKey')->andReturn(self::KEY);
         $this->import->shouldReceive('reflect')->andReturn(['connection' => $this->mst, 'tables' => []]);
         $this->exporter->shouldReceive('withConnection')->andReturnSelf();
         $this->exporter->shouldReceive('export')->andReturn($this->exportResult());
         $this->deploy->shouldReceive('registerDeploy')->andReturnUsing(function ($e, $k, $f, $n, $beforeCommit) {
-            $beforeCommit();
+            $beforeCommit($this->registration());
 
             return $this->registration();
         });
         $this->mst->shouldReceive('commit')->andThrow(new RuntimeException('gone away'));
         $this->mst->shouldNotReceive('rollBack');
-        $this->deploy->shouldNotReceive('compensate');
+        $this->deploy->shouldReceive('compensate')->once()->with(31, [30]);
+        $this->invalidator->shouldReceive('invalidate')->once()->withArgs(fn ($tables, $keys, $ids) => $tables === [] && $ids === [31, 30])->andReturn(['invalidated' => true, 'failed_key_list' => []]);
         $this->lock->shouldReceive('release')->once();
 
         $e = $this->catch(fn () => $this->runner()->run());
 
         $this->assertSame('inconsistent', $e->errorCode);
         $this->assertSame(500, $e->httpStatus);
-        $this->assertFalse($e->toArray()['compensated']);
+        $this->assertTrue($e->toArray()['compensated']);
         $this->assertSame('inconsistent', $this->run1()->status);
         $this->assertSame('commit', $this->run1()->phase);
     }

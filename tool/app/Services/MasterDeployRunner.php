@@ -28,9 +28,9 @@ use Throwable;
  *
  * ## S3-12a / S3-12b の境界
  * ここ（12a）は正常系と、COMMIT 前の簡単な失敗（sheet_invalid・deploy_locked・apply/export/register_failed など。mst をロールバックして failed）。
- * 次の PR（S3-12b）が埋めるのは、`handleMstCommitFailure()`（sys 登録後の mst COMMIT 失敗の補償・sys_deploy のキャッシュ破棄・
- * inconsistent の記録）、registerDeploy 内の sys COMMIT 自体の失敗（成否不明）の区別、プロセスが途中で止まった run（5.6）の扱いの確認。
- * 再実行時の全破棄判定（M1。`shouldInvalidateAll`）は流れの一部なので、ここで呼んでいる。
+ * S3-12b で `handleCommitFailure()`（mst の COMMIT 失敗の補償・sys_deploy のキャッシュ破棄・inconsistent の記録。
+ * sys の COMMIT 自体の失敗＝成否不明も、COMMIT の直前に持った登録結果で同じ補償を行い inconsistent にする）を実装した。
+ * プロセスが途中で止まった run（5.6）と再実行時の全破棄判定（M1。`shouldInvalidateAll`）は流れの一部で、テストで固定している。
  */
 class MasterDeployRunner
 {
@@ -208,24 +208,37 @@ class MasterDeployRunner
 
             // register: sys の 1 トランザクション。COMMIT の前に phase を commit にする（M1・sequence.md 2 節の手順 20）
             $this->updateRun($runId, ['phase' => 'register', 'master_hash' => $export['hash']], true);
+            /** @var array<string, mixed>|null $pending COMMIT 直前の登録の結果（成否不明の COMMIT の補償に使う） */
+            $pending = null;
+            $commitStarted = false;
             try {
                 $registration = $this->deployService->registerDeploy(
                     $export,
                     $deployKey,
                     $fixedKey !== null,
                     null,
-                    fn () => $this->updateRun($runId, ['phase' => 'commit'], true),
+                    function (?array $result = null) use ($runId, &$pending, &$commitStarted): void {
+                        $pending = $result;
+                        $this->updateRun($runId, ['phase' => 'commit'], true);
+                        $commitStarted = true; // 以降の失敗は sys の COMMIT 自体の失敗（成否不明）
+                    },
                 );
             } catch (MasterDeployKeyException $e) {
-                // S3-12b: sys の COMMIT 自体の失敗は成否不明。ここでは register_failed を「sys はロールバック済み」として扱う
-                throw $this->fromKeyException($e);
+                if (! $commitStarted || $pending === null) {
+                    // 登録の途中の失敗は sys もロールバック済み（register_failed など）
+                    throw $this->fromKeyException($e);
+                }
+                // sys の COMMIT 自体の失敗は成否不明（5.4 の脚注）。mst は未コミットなので戻し、確定していた場合に備えて補償する
+                $this->rollbackMst($mst);
+                $mst = null;
+                $this->handleCommitFailure($runId, $e->getPrevious() ?? $e, $pending, 'sys');
             }
             // mst の COMMIT（sys は確定済み）。5.4 の窓を広げないよう、この間に実行記録は書かない
             try {
                 $mst->commit();
             } catch (Throwable $e) {
                 $mst = null; // 成否不明の接続は触らない
-                $this->handleMstCommitFailure($runId, $e);
+                $this->handleCommitFailure($runId, $e, $registration, 'mst');
             }
             $mst = null;
 
@@ -505,23 +518,57 @@ class MasterDeployRunner
     }
 
     /**
-     * mst の COMMIT の失敗（sys は登録・COMMIT 済み。sequence.md 5.4）
+     * COMMIT の失敗（成否不明）の後始末（sequence.md 5.4・6 節）
      *
-     * S3-12b で埋める: (1) MasterDeployService::compensate() で sys_deploy を元に戻す（補償の成否を記録）、
-     * (2) sys_deploy の 3 種のキャッシュを forget（補償の有無によらず試みる）、(3) compensated を返す。
-     * 12a は補償をせず、実行記録を inconsistent にして、補償していない旨のエラーを返すだけ（再実行で直る設計。run の phase が commit なので
-     * 次の実行が全表のキャッシュを破棄する）。
+     * - mst の COMMIT 失敗（sys は確定済み）: sys_deploy を元に戻す
+     * - sys の COMMIT 失敗（確定したかは不明。mst は呼び出し側がロールバック済み）: 確定していた場合に備えて同じ補償を行う。
+     *   補償は is_active の更新だけで冪等なので、sys が確定していなかったときは何も変えない
+     * 補償の成否によらず sys_deploy の 3 種のキャッシュ破棄を試み、run を inconsistent にして 500 を返す。
+     * run の phase は commit のままなので、次の実行が全表のキャッシュを破棄する（再実行で直る）。
+     *
+     * 注意: sys の COMMIT が確定していなかったとき、run の sys_deploy_id と summary の sys_deploy_id は実在しない id かもしれない
+     * （確定不明の値。採番だけ進んだ id）。
+     * 注意: sys 接続が切れると GET_LOCK も外れ、補償は排他なしで動く。補償は冪等な is_active の更新だけなので許容する。
+     *
+     * @param  array<string, mixed>  $registration  registerDeploy の結果（activated_deploy_id・previous_active_deploy_ids を使う）
+     * @param  'mst'|'sys'  $failedAt
      *
      * @throws MasterDeployRunException 常に inconsistent
      */
-    protected function handleMstCommitFailure(int $runId, Throwable $e): never
+    protected function handleCommitFailure(int $runId, Throwable $e, array $registration, string $failedAt): never
     {
-        Log::error('mst の COMMIT に失敗（sys は登録済み）', ['exception' => $e, 'run_id' => $runId]);
-        $message = 'sys に登録したあと mst のコミットに失敗しました（補償は行っていません。再実行すると整合します）。';
+        Log::error("{$failedAt} の COMMIT に失敗（成否不明。補償を試みる）", ['exception' => $e, 'run_id' => $runId]);
+
+        $activatedId = (int) $registration['activated_deploy_id'];
+        /** @var list<int> $previousIds */
+        $previousIds = array_values(array_map('intval', (array) $registration['previous_active_deploy_ids']));
+        try {
+            $this->deployService->compensate($activatedId, $previousIds);
+            $compensated = true;
+        } catch (Throwable $compensateError) {
+            $compensated = false;
+            Log::error('sys_deploy の補償に失敗（再実行で直る）', ['exception' => $compensateError, 'run_id' => $runId]);
+        }
+
+        $cache = $this->forgetSysDeploy($registration);
+
+        $message = $compensated
+            ? "{$failedAt} のコミットに失敗しました。sys_deploy は元に戻しました（補償済み）。再実行すると整合します。"
+            : "{$failedAt} のコミットに失敗し、sys_deploy を元に戻すこともできませんでした（補償できず）。再実行すると整合します。";
+        $summary = [
+            'failed_at' => $failedAt,
+            'compensated' => $compensated,
+            'sys_deploy_id' => $activatedId,
+            'previous_active_deploy_ids' => $previousIds,
+            'cache_invalidated' => $cache['invalidated'],
+            'cache_failed_key_list' => $cache['failed_key_list'],
+        ];
         $this->updateRun($runId, [
             'status' => 'inconsistent',
             'error_code' => MasterDeployRunException::INCONSISTENT,
             'error_message' => $message,
+            'sys_deploy_id' => $activatedId,
+            'summary' => $this->encodeSummary($summary),
             'finished_at' => $this->nowString(),
         ], false);
 
@@ -531,9 +578,38 @@ class MasterDeployRunner
             500,
             [],
             null,
-            ['compensated' => false],
+            ['compensated' => $compensated],
             $e,
         );
+    }
+
+    /**
+     * sys_deploy の 3 種（latest_downloadable・deploy_key:{n}・id:{n}）だけを forget する（mst の表は触らない。例外も出さない）
+     *
+     * @param  array<string, mixed>  $registration
+     * @return array{invalidated: bool, failed_key_list: list<string>}
+     */
+    private function forgetSysDeploy(array $registration): array
+    {
+        // メモリにある登録結果だけで 3 種を試みる（sys が落ちていて補償も失敗しているときも forget は試みる。5.4）
+        $idList = [(int) $registration['activated_deploy_id'], ...array_map('intval', (array) $registration['previous_active_deploy_ids'])];
+        $deployKeyList = [(int) $registration['deploy_key']];
+        try {
+            // sys_deploy を読めたときだけ、無効にしていた行の deploy_key を足す（失敗は握る）
+            foreach (DB::connection('sys')->table('sys_deploy')->whereIn('id', $idList)->pluck('deploy_key') as $deployKey) {
+                $deployKeyList[] = (int) $deployKey;
+            }
+        } catch (Throwable $e) {
+            Log::warning('補償時に sys_deploy の deploy_key を読めない（メモリの値だけで forget する）', ['exception' => $e]);
+        }
+
+        try {
+            return $this->invalidator->invalidate([], $deployKeyList, $idList);
+        } catch (Throwable $e) {
+            Log::error('補償時の sys_deploy のキャッシュ破棄に失敗', ['exception' => $e]);
+
+            return ['invalidated' => false, 'failed_key_list' => []];
+        }
     }
 
     /**

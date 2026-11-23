@@ -394,4 +394,38 @@ class MasterDeployServiceTest extends TestCase
         $this->assertSame($before, DB::connection('sys')->table('sys_deploy')->count());
         $this->assertSame(0, DB::connection('sys')->table('sys_deploy_master')->where('hash', 'hash-b')->count());
     }
+
+    #[Test]
+    public function before_commitは登録結果を引数で受け取り_commitの前に呼ばれる(): void
+    {
+        $received = null;
+        $result = $this->service()->registerDeploy($this->export('hash-a'), 2026112301, false, $this->now(), function (array $r) use (&$received): void {
+            $received = $r;
+            // トランザクションの中なので、この時点の登録は同じ接続から見えている
+            $this->assertSame(1, DB::connection('sys')->table('sys_deploy')->where('is_active', true)->count());
+        });
+
+        $this->assertSame($result, $received);
+        $this->assertSame([$result['sys_deploy_id']], $this->activeIds());
+    }
+
+    #[Test]
+    public function before_commitが投げたらsysは全てロールバックされregister_failedになる(): void
+    {
+        $service = $this->service();
+        $a = $service->registerDeploy($this->export('hash-a'), 2026112301, false, $this->now());
+
+        try {
+            $service->registerDeploy($this->export('hash-b'), 2026112302, false, $this->now(), function (array $r): void {
+                throw new \RuntimeException('run を書けない');
+            });
+            $this->fail('MasterDeployKeyException が投げられませんでした');
+        } catch (MasterDeployKeyException $e) {
+            $this->assertSame('register_failed', $e->errorCode);
+        }
+
+        $this->assertSame([$a['sys_deploy_id']], $this->activeIds());
+        $this->assertSame(1, DB::connection('sys')->table('sys_deploy_master')->count());
+        $this->assertSame(1, DB::connection('sys')->table('sys_deploy')->count());
+    }
 }
