@@ -2,20 +2,28 @@
 
 namespace Tests\Feature\Recording;
 
-use Database\Seeders\Recording\RecordingMasterExporter;
+use App\Repositories\Sys\SysDeployRepository;
 use Database\Seeders\Recording\Scenarios\RecordingDeploySeeder;
+use Database\Seeders\Recording\Scenarios\RecordingResetSeeder;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use NexusVersion\Constants\DeployKeyConst;
 use PHPUnit\Framework\Attributes\Test;
 
 /**
- * RecordingDeploySeeder の登録（hash 引き）と RecordingMasterExporter の書き出し規則。
- * 設計: db.md 11.2・6.6。tool の MasterDataExporter と同じ規則（主キー昇順・整数・同じ mst なら同じ hash）。
+ * RecordingDeploySeeder が、build で作られた録画用の版（成果物 7777777777_{hash16} と版の mst DB）を sys に登録する挙動。
+ * 設計: db.md 11.2・sequence.md 7 節（R19。録画用の版は tool の build で作る。シーダーは作らない）。
+ * 版の mst DB は使い捨ての名前（ランダムな hash）で作り、テストの終わりに消す。
  */
 class RecordingDeployRegistrationTest extends RecordingTestCase
 {
     private const KEY = RecordingDeploySeeder::DEPLOY_KEY;
+
+    /** 版の DB・成果物を用意せず db:seed を直接流す（runSeeder は版を自動で用意するので使わない） */
+    private function seedDeployWithoutPreparing(): void
+    {
+        $this->artisan('db:seed', ['--class' => RecordingDeploySeeder::class, '--force' => true])->assertExitCode(0);
+    }
 
     #[Test]
     public function deploy_keyは予約帯の録画用の固定キーである(): void
@@ -27,6 +35,7 @@ class RecordingDeployRegistrationTest extends RecordingTestCase
     #[Test]
     public function 本番では何もせず例外で止まる(): void
     {
+        $this->prepareRecordingVersion();
         $sys = DB::connection('sys');
         $before = $sys->table('sys_deploy')->count();
         $this->app['env'] = 'production';
@@ -38,29 +47,96 @@ class RecordingDeployRegistrationTest extends RecordingTestCase
         } finally {
             $this->app['env'] = 'testing';
             $this->assertSame($before, $sys->table('sys_deploy')->count());
+            $this->assertSame(0, $sys->table('sys_deploy_master')->where('deploy_key', self::KEY)->count());
         }
+    }
+
+    #[Test]
+    public function 成果物が無いときは何も書かずに中止する(): void
+    {
+        $sys = DB::connection('sys');
+        $deployBefore = $sys->table('sys_deploy')->count();
+        $masterBefore = $sys->table('sys_deploy_master')->count();
+
+        $this->seedDeployWithoutPreparing();
+
+        $this->assertSame($deployBefore, $sys->table('sys_deploy')->count());
+        $this->assertSame($masterBefore, $sys->table('sys_deploy_master')->count());
+    }
+
+    #[Test]
+    public function 成果物の出力先のディレクトリ自体が無くても例外にせず中止する(): void
+    {
+        config(['recording.masterdata_dir' => $this->masterDataDir.'/missing']);
+        $before = DB::connection('sys')->table('sys_deploy')->count();
+
+        $this->seedDeployWithoutPreparing();
+
+        $this->assertSame($before, DB::connection('sys')->table('sys_deploy')->count());
     }
 
     #[Test]
     public function 版の_d_bが実在しないときはsysを何も書かずに中止する(): void
     {
-        $this->ensureMasterRows();
+        $this->prepareRecordingVersion(withDatabase: false);
         $sys = DB::connection('sys');
         $deployBefore = $sys->table('sys_deploy')->count();
         $masterBefore = $sys->table('sys_deploy_master')->count();
 
-        // runSeeder は版の DB を先に作るので使わず、db:seed を直接流す（DB は実在しない）。例外ではなく「何もしない」で終わる
-        $this->artisan('db:seed', ['--class' => RecordingDeploySeeder::class, '--force' => true])->assertExitCode(0);
+        $this->seedDeployWithoutPreparing();
 
         $this->assertSame($deployBefore, $sys->table('sys_deploy')->count());
         $this->assertSame($masterBefore, $sys->table('sys_deploy_master')->count());
-        $this->assertSame(0, $sys->table('sys_deploy')->where('deploy_key', self::KEY)->count());
+        $this->assertSame(0, $sys->table('sys_deploy_asset')->where('deploy_key', self::KEY)->count());
     }
 
     #[Test]
-    public function 同じmstなら同じmasterを再利用し_行を増やさず_無効に戻したdeployを有効に戻す(): void
+    public function manifestが壊れている成果物は無視して中止する(): void
     {
-        $this->ensureMasterRows();
+        $version = $this->prepareRecordingVersion();
+        file_put_contents($this->masterDataDir.'/'.$version['dir'].'/manifest.json', '{broken');
+
+        $this->assertNull(RecordingDeploySeeder::findLatestArtifact());
+        $this->seedDeployWithoutPreparing();
+        $this->assertSame(0, DB::connection('sys')->table('sys_deploy')->where('deploy_key', self::KEY)->count());
+    }
+
+    #[Test]
+    public function 版の_d_bがあれば登録し_sysだけ消えた後の再実行でも同じ版を登録し直す(): void
+    {
+        $version = $this->prepareRecordingVersion();
+        $sys = DB::connection('sys');
+
+        $this->runSeeder(RecordingDeploySeeder::class);
+
+        $master = $sys->table('sys_deploy_master')->where('deploy_key', self::KEY)->first();
+        $this->assertNotNull($master);
+        $this->assertSame($version['hash'], $master->hash);
+        $this->assertSame($version['database'], $master->mst_database);
+        $this->assertSame($version['dir'], $master->artifact_dir);
+        $this->assertSame('master_build', $master->deployed_by);
+        $this->assertSame('build', $master->source_kind);
+        $this->assertStringNotContainsString('[REC]', (string) $master->description);
+        $tables = $sys->table('sys_deploy_master_table')->where('sys_deploy_master_id', $master->id)->pluck('public_url', 'table_name');
+        $this->assertSame(['mst_config', 'mst_player_level'], $tables->keys()->sort()->values()->all());
+        $this->assertStringStartsWith('/masterdata/'.$version['dir'].'/', $tables['mst_config']);
+        $deploy = $sys->table('sys_deploy')->where('deploy_key', self::KEY)->first();
+        $this->assertTrue((bool) $deploy->is_active);
+        $this->assertSame($master->id, $deploy->sys_deploy_master_id);
+
+        // sys だけが消えた状態（版の DB と成果物は残る）→ 流し直すと同じ版が登録される
+        (new RecordingResetSeeder)->run();
+        $sys->table('sys_deploy')->where('deploy_key', self::KEY)->delete();
+        $this->prepareRecordingVersion($version['hash']);
+        $this->runSeeder(RecordingDeploySeeder::class);
+        $again = $sys->table('sys_deploy_master')->where('deploy_key', self::KEY)->first();
+        $this->assertSame($version['hash'], $again->hash);
+    }
+
+    #[Test]
+    public function build_が作った行があれば_masterを再利用し_行を増やさず_無効に戻したdeployを有効に戻す(): void
+    {
+        $this->prepareRecordingVersion();
         $sys = DB::connection('sys');
 
         $this->runSeeder(RecordingDeploySeeder::class);
@@ -74,52 +150,95 @@ class RecordingDeployRegistrationTest extends RecordingTestCase
         $this->assertCount(1, $rows);
         $this->assertSame($first->id, $rows[0]->id);
         $this->assertSame(1, (int) $rows[0]->is_active);
-        $this->assertSame(1, $sys->table('sys_deploy_master')->where('description', 'like', '[REC]%')->count());
+        $this->assertSame(1, $sys->table('sys_deploy_master')->where('deploy_key', self::KEY)->count());
+        $this->assertSame(1, $sys->table('sys_deploy_asset')->where('deploy_key', self::KEY)->count());
     }
 
     #[Test]
-    public function mstが変わると新しい行で入り_古い同じキーのdeployは無効になり_他のキーは触らない(): void
+    public function 成果物が複数あるときはbuilt_atが最新のものを使う(): void
     {
-        $this->ensureMasterRows();
+        $old = $this->prepareRecordingVersion(builtAt: '2026-11-20 00:00:00');
+        $new = $this->prepareRecordingVersion(builtAt: '2026-11-24 12:00:00');
+        $older = $this->prepareRecordingVersion(builtAt: '2026-11-01 00:00:00');
+
+        $this->assertSame($new['dir'], RecordingDeploySeeder::findLatestArtifact()['dir'] ?? null);
+
+        $this->seedDeployWithoutPreparing();
+
+        $this->assertSame([$new['hash']], DB::connection('sys')->table('sys_deploy_master')->where('deploy_key', self::KEY)->pluck('hash')->all());
+        $this->assertNotSame($old['hash'], $new['hash']);
+        $this->assertNotSame($older['hash'], $new['hash']);
+    }
+
+    #[Test]
+    public function 最新の成果物の版のdbが無ければ古い版にはフォールバックせず中止する(): void
+    {
+        $this->prepareRecordingVersion(builtAt: '2026-11-20 00:00:00');
+        $this->prepareRecordingVersion(builtAt: '2026-11-24 12:00:00', withDatabase: false);
+
+        $this->seedDeployWithoutPreparing();
+
+        $this->assertSame(0, DB::connection('sys')->table('sys_deploy_master')->where('deploy_key', self::KEY)->count());
+    }
+
+    #[Test]
+    public function start_atが未来の予約済みデプロイがあれば何もしない(): void
+    {
+        $this->prepareRecordingVersion();
         $sys = DB::connection('sys');
+        $sys->table('sys_deploy')->insert([
+            'deploy_key' => 2026112201, 'start_at' => '2999-01-01 00:00:00',
+            'sys_deploy_master_id' => 1, 'sys_deploy_asset_id' => 1, 'is_active' => true,
+        ]);
+
+        $this->seedDeployWithoutPreparing();
+
+        $this->assertSame(0, $sys->table('sys_deploy')->where('deploy_key', self::KEY)->count());
+        $this->assertSame(0, $sys->table('sys_deploy_master')->where('deploy_key', self::KEY)->count());
+
+        $this->runSeeder(RecordingResetSeeder::class);
+        $this->assertSame(1, $sys->table('sys_deploy')->where('deploy_key', 2026112201)->where('is_active', true)->count());
+    }
+
+    #[Test]
+    public function リセットは録画用のキーの行と成果物を消し_版の_d_bと他の成果物は残す(): void
+    {
+        $version = $this->prepareRecordingVersion();
+        $sys = DB::connection('sys');
+        $other = $this->masterDataDir.'/'.str_repeat('b', 64);
+        mkdir($other, 0755, true);
         $sys->table('sys_deploy')->insert([
             'deploy_key' => 2026112201, 'start_at' => '2020-01-01 00:00:00',
             'sys_deploy_master_id' => 1, 'sys_deploy_asset_id' => 1, 'is_active' => true,
         ]);
-
-        DB::connection('mst')->table('mst_config')->where('id', 'test')->update(['updated_at' => '2026-01-01 00:00:00']);
         $this->runSeeder(RecordingDeploySeeder::class);
-        $oldId = (int) $sys->table('sys_deploy')->where('deploy_key', self::KEY)->value('id');
+        $masterId = $sys->table('sys_deploy_master')->where('deploy_key', self::KEY)->value('id');
 
-        // updated_at は ON UPDATE CURRENT_TIMESTAMP なので固定する（秒をまたぐと hash が変わり、元の内容に戻せなくなる）
-        DB::connection('mst')->table('mst_config')->where('id', 'test')->update(['value' => '2', 'updated_at' => '2026-01-01 00:00:00']);
-        $this->runSeeder(RecordingDeploySeeder::class);
+        $this->runSeeder(RecordingResetSeeder::class);
+        $this->runSeeder(RecordingResetSeeder::class);
 
-        $rows = $sys->table('sys_deploy')->where('deploy_key', self::KEY)->orderBy('id')->get();
-        $this->assertCount(2, $rows);
-        $this->assertSame($oldId, (int) $rows[0]->id);
-        $this->assertSame(0, (int) $rows[0]->is_active);
-        $this->assertSame(1, (int) $rows[1]->is_active);
-        $this->assertNotSame($rows[0]->sys_deploy_master_id, $rows[1]->sys_deploy_master_id);
-        $this->assertSame(1, (int) $sys->table('sys_deploy')->where('deploy_key', 2026112201)->value('is_active'));
-
-        // 元の内容に戻すと、古い行を有効に戻す（新しい行を作らない）
-        DB::connection('mst')->table('mst_config')->where('id', 'test')->update(['value' => '1', 'updated_at' => '2026-01-01 00:00:00']);
-        $this->runSeeder(RecordingDeploySeeder::class);
-        $rows = $sys->table('sys_deploy')->where('deploy_key', self::KEY)->orderBy('id')->get();
-        $this->assertCount(2, $rows);
-        $this->assertSame([1, 0], [(int) $rows[0]->is_active, (int) $rows[1]->is_active]);
+        $this->assertSame(0, $sys->table('sys_deploy')->where('deploy_key', self::KEY)->count());
+        $this->assertSame(0, $sys->table('sys_deploy_master')->where('deploy_key', self::KEY)->count());
+        $this->assertSame(0, $sys->table('sys_deploy_asset')->where('deploy_key', self::KEY)->count());
+        $this->assertSame(0, $sys->table('sys_deploy_master_table')->where('sys_deploy_master_id', $masterId)->count());
+        $this->assertDirectoryDoesNotExist($this->masterDataDir.'/'.$version['dir']);
+        $this->assertDirectoryExists($other);
+        $this->assertSame(1, $sys->table('sys_deploy')->where('deploy_key', 2026112201)->count());
+        // 版の DB は消さない（db.md 4.6 の掃除に任せる）
+        $exists = $this->ddlConnection()->select('SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = ?', [$version['database']]);
+        $this->assertCount(1, $exists);
     }
 
     #[Test]
-    public function キャッシュはlatestとdeploy_keyとidを破棄する(): void
+    public function キャッシュはscheduleと旧キーとdeploy_keyとidを破棄する(): void
     {
-        $this->ensureMasterRows();
+        $this->prepareRecordingVersion();
         $redis = Cache::store('redis');
         $this->runSeeder(RecordingDeploySeeder::class);
         $id = (int) DB::connection('sys')->table('sys_deploy')->where('deploy_key', self::KEY)->value('id');
 
-        $keys = ['sys:sys_deploy:latest_downloadable', 'sys:sys_deploy:deploy_key:'.self::KEY, 'sys:sys_deploy:id:'.$id];
+        $repository = app(SysDeployRepository::class);
+        $keys = [$repository->scheduleCacheKey(), $repository->legacyLatestDownloadableCacheKey(), 'sys:sys_deploy:deploy_key:'.self::KEY, 'sys:sys_deploy:id:'.$id];
         foreach ($keys as $key) {
             $redis->put($key, 'stale', 600);
         }
@@ -132,40 +251,76 @@ class RecordingDeployRegistrationTest extends RecordingTestCase
     }
 
     #[Test]
-    public function 書き出しは主キー昇順で_bigintは整数で_同じmstなら同じhashになる(): void
+    public function 登録した配信ファイルの一覧とassetはbuildと同じ形になる(): void
     {
-        $mst = DB::connection('mst');
-        $mst->table('mst_config')->delete();
-        $row = static fn (string $id, int $key): array => [
-            'deploy_key' => $key, 'id' => $id, 'value' => 'v', 'value_type' => 'string', 'description' => 'd',
-            'created_at' => '2026-01-01 00:00:00', 'updated_at' => '2026-01-01 00:00:00',
-        ];
-        // 挿入順をばらす。BINARY 昇順は B < Z < a < c（照合順序に依ると a < B < c < Z）
-        $mst->table('mst_config')->insert([$row('c', 9999999999), $row('a', 2026010101), $row('Z', 1), $row('B', 2)]);
+        $version = $this->prepareRecordingVersion();
+        $sys = DB::connection('sys');
 
-        $first = (new RecordingMasterExporter($this->masterDataDir))->export(['mst_config']);
-        $second = (new RecordingMasterExporter($this->masterDataDir))->export(['mst_config']);
+        $this->runSeeder(RecordingDeploySeeder::class);
 
-        $this->assertSame($first['hash'], $second['hash']);
-        $this->assertSame($first['tables']['mst_config']['hash'], $second['tables']['mst_config']['hash']);
+        $masterId = $sys->table('sys_deploy_master')->where('deploy_key', self::KEY)->value('id');
+        $rows = $sys->table('sys_deploy_master_table')->where('sys_deploy_master_id', $masterId)->get()->keyBy('table_name');
+        $this->assertSame(['mst_config', 'mst_player_level'], $rows->keys()->sort()->values()->all());
+        foreach ($rows as $name => $row) {
+            $this->assertSame('/masterdata/'.$version['dir'].'/'.$row->file_name, $row->public_url);
+            $this->assertStringStartsWith($name.'_', $row->file_name);
+            $this->assertSame(1, (int) $row->file_size);
+        }
+        $asset = $sys->table('sys_deploy_asset')->where('deploy_key', self::KEY)->first();
+        $this->assertSame('master_build', $asset->deployed_by);
+        $this->assertSame($version['hash'], $asset->hash);
+    }
 
-        $table = $first['tables']['mst_config'];
-        $this->assertSame('mst_config_'.$table['hash'].'.sqlite', $table['file_name']);
-        $this->assertSame('/masterdata/'.$first['hash'].'/'.$table['file_name'], $table['public_url']);
-        $this->assertSame(hash('sha256', json_encode(['mst_config' => $table['hash']])), $first['hash']);
+    #[Test]
+    public function 掃除済みの印や別の_d_b名の行を再利用するときは実在確認した版の_d_bに揃える(): void
+    {
+        $version = $this->prepareRecordingVersion();
+        $sys = DB::connection('sys');
+        $this->runSeeder(RecordingDeploySeeder::class);
+        $sys->table('sys_deploy_master')->where('deploy_key', self::KEY)->update(['mst_dropped_at' => '2026-11-01 00:00:00', 'mst_database' => 'other-db']);
 
-        $sqlite = new \PDO('sqlite:'.$this->masterDataDir.'/'.$first['hash'].'/'.$table['file_name']);
-        $this->assertSame(['B', 'Z', 'a', 'c'], $sqlite->query('SELECT id FROM mst_config ORDER BY rowid')->fetchAll(\PDO::FETCH_COLUMN));
-        $this->assertSame(
-            ['deploy_key', 'id', 'value', 'value_type', 'description', 'created_at', 'updated_at'],
-            array_column($sqlite->query('PRAGMA table_info(mst_config)')->fetchAll(\PDO::FETCH_ASSOC), 'name'),
-        );
-        $this->assertSame('integer', $sqlite->query("SELECT typeof(deploy_key) FROM mst_config WHERE id = 'c'")->fetchColumn());
-        $this->assertEquals(9999999999, $sqlite->query("SELECT deploy_key FROM mst_config WHERE id = 'c'")->fetchColumn());
+        $this->runSeeder(RecordingDeploySeeder::class);
 
-        // 内容が変わればハッシュが変わる
-        $mst->table('mst_config')->where('id', 'a')->update(['value' => 'changed']);
-        $third = (new RecordingMasterExporter($this->masterDataDir))->export(['mst_config']);
-        $this->assertNotSame($first['hash'], $third['hash']);
+        $master = $sys->table('sys_deploy_master')->where('deploy_key', self::KEY)->first();
+        $this->assertNull($master->mst_dropped_at);
+        $this->assertSame($version['database'], $master->mst_database);
+    }
+
+    #[Test]
+    public function シンボリックリンクの成果物は無視し_リセットは中身を辿らない(): void
+    {
+        $target = sys_get_temp_dir().'/recording_link_target_'.uniqid('', true);
+        mkdir($target, 0755, true);
+        file_put_contents($target.'/keep.txt', 'x');
+        $link = $this->masterDataDir.'/'.self::KEY.'_'.str_repeat('a', 16);
+        symlink($target, $link);
+
+        try {
+            $this->assertSame([], RecordingDeploySeeder::artifactDirNames());
+            $this->runSeeder(RecordingResetSeeder::class);
+            $this->assertFileExists($target.'/keep.txt');
+        } finally {
+            @unlink($link);
+            @unlink($target.'/keep.txt');
+            @rmdir($target);
+        }
+    }
+
+    #[Test]
+    public function リセットで残したmasterの成果物は消さない(): void
+    {
+        $version = $this->prepareRecordingVersion();
+        $sys = DB::connection('sys');
+        $this->runSeeder(RecordingDeploySeeder::class);
+        $masterId = $sys->table('sys_deploy_master')->where('deploy_key', self::KEY)->value('id');
+        $sys->table('sys_deploy')->insert([
+            'deploy_key' => 2026112201, 'start_at' => '2020-01-01 00:00:00',
+            'sys_deploy_master_id' => $masterId, 'sys_deploy_asset_id' => 1, 'is_active' => true,
+        ]);
+
+        $this->runSeeder(RecordingResetSeeder::class);
+
+        $this->assertSame(1, $sys->table('sys_deploy_master')->where('id', $masterId)->count());
+        $this->assertDirectoryExists($this->masterDataDir.'/'.$version['dir']);
     }
 }

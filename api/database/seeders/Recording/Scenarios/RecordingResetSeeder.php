@@ -2,7 +2,6 @@
 
 namespace Database\Seeders\Recording\Scenarios;
 
-use Database\Seeders\Recording\RecordingMasterExporter;
 use Database\Seeders\Recording\RecordingScenarioSeeder;
 use Illuminate\Support\Facades\DB;
 use Nexus\Core\Models\Mst\_BaseMst;
@@ -14,7 +13,9 @@ use Nexus\Core\Utilities\ClockUtility;
  * 目的: 動画用に入れたものを元に戻す。既定の一覧には入れない。
  * 1. マーカー付きの規約（version が `rec-` で始まる）を削除する
  * 2. マーカー付きのメンテナンス（title が `[REC]` で始まる）を削除する（解除を含む）
- * 3. マーカー付きのデプロイ（description が `[REC]` で始まる。配信ファイルの一覧と SQLite のディレクトリを含む）を削除する
+ * 3. 録画用のデプロイ（deploy_key = 7777777777 の sys_deploy・sys_deploy_master・sys_deploy_asset・配信ファイルの一覧と、
+ *    成果物 `7777777777_*`）を削除する。build で作った行には `[REC]` が付かないので deploy_key で引く（仮置き。db.md 11.2）。
+ *    版の mst DB は消さない（db.md 4.6 の掃除に任せる）
  * 4. daily_login を有効に戻す（無効化シナリオの後始末）
  * 5. メンテナンス・デプロイのキャッシュを消す（即時に反映するため）
  *
@@ -25,8 +26,8 @@ use Nexus\Core\Utilities\ClockUtility;
  * それ以外のマーカーの無い行は消さない（運営・基本シードのデータは残る）。
  * 同意済みの記録（trx_agreement）は触らない。規約を消した後は孤立した記録が残るが、
  * 次に同じ version を入れ直しても ID が変わるため、新規ユーザーの撮影には影響しない。
- * 本物のデプロイが無い環境では、デプロイを消すと version API が失敗する。
- * 本物のデプロイの配信ファイル（別のマニフェストハッシュのディレクトリ）と is_active は触らない。
+ * 本物のデプロイが無い環境では、デプロイを消すと version API が失敗する。sys_deploy を消すと前の版が最新に戻る。
+ * 本物のデプロイ（別の deploy_key）の行・成果物・is_active は触らない。
  */
 class RecordingResetSeeder extends RecordingScenarioSeeder
 {
@@ -42,7 +43,7 @@ class RecordingResetSeeder extends RecordingScenarioSeeder
             ->where('title', 'like', self::MAINTENANCE_TITLE_PREFIX.'%')
             ->delete();
 
-        $deletedDeployIds = $this->deleteMarkedDeploys();
+        $deletedDeployIds = $this->deleteRecordingDeploys();
 
         // 無効化していなくても害は無い（有効のままにするだけ）。行が無ければ何も起きない
         _BaseMst::allowWrites(function (): void {
@@ -57,42 +58,62 @@ class RecordingResetSeeder extends RecordingScenarioSeeder
     }
 
     /**
-     * マーカー付きの master / asset と、それを指す sys_deploy・配信ファイルの一覧・SQLite を削除する。
+     * 録画用（deploy_key = 7777777777）の sys_deploy・sys_deploy_master・sys_deploy_asset・配信ファイルの一覧と、
+     * 成果物 `7777777777_*` を削除する（仮置き。db.md 11.2。build の行には `[REC]` が付かないので deploy_key で引く）。
+     * 版の mst DB は消さない（db.md 4.6 の掃除に任せる）。sys_deploy を消すと前の版が最新に戻る。
      * sys_deploy は外部キーが無いので、先に ID を控えてから消す。
-     * 旧版の録画用デプロイ（deploy_key が違う）も description のマーカーで拾う。
+     * 別のキーの sys_deploy が指している master / asset は、録画用のキーでも消さない（外部キーが無く、共有されうる）。
      *
      * @return list<int> 消した sys_deploy.id（キャッシュの破棄用）
      */
-    private function deleteMarkedDeploys(): array
+    private function deleteRecordingDeploys(): array
     {
         $sys = DB::connection('sys');
-        $like = self::DEPLOY_DESCRIPTION_PREFIX.'%';
+        $key = RecordingDeploySeeder::DEPLOY_KEY;
+        $realDeploys = $sys->table('sys_deploy')->where('deploy_key', '!=', $key);
 
-        // 録画用の sys_deploy（今の deploy_key と、旧版の 190001010）。これ以外の行は本物として消さない
-        $recordingKeys = [RecordingDeploySeeder::DEPLOY_KEY, 190001010];
-        $realDeploys = $sys->table('sys_deploy')->whereNotIn('deploy_key', $recordingKeys);
-
-        // 本物の sys_deploy が指している master / asset は、マーカー付きでも消さない（外部キーが無く、共有されうる）
-        $masterIds = $sys->table('sys_deploy_master')->where('description', 'like', $like)
+        $masterIds = $sys->table('sys_deploy_master')->where('deploy_key', $key)
             ->whereNotIn('id', (clone $realDeploys)->select('sys_deploy_master_id'))->pluck('id')->all();
-        $assetIds = $sys->table('sys_deploy_asset')->where('description', 'like', $like)
+        $assetIds = $sys->table('sys_deploy_asset')->where('deploy_key', $key)
             ->whereNotIn('id', (clone $realDeploys)->select('sys_deploy_asset_id'))->pluck('id')->all();
 
-        // SQLite のディレクトリ名は master の hash（マニフェストハッシュ）。出力先が無い環境では何もしない
-        $exporter = new RecordingMasterExporter(RecordingDeploySeeder::masterDataDir());
-        foreach ($sys->table('sys_deploy_master')->whereIn('id', $masterIds)->pluck('hash') as $hash) {
-            $exporter->deleteDeployment((string) $hash);
-        }
+        // 残した master の成果物は消さない（別キーの版が指しているため）
+        $keptArtifactDirs = $sys->table('sys_deploy_master')->where('deploy_key', $key)
+            ->whereNotIn('id', $masterIds)->pluck('artifact_dir')->filter()->all();
 
-        $deployQuery = $sys->table('sys_deploy')
-            ->whereIn('deploy_key', $recordingKeys)
-            ->where(fn ($q) => $q->whereIn('sys_deploy_master_id', $masterIds)->orWhereIn('sys_deploy_asset_id', $assetIds));
+        $deployQuery = $sys->table('sys_deploy')->where('deploy_key', $key);
         $deletedDeployIds = array_map('intval', (clone $deployQuery)->pluck('id')->all());
         $deployQuery->delete();
         $sys->table('sys_deploy_master_table')->whereIn('sys_deploy_master_id', $masterIds)->delete();
         $sys->table('sys_deploy_master')->whereIn('id', $masterIds)->delete();
         $sys->table('sys_deploy_asset')->whereIn('id', $assetIds)->delete();
 
+        // 成果物。ディレクトリが無い環境では何もしない
+        foreach (RecordingDeploySeeder::artifactDirNames() as $dir) {
+            if (in_array($dir, $keptArtifactDirs, true)) {
+                continue;
+            }
+            $this->removeDirectory(RecordingDeploySeeder::masterDataDir().'/'.$dir);
+        }
+
         return $deletedDeployIds;
+    }
+
+    private function removeDirectory(string $dir): void
+    {
+        // シンボリックリンクは中身を辿らず、リンクだけ除く
+        if (is_link($dir)) {
+            @unlink($dir);
+
+            return;
+        }
+        foreach (scandir($dir) ?: [] as $entry) {
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
+            $path = $dir.'/'.$entry;
+            is_dir($path) && ! is_link($path) ? $this->removeDirectory($path) : @unlink($path);
+        }
+        @rmdir($dir);
     }
 }

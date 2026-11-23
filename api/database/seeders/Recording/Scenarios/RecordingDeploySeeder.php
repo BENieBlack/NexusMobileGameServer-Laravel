@@ -2,9 +2,6 @@
 
 namespace Database\Seeders\Recording\Scenarios;
 
-use Database\Seeders\MstConfigSeeder;
-use Database\Seeders\MstPlayerLevelSeeder;
-use Database\Seeders\Recording\RecordingMasterExporter;
 use Database\Seeders\Recording\RecordingScenarioSeeder;
 use Illuminate\Support\Facades\DB;
 use Nexus\Core\Utilities\ClockUtility;
@@ -13,57 +10,31 @@ use NexusVersion\Constants\DeployKeyConst;
 /**
  * RecordingDeploySeeder
  *
- * 目的: 動画撮影用のデプロイを用意する。次の 2 つを満たす。
- * 1. sys_deploy が空でも version API（GET /api/auth/version）が成功する。有効かつ start_at を過ぎた
- *    sys_deploy が 1 件も無いと SystemDataException（299）になり、タイトル画面の最初で止まる。
- * 2. 配信ファイルとして `mst_player_level`（スタミナ最大値）と `mst_config`（回復間隔）を取得できる。
- *    home-player-info のマスター差分・スタミナ表示を撮るために必要。
+ * 目的: 運営ツールの build（`MASTER_DEPLOY_FIXED_KEY=7777777777`）が作った録画用の版を、sys に登録し直す。
+ * 設計: docs/design/master-distribution/db.md 11.2・3.5、sequence.md 7 節（R19。人の決定。2026-11-24）。
  *
- * 配信するのは mst の全 `mst_*` テーブル（運営ツールの書き出しと同じ範囲）。2 テーブルだけにしないのは、
- * クライアントが更新 DB を「配信されたテーブルだけ」で組み、必須テーブル（mst_gacha・mst_unit・mst_equipment）が
- * 欠けると切り替えに失敗し、配信されないテーブルは同梱マスターで補われず空になるため
- * （master_data/data/local/master_database.gd の open_downloaded）。
+ * このシーダーは版の DB も成果物（配信 SQLite・manifest.json）も作らない。作るのは tool の build
+ * （MasterBuildRunner。`php artisan master:build`）で、シートを使える環境だけ。CI・`make seed` では録画用の版を作らない。
+ * シーダーの出番は、`make migrate-fresh` などで sys だけが消え、版の DB と成果物が残ったときの登録のやり直し
+ * （build も start_at 省略で sys に登録するので、通常は build だけで最新になる）。
  *
- * 作るもの: sys_deploy / sys_deploy_master / sys_deploy_asset 各 1 行と、sys_deploy_master_table
- * （mst のテーブルグループごとに 1 行。mst_player_level・mst_config を必ず含む）。
- * SQLite は RecordingMasterExporter が mst DB の現在の行から書き出し、
- * config('recording.masterdata_dir')（tool-web が配信する tool/public/masterdata を api-php にマウントした先）
- * の `{マニフェストハッシュ}/` に置く。mst の両テーブルが空なら、先に MstPlayerLevelSeeder・MstConfigSeeder で入れる
- * （行があるときは触らない。これらは truncate するため。mst_player_level は string の id を持ち、
- * MstPlayerLevelSeeder が MstPlayerLevel::makeId で作る）。
+ * 流れ（sequence.md 7 節）:
+ * 1. 本番（APP_ENV=production）なら何もせず例外（予約帯。DeployKeyConst::RESERVED_FLOOR）。
+ * 2. start_at が現在より後の sys_deploy（予約済みの版）があれば何もせず理由を表示する（仮置き。予約の版が start_at に
+ *    達すると最新が入れ替わり、録画用が黙って無効になるため）。
+ * 3. 成果物 `7777777777_{hash16}`（config('recording.masterdata_dir') の下。manifest.json があるもの）を探す。
+ *    複数あれば manifest.json の built_at が最新のものを使う（仮置き）。無ければ中止して理由を表示する。
+ * 4. 版の DB（{基底 DB}-7777777777-{hash 先頭 16 文字}）が実在しなければ、sys を何も書かずに中止して理由を表示する
+ *    （実体の無い版が最新になると全 API が壊れるため。例外にはしない。CI・make seed を失敗にしないため）。
+ * 5. 同じ (deploy_key, hash) の sys_deploy_master があれば再利用し、無ければ build と同じ形で入れる。sys_deploy は
+ *    start_at = 現在で有効にする（同じ master を指す行があればそれを有効に戻して start_at を現在にし、無ければ新しい行）。
  *
- * deploy_key は予約キー（DEPLOY_KEY = 7777777777）。version API は start_at が現在以前の有効なデプロイのうち
- * start_at が最も新しいものを最新とする（同値は deploy_key 降順 → id 降順。deploy_key の大小では決まらない。
- * 設計: db.md 3.3・11.2）。録画用は start_at = 現在で登録するので、本物があっても録画用が最新になる。
- * start_at が未来の行（予約済みの版）がある環境では、その版が start_at に達すると最新が入れ替わり録画用が
- * 黙って無効になるので、何も追加しない（理由を表示する）。
- * 追加した場合は、録画用が最新になり、その間は本物のデプロイの配信ファイルが master.tables に出ない
- * （録画用の配信ファイルだけになる）。
+ * 録画用は start_at = 現在で登録すれば最新になる（deploy_key の大小は効かない。db.md 3.3）。
+ * 録画用の後に本物の build（start_at = 現在）が走ると録画用は黙って無効になる（build に予約を見る保護は無い）。
+ * 運用は「本物の版の登録の後に、録画用を build する」。元に戻すには RecordingResetSeeder。
  *
- * 暫定（db.md 11.2。R19 の細部が決まるまで）: sys_deploy_master の mst_database は版の DB 名の形
- * （{基底 DB}-7777777777-{hash 先頭 16 文字}）。このシーダーは実体の DB を作らず、その DB が実在しないときは
- * sys_deploy を何も書かずに理由を表示して中止する（実体の無い版が最新になると全 API が壊れるため。
- * 例外ではなく「何もしない」と同じ扱い）。DB を先に用意した環境でだけ登録される。artifact_dir も名前だけで、配信ファイルの実際のディレクトリは
- * 従来どおりマニフェストハッシュ（RecordingMasterExporter）。
- * 既存のデプロイの is_active は変えない。元に戻すには RecordingResetSeeder。
- * sys_deploy_master の deploy_date は 1900-01-01 で、運営ツールの連番（今日の deploy_date の件数）を増やさない。
- * シートを使える環境では、このシーダーを流さず運営ツールの経路（MASTER_DEPLOY_FIXED_KEY=7777777777 で
- * 画面か `php artisan master:deploy`）で行う。流すと、mst の今の行を別の hash で登録しうる。
- *
- * 使うケース（client_design.md 7節）: 1〜15 すべての前提（version API を通す）。
- * ケース 14（未取得の版の取得）は、このデプロイが配信ファイルを持つので、クライアントを同梱の版のまま
- * 起動すれば撮れる。
- *
- * 冪等性: 登録は (deploy_key, hash) で引く。同じ hash の master があれば再利用して sys_deploy を有効に戻し、無ければ新しい行
- * （新しい sys_deploy.id）。同じキーの古い sys_deploy は is_active=false にし、他のキーの行は触らない。
- * 同じ mst なら何度流しても行は増えない。mst が変われば新しい hash の行が増え、古い行と配信ファイルは
- * 無効なまま残る（RecordingResetSeeder が消す）。
- * 本番: APP_ENV=production なら何もせず例外（予約帯。DeployKeyConst::RESERVED_FLOOR）。
- * 副作用: start_at が未来の sys_deploy があれば何もしない。
- * 追加する行は description が `[REC]` で始まり、RecordingResetSeeder が行とファイルを消す。
- * キャッシュ: 最新デプロイ・deploy_key・sys_deploy.id は Redis に最大 1 時間キャッシュされるため、追加後に消して即時に反映する。
- *
- * @throws \RuntimeException 配信ファイルの出力先が無いとき
+ * 冪等性: 何度流しても行は増えない（master・asset は (deploy_key, hash) で引く）。
+ * 副作用: 他のキーの行は触らない。キャッシュ（schedule キー・deploy_key・sys_deploy.id）は登録後に消して即時に反映する。
  */
 class RecordingDeploySeeder extends RecordingScenarioSeeder
 {
@@ -74,8 +45,8 @@ class RecordingDeploySeeder extends RecordingScenarioSeeder
      */
     public const DEPLOY_KEY = DeployKeyConst::FIXED_KEY_RECORDING;
 
-    /** 配信に必ず含めるテーブルグループ（親テーブル名）。home-player-info のスタミナ最大値と回復間隔 */
-    public const REQUIRED_GROUPS = ['mst_player_level', 'mst_config'];
+    /** 成果物のディレクトリ名 `{deploy_key}_{hash の先頭 16 文字}`（tool の MasterArtifactStore::DIR_PATTERN と同じ形。録画用のキーに絞る） */
+    private const ARTIFACT_DIR_PATTERN = '/^'.self::DEPLOY_KEY.'_[0-9a-f]{16}$/D';
 
     /**
      * 本番（APP_ENV=production）では、予約帯の行を作らないよう、環境ガードより先に何もせず例外で止める。
@@ -96,82 +67,90 @@ class RecordingDeploySeeder extends RecordingScenarioSeeder
     {
         $now = ClockUtility::nowToString();
 
-        if ($this->hasDeployThatShouldNotBeOverridden($now)) {
-            $this->report('start_at が未来のデプロイ（予約済みの版）があるため、録画用のデプロイは追加しません（予約の版が start_at に達すると録画用が無効になるため）。');
+        if ($this->hasReservedDeploy($now)) {
+            $this->report('start_at が未来のデプロイ（予約済みの版）があるため、録画用のデプロイは登録しません（予約の版が start_at に達すると録画用が無効になるため）。');
 
             return;
         }
 
-        $this->ensureMasterRows();
+        $artifact = self::findLatestArtifact();
+        if ($artifact === null) {
+            $this->report('録画用の成果物（'.self::masterDataDir().'/'.self::DEPLOY_KEY.'_*/manifest.json）が無いため、録画用のデプロイは登録しません。'
+                .'シートを使える環境で MASTER_DEPLOY_FIXED_KEY='.self::DEPLOY_KEY.' の build（php artisan master:build）を行ってください（本物の版の登録の後）。');
 
-        $exported = (new RecordingMasterExporter(self::masterDataDir()))->export($this->masterGroups());
+            return;
+        }
 
-        // 版の DB の実体が無ければ、sys_deploy を何も書かずに中止する。実体の無い版が最新になると、
-        // ミドルウェアが存在しない DB に切り替えて全 API が 500 になるため（録画用の版の DB の作り方が未決。db.md 11.2 / R19）。
-        // 例外にはせず、従来の「何もしない」（予約済みの版がある場合）と同じ扱いにする。
-        $mstDatabase = self::mstDatabaseName($exported['hash']);
+        $mstDatabase = self::mstDatabaseName($artifact['hash']);
         if (! $this->mstDatabaseExists($mstDatabase)) {
-            $this->report('録画用の版の mst DB（'.$mstDatabase.'）が実在しないため、録画用のデプロイは追加しません。録画用の版の DB 作成方法（db.md 11.2 / R19）が未決です。決まるまで、実体の無い版は登録しません。');
+            $this->report('録画用の版の mst DB（'.$mstDatabase.'）が実在しないため、録画用のデプロイは登録しません。'
+                .'シートを使える環境で MASTER_DEPLOY_FIXED_KEY='.self::DEPLOY_KEY.' の build（php artisan master:build）を行ってください。');
 
             return;
         }
 
-        $description = self::DEPLOY_DESCRIPTION_PREFIX.' 動画撮影用のデプロイ（mst の全テーブルを配信）';
         $connection = DB::connection('sys');
         $changedDeployIds = [];
 
-        // 登録は hash で引く（deploy_key では引かない。同じ deploy_key の行が複数ありうる）
-        $connection->transaction(function () use ($connection, $exported, $description, $now, $mstDatabase, &$changedDeployIds): void {
-            $hash16 = substr($exported['hash'], 0, 16);
+        // 登録は (deploy_key, hash) で引く。build が作った行があれば再利用し、無い（sys だけ消えた）ときだけ build と同じ形で入れる
+        $connection->transaction(function () use ($connection, $artifact, $now, $mstDatabase, &$changedDeployIds): void {
             $masterId = $connection->table('sys_deploy_master')
-                ->where('deploy_key', self::DEPLOY_KEY)->where('hash', $exported['hash'])->value('id');
+                ->where('deploy_key', self::DEPLOY_KEY)->where('hash', $artifact['hash'])->value('id');
+            $existingMaster = $masterId === null ? null : $connection->table('sys_deploy_master')->where('id', $masterId)->first();
+            if ($existingMaster !== null && ($existingMaster->mst_dropped_at !== null || $existingMaster->mst_database !== $mstDatabase)) {
+                // tool の R1（再利用）と同じく、実在を確認した版の DB の名前に行を揃える（掃除で DROP 済みの印を外す。
+                // 実在確認した DB と行が食い違ったまま有効にすると、API が別の DB に切り替えるため）
+                $connection->table('sys_deploy_master')->where('id', $masterId)->update([
+                    'mst_database' => $mstDatabase,
+                    'mst_dropped_at' => null,
+                    'schema_fingerprint' => $artifact['schema_fingerprint'],
+                    'updated_at' => $now,
+                ]);
+            }
             if ($masterId === null) {
                 $masterId = $connection->table('sys_deploy_master')->insertGetId([
                     'deploy_key' => self::DEPLOY_KEY,
-                    'hash' => $exported['hash'],
-                    'deploy_date' => '1900-01-01',
+                    'hash' => $artifact['hash'],
+                    'deploy_date' => substr($now, 0, 10),
                     'deploy_count' => 0,
                     'status' => 'completed',
-                    'deployed_by' => 'recording',
-                    'deployed_at' => '1900-01-01 00:00:00',
-                    'description' => $description,
+                    'deployed_by' => 'master_build',
+                    'deployed_at' => $now,
+                    'description' => 'マスター build: '.count($artifact['tables']).'テーブル / '.array_sum(array_column($artifact['tables'], 'file_size')).'bytes（録画用の再登録）',
                     'mst_database' => $mstDatabase,
-                    'artifact_dir' => self::DEPLOY_KEY.'_'.$hash16,
-                    'schema_fingerprint' => hash('sha256', 'schema_v1'),
+                    'artifact_dir' => $artifact['dir'],
+                    'schema_fingerprint' => $artifact['schema_fingerprint'],
                     'source_kind' => 'build',
                 ]);
+                foreach ($artifact['tables'] as $tableName => $table) {
+                    $connection->table('sys_deploy_master_table')->insert([
+                        'sys_deploy_master_id' => $masterId,
+                        'table_name' => $tableName,
+                        'hash' => $table['hash'],
+                        'file_size' => $table['file_size'],
+                        'file_name' => $table['file_name'],
+                        'public_url' => '/masterdata/'.$artifact['dir'].'/'.$table['file_name'],
+                    ]);
+                }
             }
 
-            // 配信ファイルの一覧は入れ替える（主キーは master_id + table_name。public_url も書き直す）
-            $connection->table('sys_deploy_master_table')->where('sys_deploy_master_id', $masterId)->delete();
-            foreach ($exported['tables'] as $tableName => $table) {
-                $connection->table('sys_deploy_master_table')->insert([
-                    'sys_deploy_master_id' => $masterId,
-                    'table_name' => $tableName,
-                    'hash' => $table['hash'],
-                    'file_size' => $table['file_size'],
-                    'file_name' => $table['file_name'],
-                    'public_url' => $table['public_url'],
-                ]);
-            }
-
-            $assetHash = hash('sha256', 'recording_asset');
+            // asset（ダミー）は (deploy_key, hash) が UNIQUE。master と同じ hash（build と同じ）
             $assetId = $connection->table('sys_deploy_asset')
-                ->where('deploy_key', self::DEPLOY_KEY)->where('hash', $assetHash)->value('id');
+                ->where('deploy_key', self::DEPLOY_KEY)->where('hash', $artifact['hash'])->value('id');
             if ($assetId === null) {
                 $assetId = $connection->table('sys_deploy_asset')->insertGetId([
                     'deploy_key' => self::DEPLOY_KEY,
-                    'hash' => $assetHash,
-                    'deploy_date' => '1900-01-01',
+                    'hash' => $artifact['hash'],
+                    'deploy_date' => substr($now, 0, 10),
                     'deploy_count' => 0,
                     'status' => 'completed',
-                    'deployed_by' => 'recording',
-                    'deployed_at' => '1900-01-01 00:00:00',
-                    'description' => $description,
+                    'deployed_by' => 'master_build',
+                    'deployed_at' => $now,
+                    'description' => 'マスターデータのみ（アセットなし）',
                 ]);
             }
 
-            // 同じ master を指す録画用の sys_deploy があれば（id 最大の行を）有効に戻し、無ければ新しい行にする
+            // 同じ master を指す sys_deploy があれば（id 最大の行を）有効に戻して start_at を現在にし、無ければ新しい行にする
             $deployId = $connection->table('sys_deploy')
                 ->where('deploy_key', self::DEPLOY_KEY)
                 ->where('sys_deploy_master_id', $masterId)
@@ -184,36 +163,91 @@ class RecordingDeploySeeder extends RecordingScenarioSeeder
                     'sys_deploy_asset_id' => $assetId,
                     'is_active' => true,
                 ]);
-                $changedDeployIds[] = (int) $deployId;
             } else {
                 $connection->table('sys_deploy')->where('id', $deployId)
                     ->update(['is_active' => true, 'start_at' => $now, 'updated_at' => $now]);
-                $changedDeployIds[] = (int) $deployId;
             }
-
-            // 同じキーの他の行は無効にする。他のキーの行は触らない
-            $others = $connection->table('sys_deploy')
-                ->where('deploy_key', self::DEPLOY_KEY)
-                ->where('id', '!=', $deployId)
-                ->where('is_active', true);
-            foreach ($others->pluck('id') as $otherId) {
-                $changedDeployIds[] = (int) $otherId;
-            }
-            $others->update(['is_active' => false, 'updated_at' => $now]);
+            $changedDeployIds[] = (int) $deployId;
         });
-
-        // 古い版のディレクトリは消さない（無効にした sys_deploy が指していて、内容アドレスなので残しても害がない。
-        // 消すのは RecordingResetSeeder）
 
         $this->clearApiCaches($changedDeployIds);
 
-        $this->report('録画用のデプロイを用意しました（deploy_key='.self::DEPLOY_KEY.'、配信: '.count($exported['tables']).' ファイル、'.implode('・', self::REQUIRED_GROUPS).' を含む）。');
+        $this->report('録画用のデプロイを登録しました（deploy_key='.self::DEPLOY_KEY.'、成果物: '.$artifact['dir'].'、配信: '.count($artifact['tables']).' ファイル）。');
     }
 
-    /** 録画用の版の mst DB 名（{基底 DB}-7777777777-{hash 先頭 16 文字}。db.md 4.2） */
+    /** 録画用の版の mst DB 名（{基底 DB}-7777777777-{hash 先頭 16 文字}。db.md 4.2。tool の MasterVersionDatabase::versionName と同じ） */
     public static function mstDatabaseName(string $manifestHash): string
     {
         return config('database.connections.mst.database').'-'.self::DEPLOY_KEY.'-'.substr($manifestHash, 0, 16);
+    }
+
+    /** 成果物の置き場（tool の master_artifact disk を api-php にマウントした先。RecordingResetSeeder も使う） */
+    public static function masterDataDir(): string
+    {
+        return rtrim((string) config('recording.masterdata_dir'), '/');
+    }
+
+    /**
+     * 録画用の成果物のディレクトリ名（`7777777777_{hash16}`）の一覧。manifest.json の有無は問わない（リセットが消す対象）
+     *
+     * @return list<string>
+     */
+    public static function artifactDirNames(): array
+    {
+        $names = [];
+        foreach (@scandir(self::masterDataDir()) ?: [] as $entry) {
+            if (preg_match(self::ARTIFACT_DIR_PATTERN, $entry) === 1 && is_dir(self::masterDataDir().'/'.$entry) && ! is_link(self::masterDataDir().'/'.$entry)) {
+                $names[] = $entry;
+            }
+        }
+        sort($names, SORT_STRING);
+
+        return $names;
+    }
+
+    /**
+     * 完成した（manifest.json がある）録画用の成果物のうち、built_at が最新のもの（同値は名前の降順。仮置き。sequence.md 7 節）。
+     * manifest.json が読めない・形が違う（deploy_key・hash がディレクトリ名と合わない）ものは無視する。
+     *
+     * @return array{dir: string, hash: string, schema_fingerprint: string, built_at: string, tables: array<string, array{hash: string, file_name: string, file_size: int}>}|null
+     */
+    public static function findLatestArtifact(): ?array
+    {
+        $latest = null;
+        foreach (self::artifactDirNames() as $dir) {
+            $json = @file_get_contents(self::masterDataDir().'/'.$dir.'/manifest.json');
+            $manifest = is_string($json) ? json_decode($json, true) : null;
+            if (! is_array($manifest)
+                || (int) ($manifest['deploy_key'] ?? 0) !== self::DEPLOY_KEY
+                || ! is_string($manifest['hash'] ?? null)
+                || strlen($manifest['hash']) !== 64
+                || self::DEPLOY_KEY.'_'.substr($manifest['hash'], 0, 16) !== $dir
+                || ! is_array($manifest['group_list'] ?? null)
+                || $manifest['group_list'] === []) {
+                continue;
+            }
+
+            $tables = [];
+            foreach ($manifest['group_list'] as $group) {
+                $tables[(string) $group['group']] = [
+                    'hash' => (string) $group['sqlite_sha256'],
+                    'file_name' => (string) $group['file_name'],
+                    'file_size' => (int) $group['file_size'],
+                ];
+            }
+            $builtAt = (string) ($manifest['built_at'] ?? '');
+            if ($latest === null || strcmp($builtAt.'|'.$dir, $latest['built_at'].'|'.$latest['dir']) > 0) {
+                $latest = [
+                    'dir' => $dir,
+                    'hash' => $manifest['hash'],
+                    'schema_fingerprint' => (string) ($manifest['schema_fingerprint'] ?? ''),
+                    'built_at' => $builtAt,
+                    'tables' => $tables,
+                ];
+            }
+        }
+
+        return $latest;
     }
 
     /**
@@ -236,54 +270,11 @@ class RecordingDeploySeeder extends RecordingScenarioSeeder
         }
     }
 
-    /** 配信ファイルの出力先（RecordingResetSeeder も使う） */
-    public static function masterDataDir(): string
-    {
-        return rtrim((string) config('recording.masterdata_dir'), '/');
-    }
-
     /**
-     * 配信するテーブルグループ（mst の親テーブル名。`__l10n` は親と同じファイルに入るので数えない）。
-     * 運営ツールの MasterDataExporter と同じく `mst_%` を全部。並びは固定する（再実行で同じマニフェストになる）。
-     *
-     * @return list<string>
+     * 録画用を登録しない理由になる、start_at が未来の sys_deploy（予約済みの版）があるか。
+     * 予約の版が start_at に達すると最新が入れ替わり、録画用が黙って無効になるため（仮置き。db.md 11.2）。
      */
-    public function masterGroups(): array
-    {
-        $groups = [];
-        foreach (DB::connection('mst')->select("SHOW TABLES LIKE 'mst_%'") as $row) {
-            $name = (string) array_values((array) $row)[0];
-            if (! str_ends_with($name, '__l10n')) {
-                $groups[] = $name;
-            }
-        }
-        sort($groups);
-
-        return $groups;
-    }
-
-    /**
-     * 録画環境のマスター DB に両テーブルの行を入れる。どちらかが空のときだけ、既存のシーダーを使う
-     * （これらのシーダーは truncate + insert なので、行があるときは触らない）。
-     */
-    private function ensureMasterRows(): void
-    {
-        $mst = DB::connection('mst');
-
-        if ($mst->table('mst_player_level')->doesntExist()) {
-            $this->call(MstPlayerLevelSeeder::class);
-        }
-        if ($mst->table('mst_config')->doesntExist()) {
-            $this->call(MstConfigSeeder::class);
-        }
-    }
-
-    /**
-     * 録画用を足さない理由になる、start_at が未来の sys_deploy（予約済みの版）があるか。
-     * 予約の版が start_at に達すると最新が入れ替わり、録画用が黙って無効になるため。
-     * 設計: docs/design/master-distribution/db.md 11.2
-     */
-    private function hasDeployThatShouldNotBeOverridden(string $now): bool
+    private function hasReservedDeploy(string $now): bool
     {
         return DB::connection('sys')->table('sys_deploy')
             ->where('start_at', '>', $now)
