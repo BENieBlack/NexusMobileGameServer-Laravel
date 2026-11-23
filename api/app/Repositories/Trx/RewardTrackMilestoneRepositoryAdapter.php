@@ -19,21 +19,41 @@ class RewardTrackMilestoneRepositoryAdapter implements RewardTrackMilestoneRepos
 {
     public function findByPlayerAndTrack(int $sysPlayerId, string $mstRewardTrackId, string $connectionName): array
     {
-        // trx_reward_track_milestone には mst_reward_track_id がないため
-        // mst_reward_track_milestone テーブルとJOINして絞り込む
+        // trx_reward_track_milestone には mst_reward_track_id がない。mst と trx は別の DB サーバーに載っていて
+        // 跨いだ JOIN はできず、版ごとの mst DB は DB 名も毎回違うので、
+        // mst で対象のマイルストーン ID を引いてから trx を whereIn で絞る二段引きにする（findReceivedKeySet と同じ形。db.md 8.5）
+        $milestoneIds = $this->selectMilestoneIdList($mstRewardTrackId);
+
+        if (empty($milestoneIds)) {
+            return [];
+        }
+
         return DB::connection($connectionName)
-            ->table('trx_reward_track_milestone as trm')
-            ->join(
-                DB::connection('mst')->getDatabaseName().'.mst_reward_track_milestone as mstm',
-                'trm.mst_reward_track_milestone_id', '=', 'mstm.id'
-            )
-            ->where('trm.sys_player_id', $sysPlayerId)
-            ->where('mstm.mst_reward_track_id', $mstRewardTrackId)
-            ->where('trm.is_delete', false)
-            ->select('trm.*')
+            ->table('trx_reward_track_milestone')
+            ->where('sys_player_id', $sysPlayerId)
+            ->whereIn('mst_reward_track_milestone_id', $milestoneIds)
+            ->where('is_delete', false)
             ->get()
             ->map(fn ($r) => RewardTrackMilestoneAdapter::toDto((array) $r))
             ->all();
+    }
+
+    /**
+     * トラックに属するマイルストーン ID を mst で引く（トラックごとに少数）
+     *
+     * @return list<string>
+     */
+    private function selectMilestoneIdList(string $mstRewardTrackId): array
+    {
+        /** @var list<string> $ids */
+        $ids = DB::connection('mst')
+            ->table('mst_reward_track_milestone')
+            ->where('mst_reward_track_id', $mstRewardTrackId)
+            ->pluck('id')
+            ->map(fn ($id) => (string) $id)
+            ->all();
+
+        return $ids;
     }
 
     public function hasReceived(int $sysPlayerId, string $mstRewardTrackMilestoneId, string $mstRewardTrackLineId, string $connectionName): bool
@@ -71,14 +91,8 @@ class RewardTrackMilestoneRepositoryAdapter implements RewardTrackMilestoneRepos
 
     public function findReceivedKeySet(int $sysPlayerId, string $mstRewardTrackId, string $connectionName): array
     {
-        // mst と trx は別のDBサーバに載っているため、跨いだJOINはできない
-        // （'Unknown database' で落ちる）。マスター側で対象マイルストーンを引いてから、
-        // そのIDでシャード側を絞る
-        $milestoneIds = DB::connection('mst')
-            ->table('mst_reward_track_milestone')
-            ->where('mst_reward_track_id', $mstRewardTrackId)
-            ->pluck('id')
-            ->all();
+        // 二段引き: マスター側で対象マイルストーンを引いてから、そのIDでシャード側を絞る（findByPlayerAndTrack と同じ形）
+        $milestoneIds = $this->selectMilestoneIdList($mstRewardTrackId);
 
         if (empty($milestoneIds)) {
             return [];

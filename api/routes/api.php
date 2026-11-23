@@ -46,9 +46,10 @@ Route::prefix('admin')->middleware('auth.admin')->group(function () {
 // メンテナンス判定対象エンドポイント
 // =========================================
 // 以下の全エンドポイントにメンテナンスチェックと X-Platform の検証を適用
-// 順序は maintenance → platform → 署名・認証（メンテ中は 503 を先に返す）。
+// 順序は maintenance → platform → master.version → 署名・認証（メンテ中は 503 を先に返す）。
+// master.version はリクエスト頭で「いまの版」を固定し、mst 接続を版の DB に切り替える（版が無ければ 299）。
 // POST /auth/version（認証済み）もここなので X-Platform が必須（除外は GET のみ）
-Route::middleware(['maintenance', 'platform'])->group(function () {
+Route::middleware(['maintenance', 'platform', 'master.version'])->group(function () {
     // Auth endpoints with action-based routing
     // 認証不要のエンドポイント（最初のアクセス時に必要）
     // sign_upはクライアント署名検証とレート制限を適用

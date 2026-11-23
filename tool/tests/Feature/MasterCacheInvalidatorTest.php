@@ -161,11 +161,12 @@ class MasterCacheInvalidatorTest extends TestCase
 
         $this->assertSame(
             [
+                'sys:sys_deploy:schedule',
                 'sys:sys_deploy:latest_downloadable',
                 'sys:sys_deploy:deploy_key:2026010101',
                 'sys:sys_deploy:id:7',
-                'mst:mst_item:all',
-                'mst:mst_item__l10n:all',
+                MasterCacheInvalidator::mstAllKey('mst_item'),
+                MasterCacheInvalidator::mstAllKey('mst_item__l10n'),
             ],
             $invalidator->buildKeyList(['mst_item', 'mst_item__l10n', 'mst_item'], [2026010101, 2026010101], [7]),
         );
@@ -175,18 +176,18 @@ class MasterCacheInvalidatorTest extends TestCase
     public function 通常の破棄は指定したキーだけを消す(): void
     {
         $store = $this->newStore();
-        foreach (['mst:mst_a:all', 'mst:mst_b:all', 'sys:sys_deploy:latest_downloadable', 'sys:sys_deploy:deploy_key:1', 'sys:sys_deploy:id:9'] as $key) {
+        foreach ([MasterCacheInvalidator::mstAllKey('mst_a'), MasterCacheInvalidator::mstAllKey('mst_b'), 'sys:sys_deploy:latest_downloadable', 'sys:sys_deploy:deploy_key:1', 'sys:sys_deploy:id:9'] as $key) {
             $store->put($key, 'x', 3600);
         }
 
         $result = (new MasterCacheInvalidator($store))->invalidate(['mst_a'], [1], [9]);
 
         $this->assertSame(['invalidated' => true, 'failed_key_list' => []], $result);
-        $this->assertFalse($store->has('mst:mst_a:all'));
+        $this->assertFalse($store->has(MasterCacheInvalidator::mstAllKey('mst_a')));
         $this->assertFalse($store->has('sys:sys_deploy:latest_downloadable'));
         $this->assertFalse($store->has('sys:sys_deploy:deploy_key:1'));
         $this->assertFalse($store->has('sys:sys_deploy:id:9'));
-        $this->assertTrue($store->has('mst:mst_b:all'));
+        $this->assertTrue($store->has(MasterCacheInvalidator::mstAllKey('mst_b')));
     }
 
     #[Test]
@@ -207,7 +208,7 @@ class MasterCacheInvalidatorTest extends TestCase
         ]);
 
         $store = $this->newStore();
-        $keys = ['mst:mst_cache_test_a:all', 'mst:mst_cache_test_a__l10n:all', 'sys:sys_deploy:latest_downloadable', 'sys:sys_deploy:deploy_key:2026010102', 'sys:sys_deploy:id:2', 'sys:sys_deploy:id:1', 'mst:other:all'];
+        $keys = [MasterCacheInvalidator::mstAllKey('mst_cache_test_a'), MasterCacheInvalidator::mstAllKey('mst_cache_test_a__l10n'), 'sys:sys_deploy:latest_downloadable', 'sys:sys_deploy:deploy_key:2026010102', 'sys:sys_deploy:id:2', 'sys:sys_deploy:id:1', MasterCacheInvalidator::mstAllKey('other')];
         foreach ($keys as $key) {
             $store->put($key, 'x', 3600);
         }
@@ -220,7 +221,7 @@ class MasterCacheInvalidatorTest extends TestCase
         }
         // 無効な行の id と、mst に無い表のキーは対象外
         $this->assertTrue($store->has('sys:sys_deploy:id:1'));
-        $this->assertTrue($store->has('mst:other:all'));
+        $this->assertTrue($store->has(MasterCacheInvalidator::mstAllKey('other')));
     }
 
     #[Test]
@@ -230,19 +231,19 @@ class MasterCacheInvalidatorTest extends TestCase
         {
             public function forget($key): bool
             {
-                if ($key === 'mst:mst_a:all') {
+                if ($key === MasterCacheInvalidator::mstAllKey('mst_a')) {
                     throw new RuntimeException('redis down');
                 }
 
                 return parent::forget($key);
             }
         };
-        $store->put('mst:mst_b:all', 'x', 3600);
+        $store->put(MasterCacheInvalidator::mstAllKey('mst_b'), 'x', 3600);
 
         $result = (new MasterCacheInvalidator($store))->invalidate(['mst_a', 'mst_b'], [], []);
 
         $this->assertFalse($result['invalidated']);
-        $this->assertSame(['mst:mst_a:all'], $result['failed_key_list']);
-        $this->assertFalse($store->has('mst:mst_b:all'));
+        $this->assertSame([MasterCacheInvalidator::mstAllKey('mst_a')], $result['failed_key_list']);
+        $this->assertFalse($store->has(MasterCacheInvalidator::mstAllKey('mst_b')));
     }
 }

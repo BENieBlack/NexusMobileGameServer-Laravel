@@ -42,6 +42,22 @@ class RecordingDeployRegistrationTest extends RecordingTestCase
     }
 
     #[Test]
+    public function 版の_d_bが実在しないときはsysを何も書かずに中止する(): void
+    {
+        $this->ensureMasterRows();
+        $sys = DB::connection('sys');
+        $deployBefore = $sys->table('sys_deploy')->count();
+        $masterBefore = $sys->table('sys_deploy_master')->count();
+
+        // runSeeder は版の DB を先に作るので使わず、db:seed を直接流す（DB は実在しない）。例外ではなく「何もしない」で終わる
+        $this->artisan('db:seed', ['--class' => RecordingDeploySeeder::class, '--force' => true])->assertExitCode(0);
+
+        $this->assertSame($deployBefore, $sys->table('sys_deploy')->count());
+        $this->assertSame($masterBefore, $sys->table('sys_deploy_master')->count());
+        $this->assertSame(0, $sys->table('sys_deploy')->where('deploy_key', self::KEY)->count());
+    }
+
+    #[Test]
     public function 同じmstなら同じmasterを再利用し_行を増やさず_無効に戻したdeployを有効に戻す(): void
     {
         $this->ensureMasterRows();

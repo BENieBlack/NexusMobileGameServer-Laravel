@@ -18,7 +18,7 @@ DB 接続・マイグレーションの置き場所は [database.md](./database.
 | db-admin | 63060 | `{APP_NAME}-{APP_ENV}-admin` と `nexus-testing-admin`（tool のテスト用） |
 | db-tool | 63061 | `{APP_NAME}-{APP_ENV}-tool` |
 | db-system | 63062 | `-system` と `nexus-testing-system`、`nexus-testing-tool-system`（tool のテスト用） |
-| db-master | 63063 | `-master` と `nexus-testing-master`、`nexus-testing-tool-master`（tool のテスト用） |
+| db-master | 63063 | `-master` と `nexus-testing-master`、`nexus-testing-tool-master`（tool のテスト用）、`nexus-testing-master-2026010101-0000000000000000`（版の切り替えのテスト用の 2 つ目の mst DB） |
 | db-shard1〜3 | 63161〜63163 | `-shard` と `nexus-testing-shard`（DB名は全シャード共通）。shard1・2 には `nexus-testing-tool-shard`（tool のテスト用）も |
 | redis | 63790 | キャッシュ（`CACHE_STORE=redis`）。冪等キーやシャード割当のキャッシュもここに入る |
 
@@ -95,6 +95,16 @@ docker compose exec -T api-php php artisan test --testsuite=Architecture
 
 - テストは `nexus-testing-*` の DB を使う。マイグレーションはテスト自身が流す（`api/tests/RefreshMultipleDatabases.php`）。マイグレーションファイルの指紋が変わったときだけ `migrate:fresh` し、指紋は `api/storage/framework/testing/.migrated` に保存される
 - テストの時刻は `ClockUtility::setNow()` で固定し、`Tests\TestCase::setUp()` が毎回リセットする。日跨ぎの境界は `phpunit.xml` で `DAY_START_TIME=00:00:00` に固定している
+
+## テスト用の 2 つ目の mst DB
+
+版ごとの mst DB の切り替えを試すテスト（`api/tests/Feature/MasterVersion/`）は、2 つ目の mst DB `{APP_NAME}-testing-master-2026010101-0000000000000000` を使う。`docker-compose.yml` の db-master の `DB_NAMES` が作り、CI は専用の手順で作る。
+
+- DB は MySQL のボリュームの初回作成時にしか作られない。**既存の開発者環境には作られない**ので、次のどちらかをする。
+  - `docker compose down -v` でボリュームごと消して作り直す（開発データは `make migrate-fresh` と `make seed` で戻る）
+  - 手で作る: `docker compose exec -T db-master mysql -uroot -proot -e 'CREATE DATABASE IF NOT EXISTS `nexus-testing-master-2026010101-0000000000000000` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;'`
+- スキーマはテストが `ensureAltMstMigrated()`（`RefreshMultipleDatabases`）で作る。DB が無いと、作り方を添えてそのテストだけ失敗する（他のテストは巻き込まない）。
+- HTTP を通すテストが sys に版を入れるときは、`mst_database` に実在する DB（基底 DB の名前）を入れる。実体の無い名前だと、ミドルウェアがそこへ切り替えて mst を読めない。時計は基本シードの版の `start_at`（2026-02-22）より後にする。
 
 ## カバレッジ
 

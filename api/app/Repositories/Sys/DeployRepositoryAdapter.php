@@ -3,13 +3,14 @@
 namespace App\Repositories\Sys;
 
 use App\Models\Sys\SysDeploy;
+use App\Persistence\CurrentMasterVersion;
 use NexusVersion\Repositories\DeployRepositoryInterface;
 
 /**
  * DeployRepositoryAdapter
  *
  * nexus-versionパッケージのDeployRepositoryInterfaceを実装し、
- * Application層のSysDeployRepositoryをラップする。
+ * Application層のSysDeployRepository・CurrentMasterVersionをラップする。
  *
  * Repositoryは常にModelを返し、配列への詰め替えはこのアダプタが担う。
  */
@@ -17,6 +18,7 @@ class DeployRepositoryAdapter implements DeployRepositoryInterface
 {
     public function __construct(
         private readonly SysDeployRepository $sysDeployRepository,
+        private readonly CurrentMasterVersion $currentMasterVersion,
     ) {}
 
     /**
@@ -26,7 +28,9 @@ class DeployRepositoryAdapter implements DeployRepositoryInterface
      */
     public function selectLatestDownloadable(): ?array
     {
-        $sysDeploy = $this->sysDeployRepository->selectLatestDownloadable();
+        // packages/ は App\ を参照できないので、リクエストで固定した版（App 側の CurrentMasterVersion）を仲介する。
+        // start_at 基準の最新・切り替え予定のキャッシュは CurrentMasterVersion の先にある（db.md 3.3・8.3）
+        $sysDeploy = $this->currentMasterVersion->current();
 
         return $sysDeploy ? $this->toArray($sysDeploy) : null;
     }

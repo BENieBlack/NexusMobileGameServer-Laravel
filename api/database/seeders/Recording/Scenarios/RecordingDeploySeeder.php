@@ -41,8 +41,9 @@ use NexusVersion\Constants\DeployKeyConst;
  * （録画用の配信ファイルだけになる）。
  *
  * 暫定（db.md 11.2。R19 の細部が決まるまで）: sys_deploy_master の mst_database は版の DB 名の形
- * （{基底 DB}-7777777777-{hash 先頭 16 文字}）の名前だけで、実体の DB は作らない（基底 DB 名にすると
- * 基本シードの行と UNIQUE が衝突する）。artifact_dir も名前だけで、配信ファイルの実際のディレクトリは
+ * （{基底 DB}-7777777777-{hash 先頭 16 文字}）。このシーダーは実体の DB を作らず、その DB が実在しないときは
+ * sys_deploy を何も書かずに理由を表示して中止する（実体の無い版が最新になると全 API が壊れるため。
+ * 例外ではなく「何もしない」と同じ扱い）。DB を先に用意した環境でだけ登録される。artifact_dir も名前だけで、配信ファイルの実際のディレクトリは
  * 従来どおりマニフェストハッシュ（RecordingMasterExporter）。
  * 既存のデプロイの is_active は変えない。元に戻すには RecordingResetSeeder。
  * sys_deploy_master の deploy_date は 1900-01-01 で、運営ツールの連番（今日の deploy_date の件数）を増やさない。
@@ -105,12 +106,22 @@ class RecordingDeploySeeder extends RecordingScenarioSeeder
 
         $exported = (new RecordingMasterExporter(self::masterDataDir()))->export($this->masterGroups());
 
+        // 版の DB の実体が無ければ、sys_deploy を何も書かずに中止する。実体の無い版が最新になると、
+        // ミドルウェアが存在しない DB に切り替えて全 API が 500 になるため（録画用の版の DB の作り方が未決。db.md 11.2 / R19）。
+        // 例外にはせず、従来の「何もしない」（予約済みの版がある場合）と同じ扱いにする。
+        $mstDatabase = self::mstDatabaseName($exported['hash']);
+        if (! $this->mstDatabaseExists($mstDatabase)) {
+            $this->report('録画用の版の mst DB（'.$mstDatabase.'）が実在しないため、録画用のデプロイは追加しません。録画用の版の DB 作成方法（db.md 11.2 / R19）が未決です。決まるまで、実体の無い版は登録しません。');
+
+            return;
+        }
+
         $description = self::DEPLOY_DESCRIPTION_PREFIX.' 動画撮影用のデプロイ（mst の全テーブルを配信）';
         $connection = DB::connection('sys');
         $changedDeployIds = [];
 
         // 登録は hash で引く（deploy_key では引かない。同じ deploy_key の行が複数ありうる）
-        $connection->transaction(function () use ($connection, $exported, $description, $now, &$changedDeployIds): void {
+        $connection->transaction(function () use ($connection, $exported, $description, $now, $mstDatabase, &$changedDeployIds): void {
             $hash16 = substr($exported['hash'], 0, 16);
             $masterId = $connection->table('sys_deploy_master')
                 ->where('deploy_key', self::DEPLOY_KEY)->where('hash', $exported['hash'])->value('id');
@@ -124,7 +135,7 @@ class RecordingDeploySeeder extends RecordingScenarioSeeder
                     'deployed_by' => 'recording',
                     'deployed_at' => '1900-01-01 00:00:00',
                     'description' => $description,
-                    'mst_database' => config('database.connections.mst.database').'-'.self::DEPLOY_KEY.'-'.$hash16,
+                    'mst_database' => $mstDatabase,
                     'artifact_dir' => self::DEPLOY_KEY.'_'.$hash16,
                     'schema_fingerprint' => hash('sha256', 'schema_v1'),
                     'source_kind' => 'build',
@@ -199,6 +210,32 @@ class RecordingDeploySeeder extends RecordingScenarioSeeder
         $this->report('録画用のデプロイを用意しました（deploy_key='.self::DEPLOY_KEY.'、配信: '.count($exported['tables']).' ファイル、'.implode('・', self::REQUIRED_GROUPS).' を含む）。');
     }
 
+    /** 録画用の版の mst DB 名（{基底 DB}-7777777777-{hash 先頭 16 文字}。db.md 4.2） */
+    public static function mstDatabaseName(string $manifestHash): string
+    {
+        return config('database.connections.mst.database').'-'.self::DEPLOY_KEY.'-'.substr($manifestHash, 0, 16);
+    }
+
+    /**
+     * 版の DB が実在し、繋がるか。mst 接続の設定の database 違いの別接続で試す
+     * （information_schema を mst 接続で引くと、トランザクションのスナップショットに作ったばかりの DB が見えないことがある）
+     */
+    private function mstDatabaseExists(string $name): bool
+    {
+        config(['database.connections.mst_probe' => array_merge((array) config('database.connections.mst'), ['database' => $name])]);
+        DB::purge('mst_probe');
+
+        try {
+            DB::connection('mst_probe')->getPdo();
+
+            return true;
+        } catch (\Throwable) {
+            return false;
+        } finally {
+            DB::purge('mst_probe');
+        }
+    }
+
     /** 配信ファイルの出力先（RecordingResetSeeder も使う） */
     public static function masterDataDir(): string
     {
@@ -211,7 +248,7 @@ class RecordingDeploySeeder extends RecordingScenarioSeeder
      *
      * @return list<string>
      */
-    private function masterGroups(): array
+    public function masterGroups(): array
     {
         $groups = [];
         foreach (DB::connection('mst')->select("SHOW TABLES LIKE 'mst_%'") as $row) {

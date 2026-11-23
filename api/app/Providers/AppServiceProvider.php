@@ -45,6 +45,7 @@ use App\Domain\Unit\Contracts\UnitExperienceInterface;
 use App\Domain\Unit\Services\UnitLevelService;
 use App\Exceptions\GameErrorCode;
 use App\Persistence\ApiSession;
+use App\Persistence\CurrentMasterVersion;
 use App\Repositories\Log\LogVipPointRepository;
 use App\Repositories\Log\TradeLogRepositoryAdapter;
 use App\Repositories\Mst\AlbumCatalogRepositoryAdapter;
@@ -255,6 +256,8 @@ class AppServiceProvider extends ServiceProvider
         // ==========================================
 
         // Repository interfaces
+        // リクエスト頭で固定した「いまの版」（リクエスト単位。db.md 8.1）
+        $this->app->scoped(CurrentMasterVersion::class);
         $this->app->bind(DeployRepositoryInterface::class, DeployRepositoryAdapter::class);
         $this->app->bind(MaintenanceRepositoryInterface::class, SysMaintenanceRepository::class);
 

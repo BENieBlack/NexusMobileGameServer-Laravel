@@ -42,25 +42,30 @@ class MasterCacheKeyContractTest extends TestCase
     }
 
     #[Test]
-    public function mstリポジトリはmst_表名_allをキャッシュ用_d_bへ書く(): void
+    public function mstリポジトリはmst_db名_表名_allをキャッシュ用_d_bへ書く(): void
     {
         (new MstItemRepository)->queryOrMemory();
 
-        $this->assertContains(self::PHYSICAL_PREFIX.'mst:mst_item:all', $this->physicalKeyList());
+        // テストの基底 DB の名前（phpunit.xml の DB_MASTER_DATABASE）。tool 側の契約テストも同じ形の文字列を持つ
+        $this->assertSame('nexus-testing-master', config('database.connections.mst.database'));
+        $this->assertContains(self::PHYSICAL_PREFIX.'mst:nexus-testing-master:mst_item:all', $this->physicalKeyList());
     }
 
     #[Test]
-    public function sys_deployリポジトリは3種のキーをキャッシュ用_d_bへ書く(): void
+    public function sys_deployリポジトリは3種のキー（schedule・deploy_key・id）をキャッシュ用_d_bへ書く(): void
     {
         $this->insertDeploy();
 
         $repository = new SysDeployRepository;
         $repository->selectLatestDownloadable();
+        $repository->selectLatestDownloadableAt(now());
         $repository->selectByDeployKey(self::DEPLOY_KEY);
         $repository->selectById($this->sysDeployId);
 
         $keyList = $this->physicalKeyList();
-        $this->assertContains(self::PHYSICAL_PREFIX.'sys:sys_deploy:latest_downloadable', $keyList);
+        // 切り替え予定の一覧（1 キー）。旧キー latest_downloadable は廃止した（db.md 8.3）
+        $this->assertContains(self::PHYSICAL_PREFIX.'sys:sys_deploy:schedule', $keyList);
+        $this->assertNotContains(self::PHYSICAL_PREFIX.'sys:sys_deploy:latest_downloadable', $keyList);
         $this->assertContains(self::PHYSICAL_PREFIX.'sys:sys_deploy:deploy_key:'.self::DEPLOY_KEY, $keyList);
         $this->assertContains(self::PHYSICAL_PREFIX.'sys:sys_deploy:id:'.$this->sysDeployId, $keyList);
     }

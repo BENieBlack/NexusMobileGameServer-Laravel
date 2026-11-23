@@ -151,7 +151,8 @@ services:
     container_name: db-master
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
-      DB_NAMES: "${APP_NAME:-nexus}-${APP_ENV:-local}-master ${APP_NAME:-nexus}-testing-master ${APP_NAME:-nexus}-testing-tool-master"
+      # 末尾はテスト用の 2 つ目の mst DB（版の切り替えのテスト用。版の DB の命名規則に合わせた固定の名前。docs/design/master-distribution/db.md 8.6）
+      DB_NAMES: "${APP_NAME:-nexus}-${APP_ENV:-local}-master ${APP_NAME:-nexus}-testing-master ${APP_NAME:-nexus}-testing-tool-master ${APP_NAME:-nexus}-testing-master-2026010101-0000000000000000"
     ports:
       - "63063:3306"
     volumes:

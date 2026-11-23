@@ -80,8 +80,9 @@ class WalkthroughTest extends TestCase
 
         // テスト前にデプロイデータをクリーンアップ
         DB::connection('sys')->table('sys_deploy')->delete();
-        DB::connection('sys')->table('sys_deploy_master')->where('deploy_key', 2026010101)->delete();
-        DB::connection('sys')->table('sys_deploy_asset')->where('deploy_key', 2026010101)->delete();
+        // mst_database は UNIQUE で、基本シードの版が基底 DB の名前を持つので、版の行は全部消してから入れ直す
+        DB::connection('sys')->table('sys_deploy_master')->delete();
+        DB::connection('sys')->table('sys_deploy_asset')->delete();
 
         // シャーディング設定を作成
         $this->seed(SysShardingSeeder::class);
@@ -91,7 +92,7 @@ class WalkthroughTest extends TestCase
         $deployMasterId = DB::connection('sys')->table('sys_deploy_master')->insertGetId([
             'deploy_key' => 2026010101,
             'hash' => hash('sha256', 'test_master_2026010101'),
-            ...SysDeployMasterColumns::for(2026010101, 'test_master_2026010101'),
+            ...SysDeployMasterColumns::for(2026010101, 'test_master_2026010101', (string) config('database.connections.mst.database')),
             'deploy_date' => '2026-01-01',
             'deploy_count' => 1,
             'status' => 'completed',

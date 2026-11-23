@@ -2,20 +2,20 @@
 
 namespace App\Http\Middleware;
 
-use App\Repositories\Sys\SysDeployRepository;
+use App\Persistence\CurrentMasterVersion;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Throwable;
 
 /**
- * クライアントのマスターハッシュを最新デプロイと比較する。
+ * クライアントのマスターハッシュをいまの版（CurrentMasterVersion が固定したもの）と比較する。
  * 不一致時もAPI処理は継続し、レスポンスヘッダーで更新要求を通知する。
  */
 class CheckMasterHash
 {
     public function __construct(
-        private readonly SysDeployRepository $sysDeployRepository,
+        private readonly CurrentMasterVersion $currentMasterVersion,
     ) {}
 
     /**
@@ -31,7 +31,9 @@ class CheckMasterHash
         }
 
         try {
-            $sysDeploy = $this->sysDeployRepository->selectLatestDownloadable();
+            // $next の後で引き直さず、リクエスト冒頭で固定した版を使う。
+            // 引き直すと、途中で start_at を過ぎたときに応答の版と比較対象の版がずれる（db.md 8.1）
+            $sysDeploy = $this->currentMasterVersion->current();
             $masterHash = $sysDeploy?->deployMaster?->getHash();
 
             if ($masterHash === null || hash_equals((string) $masterHash, $clientHash)) {
