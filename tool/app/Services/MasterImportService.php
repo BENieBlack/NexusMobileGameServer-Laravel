@@ -14,6 +14,9 @@ use RuntimeException;
  * スプレッドシートから取得したデータをmstデータベースに
  * インポートするサービス。
  *
+ * 現行の配信（版ごとの mst DB。db.md 6.6）では、import() と reflect()（基準の mst への書き込み）はルートからも build からも呼ばれない。
+ * 行の変換・検証（ID_RULES・valueForColumn など）の部品として残している（db.md 10.4）。
+ *
  * インポート仕様:
  * - シート名 = mstテーブル名 として対応付ける
  *   例: シート名「mst_item」→ テーブル「mst_item」
@@ -274,7 +277,7 @@ class MasterImportService
     }
 
     /**
-     * 採用行を mst へ差分反映する（db.md 6.5）。コミットは呼び出し側が行う
+     * 採用行を mst へ差分反映する（旧経路。ADR 0005 の方式で、版ごとの mst DB の設計では使わない。db.md 10.4）。コミットは呼び出し側が行う
      *
      * - 置き換えの対象は行が 1 行以上ある表だけ（行が 0 の表は触らず、結果にも出さない）
      * - 先に全表を検証し、書き込みはその後。dry_run = false のときは mst 接続で beginTransaction し、
@@ -284,7 +287,7 @@ class MasterImportService
      * - dry_run = true は同じ比較をして、書かずに件数だけ返す
      *
      * シートの `replace` が true の表は、rows が空でも置き換えの対象にする（行はあるが畳みで全部削除印になった表を空にする。
-     * db.md 6.1。MasterBuildRunner が MasterOverlayFolder の replaced を渡す）。省略時は false
+     * db.md 6.1・6.4。build は MasterOverlayFolder の replaced を、作業用 DB への投入で同じ意味に使う）。省略時は false
      *
      * @param  array<string, array{headers: array<int, string>, rows: array<int, array<string, mixed>>, replace?: bool}>  $tables  表名 => シート
      * @return array{

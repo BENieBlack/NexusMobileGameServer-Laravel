@@ -196,19 +196,14 @@ class SysDeployRepository extends _BaseSysRepository
     protected string $cachePrefix = 'sys:deploy';
 
     /**
-     * 最新のダウンロード可能なデプロイを取得（リレーション付き）
+     * 指定時刻に有効なデプロイ（「いまの版」）を取得（リレーション付き）。
+     * 並びは start_at 降順 → deploy_key 降順 → id 降順。キャッシュは切り替え予定の一覧
+     * （キー sys:sys_deploy:schedule）で、時刻の判定は呼び出し時に行う。
+     * 詳細は docs/design/master-distribution/db.md 3.3・8.3。
      */
-    public function selectLatestDownloadable(): ?SysDeploy
+    public function selectLatestDownloadableAt(CarbonInterface $at): ?SysDeploy
     {
-        return $this->cacheRemember(
-            'latest:downloadable',
-            fn() => $this->newQuery()
-                ->with(['deployMaster', 'deployAsset'])
-                ->where('is_active', true)
-                ->where('start_at', '<=', now())
-                ->orderBy('deploy_key', 'desc')
-                ->first()
-        );
+        // 実装は SysDeployRepository を参照
     }
 
     /**

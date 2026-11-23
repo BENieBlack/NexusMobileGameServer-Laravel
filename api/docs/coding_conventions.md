@@ -641,7 +641,7 @@ public function getPlayerMe(Request $request, GetMeUseCase $useCase): JsonRespon
 - `App\Models\Mst\` 配下のMstモデルは、マスターデータテーブルを扱う
 - **基底クラス**: `_BaseMst` を継承（`$connection = 'mst'` が設定済み）
 - **$fillable**: `deploy_key` を**必ず最初**に配置する（統一ルール）
-- **deploy_key**: マスターデータのバージョン管理用カラム（例: `202601010`）
+- **deploy_key**: マスターデータのバージョン管理用カラム（例: `2026010101`。YYYYMMDDNN の 10 桁）
 
 **Mst Model $fillable の例:**
 ```php

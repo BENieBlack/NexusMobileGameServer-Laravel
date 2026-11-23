@@ -90,12 +90,12 @@
 ### クライアントから見た流れ
 
 1. 起動時に `GET /api/auth/version`（認証不要・メンテ中も通る）か、ログイン後に `POST /api/auth/version` を呼ぶ。手元の `sys_deploy.id` を `deploy_version`（ボディ）か `Deploy-Version` ヘッダーで送る
-2. サーバーは `is_active = true` かつ `start_at` を過ぎた `sys_deploy` のうち `deploy_key` が最大のものを最新とする（`App\Repositories\Sys\SysDeployRepository::selectLatestDownloadable()`、キャッシュあり）
+2. サーバーは `is_active = true` かつ `start_at` を過ぎた `sys_deploy` のうち、`start_at` が最も新しいもの（同じなら `deploy_key`・`id` の大きい方）を最新（いまの版）とする。本番（`APP_ENV=production`）は予約帯のキーを除く（`App\Repositories\Sys\SysDeployRepository::selectLatestDownloadableAt()`。切り替え予定の一覧をキャッシュし、リクエスト時刻で毎回選ぶ）
 3. 送られた ID が最新と同じなら `needs_update: false`。違えば最新のデプロイ情報を返す
 4. クライアントは `master.tables` の各ファイルのうちハッシュが変わったものを取り直す
 5. 通常のAPIには `X-Master-Hash` に `master.hash` を付けて送る。古ければ `X-Master-Update-Required: true` が返るので、再度 `/auth/version` を呼ぶ
 
-ダウンロード可能なデプロイが1件も無いときは `SystemDataException::deploy()` の 299 になる。
+いまの版が1件も無いときは `SystemDataException::deploy()` の 299 になる。
 
 ### VersionResponse
 
@@ -111,7 +111,7 @@
     "sys_deploy_master_id": 8,
     "hash": "マニフェストのハッシュ",
     "tables": {
-      "mst_item": { "hash": "...", "url": "/masterdata/{hash}/mst_item_{hash}.sqlite", "file_size": 12345 }
+      "mst_item": { "hash": "...", "url": "/masterdata/{deploy_key}_{hash先頭16文字}/mst_item_{hash}.sqlite", "file_size": 12345 }
     }
   },
   "asset": { "sys_deploy_asset_id": 8, "hash": "..." }
@@ -125,7 +125,7 @@
 
 ### 配信ファイルの作られ方
 
-マスターデータは運営ツールが mst DB からテーブルグループ単位の SQLite を書き出し、`sys_deploy_master` / `sys_deploy_master_table` / `sys_deploy` に登録する（`tool/app/Services/MasterDataExporter.php`, `MasterDeployService.php`）。手順は [tool.md](./tool.md) を参照。`url` は tool の `public/masterdata/` 配下を指す相対パス。
+マスターデータは運営ツールが、シートから作った版の DB（版ごとの mst DB）からテーブルグループ単位の SQLite を書き出して成果物にし、`sys_deploy_master` / `sys_deploy_master_table` / `sys_deploy` に登録する（`tool/app/Services/MasterBuildRunner.php`・`MasterImportRunner.php`・`MasterDataExporter.php`・`MasterDeployService.php`）。手順は [tool.md](./tool.md) を参照。`url` は成果物の置き場（ローカルは tool の `public/masterdata/{deploy_key}_{hash先頭16文字}/`）を指す相対パス。`latest_deploy_key` は畳みの上限（T）で、最新の選択には使わない。
 
 ## データ引き継ぎ
 

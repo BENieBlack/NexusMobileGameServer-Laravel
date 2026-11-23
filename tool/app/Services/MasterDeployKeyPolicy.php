@@ -7,9 +7,9 @@ use App\Exceptions\MasterDeployKeyException;
 /**
  * deploy_key の固定キー・予約帯・本番ガードの検査（DB を読まない）
  *
- * 設計: docs/design/master-distribution/db.md 7.1〜7.3、3.4 の 4
+ * 設計: docs/design/master-distribution/db.md 7.1〜7.3、3.4
  * 設定は config/master_deploy.php。デプロイ操作の最初（排他の前）で resolveFixedKey() を呼ぶ想定（接続は別 PR）。
- * 公開メソッドのうち assertRealKey は S3-10（採番 MasterDeployService）、isRejectedReservedKey・assertNotRejectedReservedKey は
+ * 公開メソッドのうち assertRealKey は explicit_key の検査（resolveBuildKey）、isRejectedReservedKey・assertNotRejectedReservedKey は
  * シート検証（MasterSheetValidator の V04）、resolveFixedKey は MasterDeployTargetService（target の表示）と各操作の環境設定の検査で使う。
  * 禁止環境の判定は APP_ENV を trim・小文字化して比べる。forbidden_envs に無い未知の env（local・testing・qa など）では固定キーが通る方針（db.md 7.2）。
  */
@@ -61,7 +61,7 @@ class MasterDeployKeyPolicy
     }
 
     /**
-     * 固定キーを検証して返す。未設定なら null（本物の採番）。
+     * 固定キーを検証して返す。未設定なら null（T は explicit_key で決まる）。
      *
      * @throws MasterDeployKeyException 許可リスト外は fixed_key_invalid、禁止環境で設定ありは fixed_key_forbidden
      */
@@ -130,7 +130,7 @@ class MasterDeployKeyPolicy
     }
 
     /**
-     * 本物のモードで採番した結果が予約帯なら拒否する（3.4 の 4）。
+     * 本物の形のキー（explicit_key）が予約帯なら拒否する（3.4）。
      *
      * @throws MasterDeployKeyException reserved_key_forbidden
      */
