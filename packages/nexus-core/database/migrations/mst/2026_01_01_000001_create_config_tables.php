@@ -20,7 +20,7 @@ return new class extends Migration
         // mst_* は全行がクライアントに配信される。秘密情報（鍵・内部 URL など）は入れない。
         // id は人が決める安定した文字列（AUTO_INCREMENT は使わない）。
         Schema::create('mst_config', function (Blueprint $table) {
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('id')->primary()->comment('設定ID（スネークケースの安定した文字列。例 stamina_recovery_interval_seconds）');
             $table->string('value')->comment('設定値（文字列。value_type で解釈する）');
             $table->enum('value_type', ['int', 'float', 'bool', 'string'])->comment('値の型 (int=整数, float=小数, bool=true/false, string=文字列)');

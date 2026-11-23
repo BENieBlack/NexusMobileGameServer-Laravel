@@ -105,13 +105,13 @@ class SysDeployTest extends TestCase
     public function アクセサで値を出し入れできる(): void
     {
         $deploy = new SysDeploy;
-        $deploy->setDeployKey(202603151);
+        $deploy->setDeployKey(2026031501);
         $deploy->setStartAt('2026-03-15 02:00:00');
         $deploy->setSysDeployMasterId(3);
         $deploy->setSysDeployAssetId(4);
         $deploy->setIsActive(true);
 
-        $this->assertSame(202603151, $deploy->getDeployKey());
+        $this->assertSame(2026031501, $deploy->getDeployKey());
         $this->assertStringStartsWith('2026-03-15 02:00:00', $deploy->getStartAt());
         $this->assertSame(3, $deploy->getSysDeployMasterId());
         $this->assertSame(4, $deploy->getSysDeployAssetId());
@@ -124,7 +124,7 @@ class SysDeployTest extends TestCase
     private function makeDeploy(array $attributes = []): SysDeploy
     {
         return new SysDeploy(array_merge([
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'start_at' => '2026-01-01 00:00:00',
             'sys_deploy_master_id' => 1,
             'sys_deploy_asset_id' => 1,

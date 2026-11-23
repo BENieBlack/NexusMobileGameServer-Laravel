@@ -21,7 +21,7 @@ return new class extends Migration
         // mst_message: メッセージマスター
         // ========================================
         Schema::create('mst_message', function (Blueprint $table) {
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('id')->primary()->comment('メッセージID');
             $table->dateTime('created_at')->default(DB::raw('CURRENT_TIMESTAMP'))->comment('作成日時');
             $table->dateTime('updated_at')->default(DB::raw('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'))->comment('更新日時');
@@ -33,7 +33,7 @@ return new class extends Migration
         // mst_message__l10n: メッセージ多言語
         // ========================================
         Schema::create('mst_message__l10n', function (Blueprint $table) {
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('mst_message_id')->comment('メッセージID');
             $table->enum('language', $this->supportedLanguages)->comment('言語コード');
             $table->string('title')->comment('タイトル');
@@ -49,7 +49,7 @@ return new class extends Migration
         // mst_mailbox: メールボックスマスター
         // ========================================
         Schema::create('mst_mailbox', function (Blueprint $table) {
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('id')->primary()->comment('メールボックスID');
             $table->string('mst_message_id')->comment('メッセージID');
 
@@ -101,7 +101,7 @@ return new class extends Migration
         // ========================================
         Schema::create('mst_mailbox_content', function (Blueprint $table) {
             $table->string('id')->primary()->comment('ID（{mst_mailbox_id}:{content_type}:{content_mst_id}）');
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('mst_mailbox_id')->comment('メールボックスID');
             $table->enum('content_type', [
                 'paid_diamond', 'item', 'unit', 'equipment',

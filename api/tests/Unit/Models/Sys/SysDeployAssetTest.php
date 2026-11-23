@@ -107,7 +107,7 @@ class SysDeployAssetTest extends TestCase
     public function アクセサで値を出し入れできる(): void
     {
         $asset = new SysDeployAsset;
-        $asset->setDeployKey(202603151);
+        $asset->setDeployKey(2026031501);
         $asset->setHash(self::VALID_HASH);
         $asset->setDeployCount(1);
         $asset->setStatus(SysDeployAsset::STATUS_SCHEDULED);
@@ -119,7 +119,7 @@ class SysDeployAssetTest extends TestCase
         $asset->setDeployedBy('deployer');
         $asset->setDescription('テスト配信');
 
-        $this->assertSame(202603151, $asset->getDeployKey());
+        $this->assertSame(2026031501, $asset->getDeployKey());
         $this->assertSame(self::VALID_HASH, $asset->getHash());
         $this->assertSame(1, $asset->getDeployCount());
         $this->assertSame(SysDeployAsset::STATUS_SCHEDULED, $asset->getStatus());
@@ -138,7 +138,7 @@ class SysDeployAssetTest extends TestCase
     private function makeAsset(array $attributes = []): SysDeployAsset
     {
         return new SysDeployAsset(array_merge([
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'hash' => self::VALID_HASH,
             'deploy_count' => 1,
             'status' => SysDeployAsset::STATUS_COMPLETED,

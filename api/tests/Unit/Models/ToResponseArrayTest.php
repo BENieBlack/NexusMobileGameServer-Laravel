@@ -176,7 +176,7 @@ class ToResponseArrayTest extends TestCase
     {
         $purchase = new MstInAppPurchase;
         $purchase->id = 'iap_diamond_100';
-        $purchase->deploy_key = 202501011;
+        $purchase->deploy_key = 2025010101;
         $purchase->type = 'diamond';
         $purchase->paid_diamond_amount = 100;
         $purchase->is_active = true;

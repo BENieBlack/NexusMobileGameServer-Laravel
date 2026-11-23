@@ -28,7 +28,7 @@ class LoginBonusReceiveAfterPurchaseTest extends TestCase
 {
     use RefreshMultipleDatabases;
 
-    private const DEPLOY_KEY = 202601010;
+    private const DEPLOY_KEY = 2026010101;
 
     /** 購入で付与される VIP ポイント（テスト用のレベル表で 1 以上に上がる量） */
     private const PURCHASE_VIP_POINT = 5000;

@@ -24,7 +24,7 @@ class PlayerLevelServiceTest extends TestCase
 {
     use RefreshMultipleDatabases;
 
-    private const DEPLOY_KEY = 202601010;
+    private const DEPLOY_KEY = 2026010101;
 
     /** レベル => [必要累積経験値, 最大スタミナ] */
     private const LEVELS = [

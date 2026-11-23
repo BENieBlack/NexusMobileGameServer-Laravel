@@ -71,7 +71,7 @@ class MstConfigSeederTest extends TestCase
         // 運営ツールでの変更や余計な行があっても、truncate して作り直す
         DB::connection('mst')->table('mst_config')->where('id', 'stamina_recovery_interval_seconds')->update(['value' => '999']);
         DB::connection('mst')->table('mst_config')->insert([
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'id' => 'extra_config',
             'value' => 'x',
             'value_type' => 'string',

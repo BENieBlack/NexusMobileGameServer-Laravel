@@ -16,7 +16,7 @@ return new class extends Migration
         // mst_login_bonus: ログインボーナス設定マスター
         // ========================================
         Schema::create('mst_login_bonus', function (Blueprint $table) {
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('id')->primary()->comment('ログインボーナスID');
             $table->enum('type', ['daily', 'comeback'])
                 ->default('daily')
@@ -54,7 +54,7 @@ return new class extends Migration
         // ========================================
         Schema::create('mst_login_bonus_content', function (Blueprint $table) {
             $table->string('id')->primary()->comment('ID（{mst_login_bonus_id}:{day}:{content_type}:{content_mst_id}）');
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('mst_login_bonus_id')->comment('ログインボーナスID');
             $table->unsignedInteger('day')->default(0)->comment('ログイン日数（1〜N。カムバック報酬は0）');
             $table->enum('content_type', ['item', 'unit', 'equipment', 'wallet', 'stamina'])->comment('コンテンツタイプ');

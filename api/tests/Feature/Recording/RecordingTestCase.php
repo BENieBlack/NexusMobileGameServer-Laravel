@@ -57,11 +57,11 @@ abstract class RecordingTestCase extends TestCase
         $mst = DB::connection('mst');
         if ($mst->table('mst_player_level')->doesntExist()) {
             $mst->table('mst_player_level')->insert([
-                'id' => MstPlayerLevel::makeId(1), 'level' => 1, 'deploy_key' => 202601010, 'required_exp' => 0, 'max_stamina' => 50,
+                'id' => MstPlayerLevel::makeId(1), 'level' => 1, 'deploy_key' => 2026010101, 'required_exp' => 0, 'max_stamina' => 50,
             ]);
         }
         if ($mst->table('mst_config')->doesntExist()) {
-            $mst->table('mst_config')->insert(['deploy_key' => 202601010, 'id' => 'test', 'value' => '1', 'value_type' => 'int', 'description' => 't']);
+            $mst->table('mst_config')->insert(['deploy_key' => 2026010101, 'id' => 'test', 'value' => '1', 'value_type' => 'int', 'description' => 't']);
         }
     }
 

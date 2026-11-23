@@ -39,7 +39,7 @@ class MstPlayerLevelSeeder extends Seeder
     /**
      * デプロイキー
      */
-    private const DEPLOY_KEY = 202601010;
+    private const DEPLOY_KEY = 2026010101;
 
     /**
      * Run the database seeds.

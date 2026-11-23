@@ -79,8 +79,8 @@ class WalkthroughTest extends TestCase
 
         // テスト前にデプロイデータをクリーンアップ
         DB::connection('sys')->table('sys_deploy')->delete();
-        DB::connection('sys')->table('sys_deploy_master')->where('deploy_key', 202601010)->delete();
-        DB::connection('sys')->table('sys_deploy_asset')->where('deploy_key', 202601010)->delete();
+        DB::connection('sys')->table('sys_deploy_master')->where('deploy_key', 2026010101)->delete();
+        DB::connection('sys')->table('sys_deploy_asset')->where('deploy_key', 2026010101)->delete();
 
         // シャーディング設定を作成
         $this->seed(SysShardingSeeder::class);
@@ -88,8 +88,8 @@ class WalkthroughTest extends TestCase
         // デプロイバージョンデータを作成（バージョンチェックAPIで必要）
         // まず、deploy_master と deploy_asset のダミーデータを作成
         $deployMasterId = DB::connection('sys')->table('sys_deploy_master')->insertGetId([
-            'deploy_key' => 202601010,
-            'hash' => hash('sha256', 'test_master_202601010'),
+            'deploy_key' => 2026010101,
+            'hash' => hash('sha256', 'test_master_2026010101'),
             'deploy_date' => '2026-01-01',
             'deploy_count' => 1,
             'status' => 'completed',
@@ -98,8 +98,8 @@ class WalkthroughTest extends TestCase
         ]);
 
         $deployAssetId = DB::connection('sys')->table('sys_deploy_asset')->insertGetId([
-            'deploy_key' => 202601010,
-            'hash' => hash('sha256', 'test_asset_202601010'),
+            'deploy_key' => 2026010101,
+            'hash' => hash('sha256', 'test_asset_2026010101'),
             'deploy_date' => '2026-01-01',
             'deploy_count' => 1,
             'status' => 'completed',
@@ -108,7 +108,7 @@ class WalkthroughTest extends TestCase
         ]);
 
         DB::connection('sys')->table('sys_deploy')->insert([
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'start_at' => now(),
             'sys_deploy_master_id' => $deployMasterId,
             'sys_deploy_asset_id' => $deployAssetId,
@@ -285,7 +285,7 @@ class WalkthroughTest extends TestCase
     private function step2_5_versionCheck(): void
     {
         // 現在のデプロイバージョンを取得（実際のアプリでは設定から取得）
-        $currentDeployVersion = config('app.deploy_version', 202601010);
+        $currentDeployVersion = config('app.deploy_version', 2026010101);
 
         $response = $this->withHeaders([
             'Authorization' => 'Bearer '.$this->accessToken,
@@ -308,7 +308,7 @@ class WalkthroughTest extends TestCase
         // 同じバージョンを渡したが、deploy_versionがnullだったためupdate判定される
         // この仕様は正常（nullの場合は最新版を取得させる）
         $this->assertIsBool($data['needs_update']);
-        $this->assertEquals(202601010, $data['latest_deploy_key']);
+        $this->assertEquals(2026010101, $data['latest_deploy_key']);
     }
 
     /**
@@ -640,7 +640,7 @@ class WalkthroughTest extends TestCase
         foreach ([1 => 0, 2 => 100, 3 => 250, 4 => 450, 5 => 700] as $level => $requiredExp) {
             $equipmentLevels[] = [
                 'id' => MstEquipmentLevel::makeId('R', $level),
-                'deploy_key' => 202601010,
+                'deploy_key' => 2026010101,
                 'rarity' => 'R',
                 'level' => $level,
                 'required_exp' => $requiredExp,

@@ -21,7 +21,7 @@ return new class extends Migration
         // mst_unit: ユニットマスター
         // ========================================
         Schema::create('mst_unit', function (Blueprint $table) {
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('id')->primary()->comment('ユニットID');
             $table->enum('type', ['attack', 'defense', 'support'])->comment('ユニットタイプ');
             $table->enum('element', ['fire', 'water', 'wind', 'earth', 'light', 'dark'])->comment('属性');
@@ -41,7 +41,7 @@ return new class extends Migration
         // mst_unit__l10n: ユニット多言語
         // ========================================
         Schema::create('mst_unit__l10n', function (Blueprint $table) {
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('mst_unit_id')->comment('ユニットID');
             $table->enum('language', $this->supportedLanguages)->comment('言語コード');
             $table->string('name')->comment('ユニット名');
@@ -56,7 +56,7 @@ return new class extends Migration
         // mst_item: アイテムマスター
         // ========================================
         Schema::create('mst_item', function (Blueprint $table) {
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('id')->primary()->comment('アイテムID');
             $table->string('type')->comment('アイテムタイプ');
             $table->string('effect')->comment('効果');
@@ -80,7 +80,7 @@ return new class extends Migration
         // mst_item__l10n: アイテム多言語
         // ========================================
         Schema::create('mst_item__l10n', function (Blueprint $table) {
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('mst_item_id')->comment('アイテムID');
             $table->enum('language', $this->supportedLanguages)->comment('言語コード');
             $table->string('name')->comment('アイテム名');
@@ -96,7 +96,7 @@ return new class extends Migration
         // mst_equipment: 装備マスター
         // ========================================
         Schema::create('mst_equipment', function (Blueprint $table) {
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('id')->primary()->comment('装備ID');
             $table->enum('type', ['attack', 'defense', 'support'])->comment('装備タイプ');
             $table->enum('element', ['fire', 'water', 'wind', 'earth', 'light', 'dark'])->comment('属性');
@@ -123,7 +123,7 @@ return new class extends Migration
         // mst_equipment__l10n: 装備多言語
         // ========================================
         Schema::create('mst_equipment__l10n', function (Blueprint $table) {
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('mst_equipment_id')->comment('装備ID');
             $table->enum('language', $this->supportedLanguages)->comment('言語コード');
             $table->string('name')->comment('装備名');
@@ -141,7 +141,7 @@ return new class extends Migration
         // ========================================
         Schema::create('mst_unit_level', function (Blueprint $table) {
             $table->string('id')->primary()->comment('ID（{rarity}:{level}。例 UR:1）');
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->enum('rarity', ['UR', 'SSR', 'SR', 'R', 'UC', 'C'])->comment('レアリティ');
             $table->unsignedInteger('level')->comment('レベル');
             $table->unsignedInteger('required_exp')->default(0)->comment('このレベルに到達するために必要な累積経験値');
@@ -157,7 +157,7 @@ return new class extends Migration
         // ========================================
         Schema::create('mst_equipment_level', function (Blueprint $table) {
             $table->string('id')->primary()->comment('ID（{rarity}:{level}。例 UR:1）');
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->enum('rarity', ['UR', 'SSR', 'SR', 'R', 'UC', 'C'])->comment('レアリティ');
             $table->unsignedInteger('level')->comment('レベル');
             $table->unsignedInteger('required_exp')->default(0)->comment('このレベルに到達するために必要な累積経験値');

@@ -26,7 +26,7 @@ class BuyPackUseCaseTest extends TestCase
     use PreparesPurchaseFixtures;
     use RefreshMultipleDatabases;
 
-    private const DEPLOY_KEY = 202601010;
+    private const DEPLOY_KEY = 2026010101;
 
     private const PRICE_MICROS = 980_000_000;
 

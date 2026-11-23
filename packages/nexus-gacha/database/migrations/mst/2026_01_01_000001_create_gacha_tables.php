@@ -21,7 +21,7 @@ return new class extends Migration
         // mst_gacha: ガチャマスター
         // ========================================
         Schema::create('mst_gacha', function (Blueprint $table) {
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('id')->primary()->comment('ガチャID');
             $table->unsignedInteger('sort_desc')->default(0)->comment('表示順序（降順）');
             $table->boolean('is_active')->default(true)->comment('有効フラグ');
@@ -41,7 +41,7 @@ return new class extends Migration
         // mst_gacha__l10n: ガチャ多言語
         // ========================================
         Schema::create('mst_gacha__l10n', function (Blueprint $table) {
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('mst_gacha_id')->comment('ガチャID');
             $table->enum('language', $this->supportedLanguages)->comment('言語コード');
             $table->string('title')->comment('ガチャタイトル');
@@ -58,7 +58,7 @@ return new class extends Migration
         // ガチャの実行回数（1連、10連など）ごとのコスト設定
         // ========================================
         Schema::create('mst_gacha_cost', function (Blueprint $table) {
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('id')->primary()->comment('コストID');
             $table->string('mst_gacha_id')->comment('ガチャID');
             $table->unsignedInteger('draw_count')->comment('実行回数（1連、10連など）');
@@ -80,7 +80,7 @@ return new class extends Migration
         // レアリティ別の排出率設定（1~5）
         // ========================================
         Schema::create('mst_gacha_rarity_rate', function (Blueprint $table) {
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('id')->primary()->comment('レアリティ排出率ID');
             $table->string('mst_gacha_id')->comment('ガチャID');
             $table->unsignedTinyInteger('rarity')->comment('レアリティ（1~5、5が最高レア）');
@@ -97,7 +97,7 @@ return new class extends Migration
         // レアリティごとの個別オブジェクト排出設定
         // ========================================
         Schema::create('mst_gacha_prize', function (Blueprint $table) {
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('id')->primary()->comment('景品ID');
             $table->string('mst_gacha_id')->comment('ガチャID');
             $table->unsignedTinyInteger('rarity')->comment('レアリティ（1~5）');
@@ -123,7 +123,7 @@ return new class extends Migration
         // ステップアップガチャのステップごとの設定
         // ========================================
         Schema::create('mst_gacha_step', function (Blueprint $table) {
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('id')->primary()->comment('ステップID');
             $table->string('mst_gacha_id')->comment('ガチャID');
             $table->unsignedInteger('step_number')->comment('ステップ番号（1, 2, 3...）');
@@ -149,7 +149,7 @@ return new class extends Migration
         // パターン3: UnitAとUnitBのどちらかを選択 → selection_type='choice', コンテンツを別テーブルで定義
         // ========================================
         Schema::create('mst_gacha_step_bonus', function (Blueprint $table) {
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('id')->primary()->comment('ステップボーナスID');
             $table->string('mst_gacha_step_id')->comment('ステップID');
             $table->unsignedInteger('position')->comment('ボーナス位置（1回目、2回目など、0=ランダム位置）');
@@ -172,7 +172,7 @@ return new class extends Migration
         // selection_type='random'または'choice'の場合のコンテンツリスト
         // ========================================
         Schema::create('mst_gacha_step_bonus_content', function (Blueprint $table) {
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('id')->primary()->comment('ボーナスコンテンツID');
             $table->string('mst_gacha_step_bonus_id')->comment('ステップボーナスID');
             $table->enum('content_type', ['item', 'unit', 'equipment'])->comment('コンテンツタイプ');

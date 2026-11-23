@@ -78,7 +78,7 @@ class VersionServiceTest extends TestCase
 
         // Arrange
         $master = SysDeployMaster::create([
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'hash' => 'master_hash_001',
             'deploy_date' => now()->subDay()->toDateString(),
             'deploy_count' => 0,
@@ -86,7 +86,7 @@ class VersionServiceTest extends TestCase
         ]);
 
         $asset = SysDeployAsset::create([
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'hash' => 'asset_hash_001',
             'deploy_date' => now()->subDay()->toDateString(),
             'deploy_count' => 0,
@@ -94,7 +94,7 @@ class VersionServiceTest extends TestCase
         ]);
 
         $deploy = SysDeploy::create([
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'start_at' => now()->subHour(),
             'sys_deploy_master_id' => $master->id,
             'sys_deploy_asset_id' => $asset->id,
@@ -124,7 +124,7 @@ class VersionServiceTest extends TestCase
         // Arrange - Create old deploy
         $oldMaster = SysDeployMaster::create([
             'hash' => 'master_hash_001',
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'deploy_date' => now()->subDays(2)->toDateString(),
             'deploy_count' => 0,
             'deployed_at' => now()->subDays(2),
@@ -132,14 +132,14 @@ class VersionServiceTest extends TestCase
 
         $oldAsset = SysDeployAsset::create([
             'hash' => 'asset_hash_001',
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'deploy_date' => now()->subDays(2)->toDateString(),
             'deploy_count' => 0,
             'deployed_at' => now()->subDays(2),
         ]);
 
         $oldDeploy = SysDeploy::create([
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'start_at' => now()->subDays(2),
             'sys_deploy_master_id' => $oldMaster->id,
             'sys_deploy_asset_id' => $oldAsset->id,
@@ -148,7 +148,7 @@ class VersionServiceTest extends TestCase
 
         // Arrange - Create new deploy
         $newMaster = SysDeployMaster::create([
-            'deploy_key' => 202601020,
+            'deploy_key' => 2026010201,
             'hash' => 'master_hash_002',
             'deploy_date' => now()->subDay()->toDateString(),
             'deploy_count' => 0,
@@ -156,7 +156,7 @@ class VersionServiceTest extends TestCase
         ]);
 
         $newAsset = SysDeployAsset::create([
-            'deploy_key' => 202601020,
+            'deploy_key' => 2026010201,
             'hash' => 'asset_hash_002',
             'deploy_date' => now()->subDay()->toDateString(),
             'deploy_count' => 0,
@@ -164,7 +164,7 @@ class VersionServiceTest extends TestCase
         ]);
 
         $newDeploy = SysDeploy::create([
-            'deploy_key' => 202601020,
+            'deploy_key' => 2026010201,
             'start_at' => now()->subHour(),
             'sys_deploy_master_id' => $newMaster->id,
             'sys_deploy_asset_id' => $newAsset->id,
@@ -208,7 +208,7 @@ class VersionServiceTest extends TestCase
 
         // Arrange - Create deploy
         $master = SysDeployMaster::create([
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'hash' => 'master_hash_001',
             'deploy_date' => now()->subDay()->toDateString(),
             'deploy_count' => 0,
@@ -216,7 +216,7 @@ class VersionServiceTest extends TestCase
         ]);
 
         $asset = SysDeployAsset::create([
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'hash' => 'asset_hash_001',
             'deploy_date' => now()->subDay()->toDateString(),
             'deploy_count' => 0,
@@ -224,7 +224,7 @@ class VersionServiceTest extends TestCase
         ]);
 
         $deploy = SysDeploy::create([
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'start_at' => now()->subHour(),
             'sys_deploy_master_id' => $master->id,
             'sys_deploy_asset_id' => $asset->id,

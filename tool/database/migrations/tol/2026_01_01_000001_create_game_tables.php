@@ -16,7 +16,7 @@ return new class extends Migration
         // ========================================
         Schema::connection('tool')->create('tol_master_status', function (Blueprint $table) {
             $table->id()->comment('ID');
-            $table->integer('deploy_key')->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->comment('デプロイキー');
             $table->enum('status', ['preparing', 'ready', 'active', 'archived'])->comment('ステータス');
             $table->text('note')->nullable()->comment('備考');
             $table->dateTime('created_at')->nullable()->comment('作成日時');
@@ -31,7 +31,7 @@ return new class extends Migration
         // ========================================
         Schema::connection('tool')->create('tol_asset_status', function (Blueprint $table) {
             $table->id()->comment('ID');
-            $table->integer('deploy_key')->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->comment('デプロイキー');
             $table->string('asset_type', 50)->comment('アセットタイプ');
             $table->string('version', 50)->comment('バージョン');
             $table->enum('status', ['preparing', 'ready', 'active', 'archived'])->comment('ステータス');
@@ -42,6 +42,36 @@ return new class extends Migration
 
             $table->index('deploy_key');
             $table->index('status');
+        });
+
+        // ========================================
+        // tol_master_deploy_run: マスターデプロイ操作の実行記録
+        // 設計: docs/design/master-distribution/db.md 5 節
+        // ========================================
+        Schema::connection('tool')->create('tol_master_deploy_run', function (Blueprint $table) {
+            $table->id()->comment('ID');
+            $table->enum('mode', ['real', 'fixed'])->comment('本物のキー（real）か固定キー（fixed）');
+            $table->bigInteger('deploy_key')->nullable()->comment('畳みの上限 T（採番前は null）');
+            $table->enum('status', ['running', 'succeeded', 'failed', 'inconsistent', 'aborted'])->comment('実行状態');
+            $table->enum('phase', ['lock', 'read', 'validate', 'apply', 'export', 'register', 'commit', 'invalidate', 'done'])
+                ->comment('最後に着手した段階');
+            $table->unsignedBigInteger('adm_account_id')->nullable()->comment('実行した管理者（adm_account.id。CLI 実行は null）');
+            $table->string('app_env', 32)->comment('実行時の APP_ENV');
+            $table->string('master_hash', 64)->nullable()->comment('書き出したマニフェストの hash');
+            $table->unsignedBigInteger('sys_deploy_master_id')->nullable()->comment('登録または再利用した sys_deploy_master の ID');
+            $table->unsignedBigInteger('sys_deploy_id')->nullable()->comment('有効にした sys_deploy の ID');
+            $table->boolean('is_new')->nullable()->comment('新しい版を登録したか（既存を再利用したら false）');
+            $table->json('summary')->nullable()->comment('表ごとの件数とキャッシュ破棄の成否');
+            $table->string('error_code', 50)->nullable()->comment('エラーコード');
+            $table->text('error_message')->nullable()->comment('利用者に出したメッセージ');
+            $table->dateTime('started_at')->comment('開始日時（UTC）');
+            $table->dateTime('finished_at')->nullable()->comment('終了日時');
+            $table->dateTime('created_at')->default(DB::raw('CURRENT_TIMESTAMP'))->comment('作成日時');
+            $table->dateTime('updated_at')->default(DB::raw('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'))->comment('更新日時');
+
+            $table->index('deploy_key');
+            $table->index('status');
+            $table->index('started_at');
         });
 
         // ========================================
@@ -167,6 +197,7 @@ return new class extends Migration
         Schema::connection('tool')->dropIfExists('tol_maintenance');
         Schema::connection('tool')->dropIfExists('tol_cache_control');
         Schema::connection('tool')->dropIfExists('tol_banner');
+        Schema::connection('tool')->dropIfExists('tol_master_deploy_run');
         Schema::connection('tool')->dropIfExists('tol_asset_status');
         Schema::connection('tool')->dropIfExists('tol_master_status');
     }

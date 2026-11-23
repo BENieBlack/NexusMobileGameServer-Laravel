@@ -25,7 +25,7 @@ return new class extends Migration
         // 期間外の交換所の商品は、商品の期間内でも交換できない
         // ------------------------------------------------
         Schema::create('mst_trade', function (Blueprint $table) {
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('id')->primary()->comment('交換所ID（例: trade_general, trade_event_202605）');
             $table->dateTime('start_at')->comment('開始日時');
             $table->dateTime('end_at')->nullable()->comment('終了日時（NULLは無期限）');
@@ -37,7 +37,7 @@ return new class extends Migration
         });
 
         Schema::create('mst_trade__l10n', function (Blueprint $table) {
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('mst_trade_id')->comment('mst_tradeテーブルのID');
             $table->enum('language', $this->supportedLanguages)->comment('言語コード');
             $table->string('name')->comment('交換所名');
@@ -53,7 +53,7 @@ return new class extends Migration
         // 1回交換するごとに cost_type の cost_mst_id を cost_amount 個消費する。trade_limit 回まで交換でき、reset_type の周期で数え直す
         // ------------------------------------------------
         Schema::create('mst_trade_product', function (Blueprint $table) {
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('id')->primary()->comment('商品ID（例: trade_general_potion_daily）');
             $table->string('mst_trade_id')->comment('mst_tradeテーブルのID');
             $table->string('cost_type')->comment('消費種別 (diamond: 無償→有償の順 / paid_diamond: 有償のみ / item: アイテム / wallet: コイン・ゴールドなどの通貨)');
@@ -72,7 +72,7 @@ return new class extends Migration
         });
 
         Schema::create('mst_trade_product__l10n', function (Blueprint $table) {
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('mst_trade_product_id')->comment('mst_trade_productテーブルのID');
             $table->enum('language', $this->supportedLanguages)->comment('言語コード');
             $table->string('name')->comment('商品名');
@@ -90,7 +90,7 @@ return new class extends Migration
         // ------------------------------------------------
         Schema::create('mst_trade_product_content', function (Blueprint $table) {
             $table->string('id')->primary()->comment('ID（{mst_trade_product_id}:{content_type}:{content_mst_id}）');
-            $table->integer('deploy_key')->default(202601010)->comment('デプロイキー');
+            $table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー');
             $table->string('mst_trade_product_id')->comment('mst_trade_productテーブルのID');
             $table->string('content_type')->comment('手に入るものの種別 (item / unit / equipment / stamina など。無償ダイヤは item + free_diamond)');
             $table->string('content_mst_id')->comment('手に入るもののマスターID（staminaはダミー値。無償ダイヤは free_diamond）');

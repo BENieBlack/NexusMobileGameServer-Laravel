@@ -31,17 +31,15 @@ use Nexus\Core\Utilities\ClockUtility;
  * （行があるときは触らない。これらは truncate するため。mst_player_level は string の id を持ち、
  * MstPlayerLevelSeeder が MstPlayerLevel::makeId で作る）。
  *
- * deploy_key は固定値（DEPLOY_KEY = 777777777、9 桁）。version API は有効なデプロイのうち deploy_key が最大のものを
- * 最新とする。運営ツール経由の本物のデプロイは 10 桁（YYYYMMDD×100+連番。例 2026112201。
- * MasterDeployService::generateDeployKey）で DEPLOY_KEY より大きいので、そういう有効なデプロイがある環境では
- * 何も追加しない（本物が最新のまま）。つまりケース 14 は、運営ツール経由の本物のデプロイが無い環境
- * （基本シードの sys_deploy だけ、など）でしか撮れない。開発用 999999999・レベルデザイン用 888888888 の
- * 有効なデプロイがある環境も同じ。
- * 追加した場合は、DEPLOY_KEY が基本シードなど小さい deploy_key より大きいので録画用が最新になり、
- * その間は本物のデプロイの配信ファイルが master.tables に出ない（録画用の配信ファイルだけになる）。
+ * deploy_key は予約キー（DEPLOY_KEY = 7777777777）。version API は有効なデプロイのうち deploy_key が最大のものを
+ * 最新とする。運営ツール経由の本物のデプロイは YYYYMMDD×100+連番（例 2026112201）で DEPLOY_KEY より小さいので、
+ * 本物があっても録画用が最新になる。開発用 9999999999・レベルデザイン用 8888888888 の有効なデプロイがある
+ * 環境だけ、それらが最新になるので何も追加しない。
+ * 追加した場合は、録画用が最新になり、その間は本物のデプロイの配信ファイルが master.tables に出ない
+ * （録画用の配信ファイルだけになる）。
  * 既存のデプロイの is_active は変えない。元に戻すには RecordingResetSeeder。
  * sys_deploy_master の deploy_date は 1900-01-01 で、運営ツールの連番（今日の deploy_date の件数）を増やさない。
- * deploy_key の上乗せ（畳み・予約キーの 10 桁化）は deploy_key 上乗せの S3 で、この方式ごと作り直す。
+ * 運営ツールと同じ畳み・登録の経路に乗せる作り直しは deploy_key 上乗せの S3-4 で行う（今は mst の現在の行を書き出すつなぎ）。
  *
  * 使うケース（client_design.md 7節）: 1〜15 すべての前提（version API を通す）。
  * ケース 14（未取得の版の取得）は、このデプロイが配信ファイルを持つので、クライアントを同梱の版のまま
@@ -49,7 +47,7 @@ use Nexus\Core\Utilities\ClockUtility;
  *
  * 冪等性: deploy_key 固定の updateOrInsert。何度流しても各 1 行（master_table は入れ替え）。mst の内容が
  * 変わっていればファイルは新しいハッシュで作り直し、古い録画用ディレクトリは消す。
- * 副作用: master_table を持つ本物のデプロイ、または deploy_key が DEPLOY_KEY より大きい有効なデプロイがあれば何もしない。
+ * 副作用: deploy_key が DEPLOY_KEY より大きい有効なデプロイがあれば何もしない。
  * 追加する行は description が `[REC]` で始まり、RecordingResetSeeder が行とファイルを消す。
  * キャッシュ: 最新デプロイは Redis に最大 1 時間キャッシュされるため、追加後に消して即時に反映する。
  *
@@ -58,13 +56,12 @@ use Nexus\Core\Utilities\ClockUtility;
 class RecordingDeploySeeder extends RecordingScenarioSeeder
 {
     /**
-     * 9 桁の固定値。運営ツールが作る本物の 10 桁（例 2026112201）より小さいので、本物が有効なら最新にならない
-     * （その場合は追加しない）。開発用の仮データ（999999999）・レベルデザイン中のデータ（888888888）より小さい。
-     * 最新の判定は最大の deploy_key（sys_deploy.is_active かつ start_at 到来のうち。SysDeployRepository::
-     * selectLatestDownloadable）。列は integer（unique）で収まる。
-     * deploy_key 上乗せの S3 で、予約キー 7777777777（10 桁）の固定キーに作り直す。それまでのつなぎ。
+     * 予約帯（7000000000 以上。DeployKeyConst::FIXED_KEY_RECORDING）の固定キー。本物の 10 桁（例 2026112201）より
+     * 大きいので、本物が有効でも録画用が最新になる（本番では予約帯が除かれる）。レベルデザイン用（8888888888）・
+     * 開発用（9999999999）より小さい。最新の判定は deploy_key 降順 → id 降順（SysDeployRepository::
+     * selectLatestDownloadable）。列は bigInteger。登録の作り直しは S3-4 で行う。
      */
-    public const DEPLOY_KEY = 777777777;
+    public const DEPLOY_KEY = 7777777777;
 
     /** 配信に必ず含めるテーブルグループ（親テーブル名）。home-player-info のスタミナ最大値と回復間隔 */
     public const REQUIRED_GROUPS = ['mst_player_level', 'mst_config'];
@@ -74,7 +71,7 @@ class RecordingDeploySeeder extends RecordingScenarioSeeder
         $now = ClockUtility::nowToString();
 
         if ($this->hasDeployThatShouldNotBeOverridden($now)) {
-            $this->report('配信ファイルを持つ、または deploy_key が録画用より大きい有効なデプロイが既にあるため、デプロイは追加しません。');
+            $this->report('deploy_key が録画用より大きい有効なデプロイ（開発用・レベルデザイン用）が既にあるため、デプロイは追加しません。');
 
             return;
         }
@@ -195,20 +192,17 @@ class RecordingDeploySeeder extends RecordingScenarioSeeder
     }
 
     /**
-     * 録画用を足さない理由になる、録画用以外の有効かつ開始済みのデプロイがあるか。次のどちらか。
-     * - 配信ファイル（sys_deploy_master_table）を持つ（本物の配信を隠さない）
-     * - deploy_key が録画用より大きい（運営ツール経由の本物の 10 桁、開発用 999999999・レベルデザイン用 888888888。最新になれないので足しても無駄）
-     * 配信ファイルが無く deploy_key も小さいデプロイ（基本シードの sys_deploy など）は、録画用が上に重なるので数えない。
+     * 録画用を足さない理由になる、deploy_key が録画用より大きい有効かつ開始済みのデプロイがあるか
+     * （開発用 9999999999・レベルデザイン用 8888888888。最新になれないので足しても無駄）。
+     * 配信ファイルを持つ本物の 10 桁のデプロイや基本シードの sys_deploy は、録画用が上に重なるので数えない。
+     * 設計: Nexus docs/design/master-distribution/db.md 11.2
      */
     private function hasDeployThatShouldNotBeOverridden(string $now): bool
     {
         return DB::connection('sys')->table('sys_deploy')
             ->where('is_active', true)
             ->where('start_at', '<=', $now)
-            ->where('deploy_key', '!=', self::DEPLOY_KEY)
-            ->where(fn ($q) => $q
-                ->where('deploy_key', '>', self::DEPLOY_KEY)
-                ->orWhereIn('sys_deploy_master_id', DB::connection('sys')->table('sys_deploy_master_table')->select('sys_deploy_master_id')))
+            ->where('deploy_key', '>', self::DEPLOY_KEY)
             ->exists();
     }
 }

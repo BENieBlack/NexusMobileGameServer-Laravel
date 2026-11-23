@@ -102,7 +102,7 @@ class GachaDrawTest extends TestCase
         // ガチャマスター
         MstGacha::create([
             'id' => $this->testGachaId,
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'sort_desc' => 100,
             'is_active' => true,
             'start_at' => ClockUtility::now()->subDay(),
@@ -114,7 +114,7 @@ class GachaDrawTest extends TestCase
         // ガチャコスト（ダイヤモンド100個）
         MstGachaCost::create([
             'id' => $this->testGachaId.'_cost_1',
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'mst_gacha_id' => $this->testGachaId,
             'draw_count' => 1,
             'cost_type' => 'diamond',
@@ -125,7 +125,7 @@ class GachaDrawTest extends TestCase
         // ガチャコスト（10連: ダイヤモンド900個）
         MstGachaCost::create([
             'id' => $this->testGachaId.'_cost_10',
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'mst_gacha_id' => $this->testGachaId,
             'draw_count' => 10,
             'cost_type' => 'diamond',
@@ -135,7 +135,7 @@ class GachaDrawTest extends TestCase
 
         // ガチャステップ（通常ガチャ）
         MstGachaStep::create([
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'id' => $this->testGachaId.'_step_1',
             'mst_gacha_id' => $this->testGachaId,
             'step_number' => 1,
@@ -147,7 +147,7 @@ class GachaDrawTest extends TestCase
         // レアリティ排出率（rarity 3: 70%, rarity 4: 30%）
         MstGachaRarityRate::create([
             'id' => $this->testGachaId.'_rate_r3',
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'mst_gacha_id' => $this->testGachaId,
             'rarity' => 3,
             'rate' => 7000, // 70%
@@ -155,7 +155,7 @@ class GachaDrawTest extends TestCase
 
         MstGachaRarityRate::create([
             'id' => $this->testGachaId.'_rate_r4',
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'mst_gacha_id' => $this->testGachaId,
             'rarity' => 4,
             'rate' => 3000, // 30%
@@ -175,7 +175,7 @@ class GachaDrawTest extends TestCase
     {
         // Item (rarity 3)
         MstGachaPrize::create([
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'id' => $this->testGachaId.'_prize_item_r3',
             'mst_gacha_id' => $this->testGachaId,
             'rarity' => 3,
@@ -188,7 +188,7 @@ class GachaDrawTest extends TestCase
 
         // Item (rarity 4) - 追加
         MstGachaPrize::create([
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'id' => $this->testGachaId.'_prize_item_r4',
             'mst_gacha_id' => $this->testGachaId,
             'rarity' => 4,
@@ -201,7 +201,7 @@ class GachaDrawTest extends TestCase
 
         // Unit (rarity 3) - 追加
         MstGachaPrize::create([
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'id' => $this->testGachaId.'_prize_unit_r3',
             'mst_gacha_id' => $this->testGachaId,
             'rarity' => 3,
@@ -214,7 +214,7 @@ class GachaDrawTest extends TestCase
 
         // Unit (rarity 4)
         MstGachaPrize::create([
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'id' => $this->testGachaId.'_prize_unit_r4',
             'mst_gacha_id' => $this->testGachaId,
             'rarity' => 4,
@@ -227,7 +227,7 @@ class GachaDrawTest extends TestCase
 
         // Equipment (rarity 3) - 追加
         MstGachaPrize::create([
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'id' => $this->testGachaId.'_prize_equipment_r3',
             'mst_gacha_id' => $this->testGachaId,
             'rarity' => 3,
@@ -240,7 +240,7 @@ class GachaDrawTest extends TestCase
 
         // Equipment (rarity 4)
         MstGachaPrize::create([
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'id' => $this->testGachaId.'_prize_equipment_r4',
             'mst_gacha_id' => $this->testGachaId,
             'rarity' => 4,
@@ -259,7 +259,7 @@ class GachaDrawTest extends TestCase
     {
         MstItem::create([
             'id' => 'test_item_gold',
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'type' => 'material',
             'effect' => 'none',
             'value' => 0,
@@ -267,7 +267,7 @@ class GachaDrawTest extends TestCase
 
         MstItem::create([
             'id' => 'test_item_diamond',
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'type' => 'material',
             'effect' => 'none',
             'value' => 0,

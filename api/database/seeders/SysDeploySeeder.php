@@ -25,7 +25,7 @@ class SysDeploySeeder extends Seeder
         // マスターデータデプロイ履歴を作成
         $masterDeploys = [
             [
-                'deploy_key' => 202601010,
+                'deploy_key' => 2026010101,
                 'hash' => hash('sha256', 'master_v1.0.0'),
                 'deploy_date' => '2026-01-01',
                 'deploy_count' => 1,
@@ -37,7 +37,7 @@ class SysDeploySeeder extends Seeder
                 'updated_at' => '2026-01-01 00:00:00',
             ],
             [
-                'deploy_key' => 202602010,
+                'deploy_key' => 2026020101,
                 'hash' => hash('sha256', 'master_v1.1.0'),
                 'deploy_date' => '2026-02-01',
                 'deploy_count' => 1,
@@ -49,7 +49,7 @@ class SysDeploySeeder extends Seeder
                 'updated_at' => '2026-02-01 12:00:00',
             ],
             [
-                'deploy_key' => 202602220,
+                'deploy_key' => 2026022201,
                 'hash' => hash('sha256', 'master_v1.2.0'),
                 'deploy_date' => '2026-02-22',
                 'deploy_count' => 1,
@@ -70,7 +70,7 @@ class SysDeploySeeder extends Seeder
         // アセットデプロイ履歴を作成
         $assetDeploys = [
             [
-                'deploy_key' => 202601010,
+                'deploy_key' => 2026010101,
                 'hash' => hash('sha256', 'asset_v1.0.0'),
                 'deploy_date' => '2026-01-01',
                 'deploy_count' => 1,
@@ -87,7 +87,7 @@ class SysDeploySeeder extends Seeder
                 'updated_at' => '2026-01-01 00:00:00',
             ],
             [
-                'deploy_key' => 202602010,
+                'deploy_key' => 2026020101,
                 'hash' => hash('sha256', 'asset_v1.1.0'),
                 'deploy_date' => '2026-02-01',
                 'deploy_count' => 1,
@@ -104,7 +104,7 @@ class SysDeploySeeder extends Seeder
                 'updated_at' => '2026-02-01 12:00:00',
             ],
             [
-                'deploy_key' => 202602220,
+                'deploy_key' => 2026022201,
                 'hash' => hash('sha256', 'asset_v1.2.0'),
                 'deploy_date' => '2026-02-22',
                 'deploy_count' => 1,
@@ -130,7 +130,7 @@ class SysDeploySeeder extends Seeder
         // デプロイ統合テーブルを作成
         $deploys = [
             [
-                'deploy_key' => 202601010,
+                'deploy_key' => 2026010101,
                 'start_at' => '2026-01-01 00:00:00',
                 'sys_deploy_master_id' => $masterIds[0],
                 'sys_deploy_asset_id' => $assetIds[0],
@@ -139,7 +139,7 @@ class SysDeploySeeder extends Seeder
                 'updated_at' => '2026-02-01 12:00:00',
             ],
             [
-                'deploy_key' => 202602010,
+                'deploy_key' => 2026020101,
                 'start_at' => '2026-02-01 12:00:00',
                 'sys_deploy_master_id' => $masterIds[1],
                 'sys_deploy_asset_id' => $assetIds[1],
@@ -148,7 +148,7 @@ class SysDeploySeeder extends Seeder
                 'updated_at' => '2026-02-22 00:00:00',
             ],
             [
-                'deploy_key' => 202602220,
+                'deploy_key' => 2026022201,
                 'start_at' => '2026-02-22 00:00:00',
                 'sys_deploy_master_id' => $masterIds[2],
                 'sys_deploy_asset_id' => $assetIds[2],

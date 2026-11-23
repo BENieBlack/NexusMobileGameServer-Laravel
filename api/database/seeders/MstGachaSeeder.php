@@ -52,7 +52,7 @@ class MstGachaSeeder extends Seeder
         // ガチャ基本情報
         MstGacha::create([
             'id' => $gachaId,
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'gacha_type' => 'normal',
             'start_at' => '2026-01-01 00:00:00',
             'end_at' => '2099-12-31 23:59:59',
@@ -141,7 +141,7 @@ class MstGachaSeeder extends Seeder
         // ガチャ基本情報
         MstGacha::create([
             'id' => $gachaId,
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'gacha_type' => 'step_up',
             'start_at' => '2026-04-01 00:00:00',
             'end_at' => '2026-04-30 23:59:59',
@@ -326,7 +326,7 @@ class MstGachaSeeder extends Seeder
         // ガチャ基本情報
         MstGacha::create([
             'id' => $gachaId,
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'gacha_type' => 'pickup',
             'start_at' => '2026-04-01 00:00:00',
             'end_at' => '2026-04-15 23:59:59',

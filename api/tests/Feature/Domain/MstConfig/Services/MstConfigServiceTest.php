@@ -132,7 +132,7 @@ class MstConfigServiceTest extends TestCase
     private function insertConfig(string $value, string $valueType): void
     {
         DB::connection('mst')->table('mst_config')->insert([
-            'deploy_key' => 202601010,
+            'deploy_key' => 2026010101,
             'id' => self::KEY->value,
             'value' => $value,
             'value_type' => $valueType,

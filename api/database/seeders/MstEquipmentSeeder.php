@@ -173,7 +173,7 @@ class MstEquipmentSeeder extends Seeder
             // 装備本体を作成
             MstEquipment::create([
                 'id' => $equipData['id'],
-                'deploy_key' => 202601010,
+                'deploy_key' => 2026010101,
                 'type' => $equipData['type'],
                 'element' => $equipData['element'],
                 'rarity' => $equipData['rarity'],
