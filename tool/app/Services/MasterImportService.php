@@ -18,8 +18,8 @@ use RuntimeException;
  * - シート名 = mstテーブル名 として対応付ける
  *   例: シート名「mst_item」→ テーブル「mst_item」
  * - 1行目はヘッダ（カラム名）として使用
- * - import(): 既存レコードは全て削除してから再INSERT（truncate & insert。廃止予定。S3-16）
- * - reflect(): トランザクション内の差分反映（INSERT・変更行のみ DELETE+INSERT・DELETE）。コミットは呼び出し側
+ * - import(): 既存レコードは全て削除してから再INSERT（truncate & insert。ルートからは呼ばれなくなった。削除は未実施で、行の変換・ID の検査の部品として残している。db.md 10.4）
+ * - reflect(): トランザクション内の差分反映（INSERT・変更行のみ DELETE+INSERT・DELETE）。コミットは呼び出し側（同上。ルートからは呼ばれない）
  * - deploy_key は現在のUnixタイムスタンプを使用
  * - rarity / bonus_rarity は列の実際の型で扱いを変える（ENUM は文字列のまま、整数列は数値へ変換）。
  *   不正な値は TRUNCATE の前に検出してエラーにする
@@ -284,7 +284,7 @@ class MasterImportService
      * - dry_run = true は同じ比較をして、書かずに件数だけ返す
      *
      * シートの `replace` が true の表は、rows が空でも置き換えの対象にする（行はあるが畳みで全部削除印になった表を空にする。
-     * db.md 6.1。MasterDeployRunner が MasterOverlayFolder の replaced を渡す）。省略時は false
+     * db.md 6.1。MasterBuildRunner が MasterOverlayFolder の replaced を渡す）。省略時は false
      *
      * @param  array<string, array{headers: array<int, string>, rows: array<int, array<string, mixed>>, replace?: bool}>  $tables  表名 => シート
      * @return array{
@@ -774,7 +774,7 @@ class MasterImportService
     private const RARITY_COLUMNS = ['rarity', 'bonus_rarity'];
 
     /**
-     * 表の rarity 系カラムの型（検証 V10 用。MasterDeployRunner が MasterSheetValidator へ渡す）
+     * 表の rarity 系カラムの型（検証 V10 用。MasterBuildRunner が MasterSheetValidator へ渡す）
      *
      * @param  array<int, string>  $headers
      * @return array<string, array{kind: 'enum', values: array<int, string>}|array{kind: 'int'}>

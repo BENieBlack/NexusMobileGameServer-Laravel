@@ -33,8 +33,8 @@ class RouteAccessTest extends TestCase
     }
 
     #[Test]
-    public function 未認証でもマスターインポートを実行できない(): void
+    public function 未認証でもマスターのbuildを実行できない(): void
     {
-        $this->post('/master-import/execute')->assertRedirect('/login');
+        $this->post('/master-import/build')->assertRedirect('/login');
     }
 }

@@ -4,9 +4,6 @@ namespace Tests\Feature;
 
 use App\Models\Adm\AdmAccount;
 use App\Services\GoogleSpreadsheetService;
-use App\Services\MasterDataExporter;
-use App\Services\MasterDeployService;
-use App\Services\MasterImportService;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Storage;
 use Mockery;
@@ -14,7 +11,7 @@ use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
 /**
- * 旧経路 6 本（execute・export・all-sheets・spreadsheets・sheets・preview）の回帰テスト（S3-16 で廃止するまでの間）
+ * シート系 4 本（all-sheets・spreadsheets・sheets・preview）の回帰テスト（execute・export は S3-16 で廃止した）
  *
  * S3-13 でコントローラが GoogleSpreadsheetService を使うときに解決する形へ変えたので、
  * 認証情報が未設定でも壊れないこと・レスポンスの形が変わらないこと・Client を作り直さないことを固定する。
@@ -77,7 +74,6 @@ class MasterImportLegacyRoutesTest extends TestCase
             ['get', '/master-import/spreadsheets'],
             ['get', '/master-import/sheets?spreadsheet_id=a'],
             ['get', '/master-import/preview?spreadsheet_id=a&sheet_title=mst_x'],
-            ['post', '/master-import/execute', ['spreadsheet_id' => 'a', 'sheet_title' => 'mst_x']],
         ] as $case) {
             $response = $this->json($case[0], $case[1], $case[2] ?? []);
             $response->assertStatus(422)->assertJsonPath('status', 'error')->assertJsonStructure(['message']);
@@ -103,54 +99,5 @@ class MasterImportLegacyRoutesTest extends TestCase
     {
         $this->getJson('/master-import/sheets')->assertStatus(422)->assertJsonValidationErrors('spreadsheet_id');
         $this->getJson('/master-import/preview')->assertStatus(422)->assertJsonValidationErrors(['spreadsheet_id', 'sheet_title']);
-        $this->postJson('/master-import/execute')->assertStatus(422)->assertJsonValidationErrors(['spreadsheet_id', 'sheet_title']);
-    }
-
-    #[Test]
-    public function executeの形(): void
-    {
-        $count = 0;
-        $mock = $this->bindSheetMock($count);
-        $mock->shouldReceive('getSheetData')->with('a', 'mst_x')->once()->andReturn(['mst_x' => ['headers' => ['id'], 'rows' => [['1']]]]);
-        $import = Mockery::mock(MasterImportService::class);
-        $import->shouldReceive('import')->once()->with('mst_x', ['id'], [['1']])->andReturn(['table' => 'mst_x', 'inserted' => 1, 'skipped' => 0, 'errors' => []]);
-        $this->app->instance(MasterImportService::class, $import);
-
-        $this->postJson('/master-import/execute', ['spreadsheet_id' => 'a', 'sheet_title' => 'mst_x'])
-            ->assertOk()
-            ->assertJsonPath('status', 'success')
-            ->assertJsonPath('message', '「mst_x」へ合計 1 件インポートしました。')
-            ->assertJsonPath('results.0.inserted', 1);
-    }
-
-    #[Test]
-    public function executeはシートが空なら_warning(): void
-    {
-        $count = 0;
-        $mock = $this->bindSheetMock($count);
-        $mock->shouldReceive('getSheetData')->once()->andReturn([]);
-
-        $this->postJson('/master-import/execute', ['spreadsheet_id' => 'a', 'sheet_title' => 'mst_x'])
-            ->assertOk()->assertJsonPath('status', 'warning')->assertJsonPath('results', []);
-    }
-
-    #[Test]
-    public function exportの形は認証情報なしでも動く(): void
-    {
-        Config::set('services.google_spreadsheet.credentials_json', null);
-        Config::set('services.google_spreadsheet.credentials_path', null);
-        $export = ['hash' => 'h', 'file_size' => 1, 'table_count' => 2, 'file_count' => 3, 'tables' => []];
-        $exporter = Mockery::mock(MasterDataExporter::class);
-        $exporter->shouldReceive('export')->once()->andReturn($export);
-        $this->app->instance(MasterDataExporter::class, $exporter);
-        $deploy = Mockery::mock(MasterDeployService::class);
-        $deploy->shouldReceive('register')->once()->with($export)->andReturn(['deploy_key' => 2026112201, 'sys_deploy_master_id' => 1, 'sys_deploy_id' => 2, 'is_new' => true]);
-        $this->app->instance(MasterDeployService::class, $deploy);
-
-        $this->postJson('/master-import/export')
-            ->assertOk()
-            ->assertJsonPath('status', 'success')
-            ->assertJsonPath('export.hash', 'h')
-            ->assertJsonPath('deploy', ['deploy_key' => 2026112201, 'sys_deploy_master_id' => 1, 'sys_deploy_id' => 2, 'is_new' => true]);
     }
 }

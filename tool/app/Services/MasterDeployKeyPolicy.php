@@ -10,7 +10,7 @@ use App\Exceptions\MasterDeployKeyException;
  * 設計: docs/design/master-distribution/db.md 7.1〜7.3、3.4 の 4
  * 設定は config/master_deploy.php。デプロイ操作の最初（排他の前）で resolveFixedKey() を呼ぶ想定（接続は別 PR）。
  * 公開メソッドのうち assertRealKey は S3-10（採番 MasterDeployService）、isRejectedReservedKey・assertNotRejectedReservedKey は
- * シート検証（MasterSheetValidator の V04）、resolveFixedKey は S3-10 の MasterDeployRunner・S3-13 の target 表示で使う。
+ * シート検証（MasterSheetValidator の V04）、resolveFixedKey は MasterDeployTargetService（target の表示）と各操作の環境設定の検査で使う。
  * 禁止環境の判定は APP_ENV を trim・小文字化して比べる。forbidden_envs に無い未知の env（local・testing・qa など）では固定キーが通る方針（db.md 7.2）。
  */
 class MasterDeployKeyPolicy

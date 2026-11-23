@@ -26,7 +26,7 @@ use Throwable;
  */
 class MasterImportRunner extends MasterDeployOperation
 {
-    private const ARTIFACT_DIR_PATTERN = '/^[0-9]{10}_[0-9a-f]{16}$/D';
+    private const ARTIFACT_DIR_PATTERN = MasterArtifactStore::DIR_PATTERN;
 
     private const MISMATCH_SAMPLE_MAX = 20;
 

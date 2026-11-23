@@ -5,7 +5,7 @@ namespace App\Exceptions;
 use RuntimeException;
 
 /**
- * MasterDeployRunner が、api.md 4 節のエラーとして呼び出し側（画面・CLI）へ返す例外
+ * 各 Runner・Service が、api.md 13 節のエラーとして呼び出し側（画面・CLI）へ返す例外
  *
  * 設計: docs/design/master-distribution/api.md 2 節（失敗の形）・4 節（エラー）
  * toArray() が `{ status: error, code, message, error_list, run_id, ... }` を返す。HTTP ステータスは httpStatus。
