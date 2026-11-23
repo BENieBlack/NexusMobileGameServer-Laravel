@@ -388,6 +388,110 @@ class MasterVersionDatabase
     }
 
     /**
+     * 成果物の行データ（`data/{表}.ndjson`）を DB に入れる（import・復元。db.md 6.6 の version_db）。DDL を終えた後に、全表を 1 つのトランザクションで
+     * 500 行ずつ入れる。列は schema.json の `data_columns` のうち DB に実在するもの。値は文字列か null のまま束縛し、型は MySQL が決める
+     * （6.5.1）。created_at・updated_at は固定値。失敗したらロールバックして、表名と DB の文言を持つ RuntimeException を投げる
+     *
+     * @param  string  $localDir  成果物のローカルのコピー（data/・schema.json がある）
+     * @param  list<array{name: string, row_count: int, data_sha256: string}>  $manifestTables
+     * @return array<string, int> 表名 => 入れた行数（行が 1 行以上の表だけ）
+     *
+     * @throws RuntimeException
+     */
+    public function loadNdjson(string $database, string $localDir, array $manifestTables): array
+    {
+        $localDir = rtrim($localDir, '/');
+        $schema = json_decode((string) file_get_contents($localDir.'/schema.json'), true);
+        $dataColumns = [];
+        foreach ((array) ($schema['tables'] ?? []) as $table) {
+            $dataColumns[(string) $table['name']] = (array) ($table['data_columns'] ?? []);
+        }
+        $existingTables = $this->listTables($database);
+        $actualColumns = [];
+        foreach ($this->schemaDefinition($database) as $table) {
+            $actualColumns[$table['name']] = array_column($table['columns'], 'name');
+        }
+        $connection = $this->connection();
+        $loaded = [];
+        $current = '';
+        $connection->beginTransaction();
+        try {
+            foreach ($manifestTables as $tableEntry) {
+                $name = (string) $tableEntry['name'];
+                if ((int) $tableEntry['row_count'] === 0) {
+                    continue;
+                }
+                $current = $name;
+                if (! in_array($name, $existingTables, true)) {
+                    throw new RuntimeException('基底 DB に表がありません');
+                }
+                $columns = array_values(array_filter(
+                    (array) ($dataColumns[$name] ?? []),
+                    static fn ($column): bool => in_array($column, $actualColumns[$name], true),
+                ));
+                $auto = array_values(array_intersect(self::AUTO_COLUMNS, $actualColumns[$name]));
+                $columnSql = implode(', ', array_map([self::class, 'quote'], [...$columns, ...$auto]));
+                $placeholder = '('.implode(', ', array_fill(0, count($columns) + count($auto), '?')).')';
+                $target = self::quote($database).'.'.self::quote($name);
+
+                $handle = fopen($localDir.'/data/'.$name.'.ndjson', 'rb');
+                if ($handle === false) {
+                    throw new RuntimeException('行データを開けません');
+                }
+                $count = 0;
+                try {
+                    $chunk = [];
+                    while (($line = fgets($handle)) !== false) {
+                        $row = json_decode(rtrim($line, "\n"), true, 512, JSON_THROW_ON_ERROR);
+                        $chunk[] = $row;
+                        $count++;
+                        if (count($chunk) >= self::INSERT_CHUNK) {
+                            $this->insertNdjsonChunk($connection, $target, $columnSql, $placeholder, $columns, $auto, $chunk);
+                            $chunk = [];
+                        }
+                    }
+                    if ($chunk !== []) {
+                        $this->insertNdjsonChunk($connection, $target, $columnSql, $placeholder, $columns, $auto, $chunk);
+                    }
+                } finally {
+                    fclose($handle);
+                }
+                $loaded[$name] = $count;
+            }
+            $connection->commit();
+        } catch (Throwable $e) {
+            try {
+                $connection->rollBack();
+            } catch (Throwable) {
+            }
+
+            throw new RuntimeException(($current !== '' ? "{$current}: " : '').self::safeMessage($e), 0, $e);
+        }
+
+        return $loaded;
+    }
+
+    /**
+     * @param  list<string>  $columns
+     * @param  list<string>  $auto
+     * @param  list<array<string, string|null>>  $rows
+     */
+    private function insertNdjsonChunk(ConnectionInterface $connection, string $target, string $columnSql, string $placeholder, array $columns, array $auto, array $rows): void
+    {
+        $bindings = [];
+        foreach ($rows as $row) {
+            foreach ($columns as $column) {
+                $value = $row[$column] ?? null;
+                $bindings[] = $value === null ? null : (string) $value;
+            }
+            foreach ($auto as $_) {
+                $bindings[] = self::FIXED_TIMESTAMP;
+            }
+        }
+        $connection->insert("INSERT INTO {$target} ({$columnSql}) VALUES ".implode(', ', array_fill(0, count($rows), $placeholder)), $bindings);
+    }
+
+    /**
      * 別の DB の全表の行を、同じ名前の表へ写す（`INSERT ... SELECT`。作業用 DB → 版の DB）。表定義が同じ（LIKE で作った）前提。
      * 1 つのトランザクションで行う。失敗したらロールバックして例外
      *

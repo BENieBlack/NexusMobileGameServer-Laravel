@@ -52,6 +52,62 @@ class MasterDeployRunException extends RuntimeException
 
     public const DROP_FORBIDDEN = 'drop_forbidden';
 
+    // ---- 段階 4（import・finalize・rollback・cancel-schedule・cleanup・deactivate・resolve-unknown。db.md 3.6・4.6・4.7・6.7、api.md 13 節） ----
+
+    public const UPSTREAM_NOT_CONFIGURED = 'upstream_not_configured';
+
+    public const ARTIFACT_NOT_FOUND = 'artifact_not_found';
+
+    public const ARTIFACT_INVALID = 'artifact_invalid';
+
+    public const NOT_FINALIZED = 'not_finalized';
+
+    public const PULL_FAILED = 'pull_failed';
+
+    public const RESERVED_KEY_FORBIDDEN = 'reserved_key_forbidden';
+
+    public const SCHEMA_MISMATCH = 'schema_mismatch';
+
+    public const DEPLOY_KEY_REGRESSION = 'deploy_key_regression';
+
+    public const CONFIRMED_KEY_MODIFIED = 'confirmed_key_modified';
+
+    public const REFERENCE_UNAVAILABLE = 'reference_unavailable';
+
+    public const ROLLBACK_BLOCKED_BY_SCHEDULED = 'rollback_blocked_by_scheduled';
+
+    public const ROLLBACK_TARGET_NOT_FOUND = 'rollback_target_not_found';
+
+    public const ROLLBACK_TARGET_UNAVAILABLE = 'rollback_target_unavailable';
+
+    public const SCHEDULE_NOT_FOUND = 'schedule_not_found';
+
+    public const SCHEDULE_ALREADY_STARTED = 'schedule_already_started';
+
+    public const SCHEDULE_CANCEL_TOO_SOON = 'schedule_cancel_too_soon';
+
+    public const DEPLOY_NOT_FOUND = 'deploy_not_found';
+
+    public const DEACTIVATE_NO_FALLBACK = 'deactivate_no_fallback';
+
+    public const ACTIVATE_TARGET_DROPPED = 'activate_target_dropped';
+
+    public const CLEANUP_FAILED = 'cleanup_failed';
+
+    public const RUN_NOT_FOUND = 'run_not_found';
+
+    public const SYS_UNREADABLE = 'sys_unreadable';
+
+    public const DROP_FAILED = 'drop_failed';
+
+    public const DEPLOY_KEY_MISMATCH = 'deploy_key_mismatch';
+
+    public const FINALIZE_CONFLICT = 'finalize_conflict';
+
+    public const FOLLOW_CHECK_UNAVAILABLE = 'follow_check_unavailable';
+
+    public const SHEET_CHANGED_SINCE_BUILD = 'sheet_changed_since_build';
+
     /**
      * @param  array<int, array<string, mixed>>  $errorList
      * @param  array<string, mixed>  $extra  error_total・error_count_by_code・compensated など、レスポンスへそのまま足す項目

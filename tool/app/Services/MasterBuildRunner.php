@@ -358,6 +358,51 @@ class MasterBuildRunner
         }
     }
 
+    /**
+     * 追従検出（master:finalize・master:verify-sheet。db.md 6.7 の R28）用: 現在のシートを同じ T で畳み直し、`row_digest`（deploy_key ごと）を返す
+     *
+     * 作業用 DB を一時に作って捨てる（作った名前だけ DROP）。ロック・実行記録・ストレージ・sys・キャッシュは触らない（呼び出し側がロックを持つ）。
+     *
+     * @return list<array{deploy_key: int, digest: string}>
+     *
+     * @throws MasterDeployRunException sheet_not_configured・sheet_read_failed・sheet_invalid・load_failed・export_failed
+     */
+    public function computeRowDigest(int $deployKey): array
+    {
+        $prepared = $this->prepare($deployKey, false, null);
+        $work = $this->databases->workName();
+        $localDir = sys_get_temp_dir().'/nexus-digest-'.bin2hex(random_bytes(6));
+        try {
+            $this->databases->createFromBase($work);
+            try {
+                $this->databases->loadFolded($work, $prepared['folded']);
+            } catch (Throwable $e) {
+                throw $this->loadFailed($e);
+            }
+            try {
+                $built = $this->builder->build($work, $deployKey, $localDir, $this->buildDeployKeyLookup($prepared['folded']), [
+                    'built_env' => (string) config('app.env'),
+                    'built_at' => now()->utc()->format('Y-m-d H:i:s'),
+                    'source_kind' => 'build',
+                ]);
+            } catch (JsonException $e) {
+                throw $this->loadFailed($e);
+            } catch (Throwable $e) {
+                Log::error('追従検出の成果物の書き出しに失敗', ['exception' => $e]);
+                throw new MasterDeployRunException(MasterDeployRunException::EXPORT_FAILED, '追従検出の書き出しに失敗しました: '.MasterVersionDatabase::safeMessage($e), 500, previous: $e);
+            }
+
+            return $built['row_digest_list'];
+        } finally {
+            File::deleteDirectory($localDir);
+            try {
+                $this->databases->drop($work);
+            } catch (Throwable $e) {
+                Log::warning('追従検出の作業用 DB を DROP できませんでした（孤児掃除の対象）', ['exception' => $e, 'database' => $work]);
+            }
+        }
+    }
+
     // ---- start_at（I6。db.md 3.6） ----
 
     /**
