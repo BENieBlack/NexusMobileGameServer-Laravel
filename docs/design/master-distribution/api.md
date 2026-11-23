@@ -401,7 +401,7 @@ api 側:
 | 3 | 排他（他の操作が実行中） | `deploy_locked` |
 | 4 | 環境・状態の前提で拒否 | `role_forbidden`・`fixed_key_forbidden`・`fixed_key_invalid`・`deploy_key_not_configured`・`reserved_key_forbidden`・`base_database_mismatch`・`mst_database_name_too_long`・`upstream_not_configured`・`sheet_not_configured`・`follow_check_unavailable`・`rollback_blocked_by_scheduled`・`rollback_target_not_found`・`rollback_target_unavailable`・`schedule_not_found`・`schedule_already_started`・`schedule_cancel_too_soon`・`run_not_found`・`drop_forbidden` |
 
-出力は結果の表と `error_list` を標準出力に。用途: 録画を撮るローカル（`MASTER_DEPLOY_FIXED_KEY=7777777777`。db.md 11.2。録画の方式は**未決**・R19）、画面を開けない環境、CI 外の運用。
+出力は結果の表と `error_list` を標準出力に。用途: 録画を撮るローカル（`MASTER_DEPLOY_FIXED_KEY=7777777777`。db.md 11.2。録画の版はこの build で作る＝**決定**。人。2026-11-24。R19）、画面を開けない環境、CI 外の運用。
 
 ## 11. 排他・失敗時の整合・タイムアウト
 
@@ -543,7 +543,7 @@ build は Google API の呼び出しを全タブ分行い、import は成果物�
 
 ### 14.3 未決
 - **R28**（QA 完了の操作・最終 hash の確定・追従検出のゲートの置き場。8 節は提案）。`final.json` の置き場（成果物のディレクトリか、実行記録・sys か）。
-- **R24** 本番のストレージの種類（hash の長さは**決定**: DB 名の HASH もディレクトリ名の hash も完全な hash の先頭 16 文字。完全な hash は `sys_deploy_master.hash`・`manifest.json` などでそのまま使う。db.md 4.2・6.5.2）・本番のストレージの種類（15 節の本番の disk）。（R39 は決定済み: `is_active` を見る。9.6）**R27** pull 方式の可否。**R32** NN の付け方（サーバーは形を検査するだけ）。**R19** 録画の版の DB の作り方（10 節の用途）。**R20** 切り替え瞬間のクライアント（API の形は変えない）。
+- **R24** 本番のストレージ（hash の長さは**決定**: DB 名の HASH もディレクトリ名の hash も完全な hash の先頭 16 文字。完全な hash は `sys_deploy_master.hash`・`manifest.json` などでそのまま使う。db.md 4.2・6.5.2）。**決定**（人。2026-11-24）: 本番のストレージは「S3 のようなオブジェクトストレージに CDN を立てる想定」。サービス名・disk の設定の細部・CDN の設定は未決（15.2）。（R39 は決定済み: `is_active` を見る。9.6）**R27** pull 方式の可否。**R32** NN の付け方（サーバーは形を検査するだけ）。**R19** は決定済み（人。2026-11-24。録画の版は録画キー固定の build で作る。10 節の用途）。**R20** 切り替え瞬間のクライアント（API の形は変えない）。
 - 保持数 N と成果物の掃除（R40）。
 
 ### 14.4 Nexus との関係
@@ -578,12 +578,13 @@ db.md 7.2 の `tool/config/master_deploy.php` を使う（キーは db.md のと
 | review | `import` | 成果物のまま | なし | QA の置き場（読み取りだけ） | |
 | production | `import` | 成果物のまま | なし | review の置き場 | `reject_past_start_at = true`・`enforce_confirmed_rows = true`・`require_finalized = true` |
 | staging | `import` | 成果物のまま | なし | production の置き場（時間差で、同じ `start_at`） | `fixed_key_forbidden_envs` に含む |
-| 録画（ローカル） | `build` | `fixed_key = 7777777777` | 開発の別ディレクトリ（**仮置き**） | なし | 録画の版の DB の作り方は**未決**（R19） |
+| 録画（ローカル） | `build` | `fixed_key = 7777777777` | 開発の別ディレクトリ（**仮置き**） | なし | 録画の版はこの build で作る（**決定**。R19。命名は他の版と同じ `…-master-7777777777-{HASH16}`） |
 
 ### 15.2 成果物のストレージ（db.md 6.5.3）
 - Laravel の disk で抽象化する（決定）。`master_artifact`（自環境。書き込み可）・`master_artifact_upstream`（import の上流。**読み取りだけ**）・`asset_artifact`（アセット。設計は別の機能。R23）。
 - **ローカル**: `master_artifact` は `tool/public/masterdata`（`local`。tool-web の `/masterdata` で配る）、アセットは `tool/public/asset`（決定）。`master_artifact_upstream` はローカルでは別のディレクトリ（環境変数で指定。pull = ディレクトリのコピーで再現）。いずれも git に入れない（`.gitignore`。db.md 6.5.4）。
-- **本番側**: 専用バケット（review・production・staging）と共通ストレージ（develop・LD・QA）。**種類は未決**（R24）。上流の資格情報は読み取りだけ。
+- **本番側**: **S3 のようなオブジェクトストレージのバケットに CDN を立てて配る想定**（**決定**。人。2026-11-24。R24）。**具体的なサービス名・disk の設定の細部・CDN の設定は未決**（仮置きと区別）。専用バケット（review・production・staging）と共通ストレージ（develop・LD・QA）の分け方は仮置き。上流の資格情報は読み取りだけ。
+- **DB の権限**（db.md 4.5。**決定**。人。2026-11-24。R38）: tool の DB ユーザーに `CREATE DATABASE`（と自分が作った版の `DROP`）を付け、api のユーザーには付けない（読み取り専用）。
 - URL の形: `/masterdata/{deploy_key}_{hash}/{file_name}`（相対パス。決定）。
 
 ### 15.3 `start_at` の既定
