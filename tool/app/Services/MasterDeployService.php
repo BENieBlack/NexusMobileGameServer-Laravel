@@ -74,6 +74,8 @@ class MasterDeployService
      * }  $exportResult
      * @param  int  $deployKey  本物は allocateRealKey() の結果、固定は MasterDeployKeyPolicy::resolveFixedKey() の結果
      * @param  bool  $isFixed  固定キーのモードか
+     * @param  (callable(): void)|null  $beforeCommit  sys のトランザクションの中で、登録の後・COMMIT の前に呼ぶ（Runner が実行記録の phase を commit にする。
+     *                                                 db.md 8 節 M1。例外はトランザクションごとロールバックされ register_failed になる）
      * @return array{
      *   sys_deploy_master_id: int,
      *   sys_deploy_id: int,
@@ -90,7 +92,7 @@ class MasterDeployService
      *
      * @throws MasterDeployKeyException reserved_key_forbidden・fixed_key_invalid・deploy_key_conflict・register_failed
      */
-    public function registerDeploy(array $exportResult, int $deployKey, bool $isFixed, ?CarbonInterface $now = null): array
+    public function registerDeploy(array $exportResult, int $deployKey, bool $isFixed, ?CarbonInterface $now = null, ?callable $beforeCommit = null): array
     {
         $now = ($now ?? now())->copy()->utc();
         if ($isFixed) {
@@ -104,7 +106,14 @@ class MasterDeployService
 
         try {
             return DB::connection('sys')->transaction(
-                fn (): array => $this->registerInTransaction($exportResult, $deployKey, $isFixed, $now)
+                function () use ($exportResult, $deployKey, $isFixed, $now, $beforeCommit): array {
+                    $result = $this->registerInTransaction($exportResult, $deployKey, $isFixed, $now);
+                    if ($beforeCommit !== null) {
+                        $beforeCommit();
+                    }
+
+                    return $result;
+                }
             );
         } catch (MasterDeployKeyException $e) {
             throw $e;

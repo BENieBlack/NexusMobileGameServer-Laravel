@@ -283,7 +283,10 @@ class MasterImportService
      *   commit() か rollBack() を呼ぶ（dry_run = true のときはトランザクションを開かないので不要）
      * - dry_run = true は同じ比較をして、書かずに件数だけ返す
      *
-     * @param  array<string, array{headers: array<int, string>, rows: array<int, array<string, mixed>>}>  $tables  表名 => シート
+     * シートの `replace` が true の表は、rows が空でも置き換えの対象にする（行はあるが畳みで全部削除印になった表を空にする。
+     * db.md 6.1。MasterDeployRunner が MasterOverlayFolder の replaced を渡す）。省略時は false
+     *
+     * @param  array<string, array{headers: array<int, string>, rows: array<int, array<string, mixed>>, replace?: bool}>  $tables  表名 => シート
      * @return array{
      *   connection: ConnectionInterface,
      *   tables: array<string, array{inserted: int, updated: int, deleted: int, unchanged: int}>
@@ -296,6 +299,18 @@ class MasterImportService
         $prepared = [];
         foreach ($tables as $tableName => $sheet) {
             if ($sheet['rows'] === []) {
+                if (($sheet['replace'] ?? false) === true) {
+                    // 全行を削除する表: 主キー列だけをヘッダに持つ空の records で差分反映する
+                    $this->validateTableName($tableName);
+                    $prepared[$tableName] = [
+                        'existingColumns' => $this->getTableColumns($tableName),
+                        'headers' => $this->getPrimaryKeyColumns($connection, $tableName),
+                        'records' => [],
+                        'skipped' => 0,
+                        'errors' => [],
+                    ];
+                }
+
                 continue;
             }
             $prepared[$tableName] = $this->prepareRecords($tableName, $sheet['headers'], $sheet['rows']);
@@ -757,6 +772,17 @@ class MasterImportService
      * レアリティを持つカラム名。変換するかどうかは名前ではなく、その列の型で決める
      */
     private const RARITY_COLUMNS = ['rarity', 'bonus_rarity'];
+
+    /**
+     * 表の rarity 系カラムの型（検証 V10 用。MasterDeployRunner が MasterSheetValidator へ渡す）
+     *
+     * @param  array<int, string>  $headers
+     * @return array<string, array{kind: 'enum', values: array<int, string>}|array{kind: 'int'}>
+     */
+    public function rarityColumnsOf(string $tableName, array $headers): array
+    {
+        return $this->getRarityColumns($tableName, $headers);
+    }
 
     /**
      * rarity 系カラムの型を判定する
