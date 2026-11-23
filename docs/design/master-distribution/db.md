@@ -23,7 +23,7 @@ Nexus の全体設計「マスター配信」の決定（D1〜D10。Nexus の AD
 | sys | `sys_deploy_master` に `mst_database`・`artifact_dir`・`schema_fingerprint` などを足し、`hash` の UNIQUE を `(deploy_key, hash)` に直す。「最新」は `start_at` の新しい順（3 節） |
 | 実行記録 | `tol_master_deploy_run` に種別（build/import）・版の DB 名などを足し、`inconsistent`・補償・全破棄のための phase を外す（5 節） |
 | 成果物 | `{deploy_key}_{hash}/`（ディレクトリ名の hash は完全な hash の**先頭 16 文字**。**決定**。完全な hash は SHA-256 の 64 文字で、`sys_deploy_master.hash`・`manifest.json`・I1 の再計算にそのまま使う。入力は**データ＋スキーマ版**）に行データ（型を保つ NDJSON）・スキーマ・配信 SQLite・マニフェストを置く。保存先は Laravel のファイルシステムの disk で抽象化（6.5） |
-| 録画（R19） | キーは `7777777777`（**決定**。Q2）。最新は `start_at` 基準なので、録画用は `start_at = 現在` で登録すれば最新になる。録画用の mst を版の DB として作る方式の**細部だけが未決**（11.2） |
+| 録画（R19） | キーは `7777777777`（**決定**。Q2）。最新は `start_at` 基準なので、録画用は `start_at = 現在` で登録すれば最新になる。録画用の mst は**録画キー固定の build で作る**（**決定**。人。2026-11-24。11.2） |
 | シートに行が無い表 | 版の DB で**空の表**（**決定**。R33。6.1） |
 
 ## 2. 変更の一覧
@@ -41,7 +41,7 @@ Nexus の全体設計「マスター配信」の決定（D1〜D10。Nexus の AD
 | C9 | `tol_master_deploy_run` の変更 | 5 節 | **仮置き** |
 | C10 | シートの読み取り・検証・畳み | 6.1〜6.4 | **決定**（D3・D8・Q1・Q3・Q14。残る） |
 | C11 | 採番・補償・全破棄・差分反映・`TRUNCATE` | **廃止** | **決定**（ADR 0007） |
-| C12 | シーダー・録画用デプロイ | 11 節 | キーは**決定**（Q2）。方式の細部は**未決**（R19） |
+| C12 | シーダー・録画用デプロイ | 11 節 | キーと作り方は**決定**（Q2・R19。人。2026-11-24。11.2） |
 | C13 | S3 実装済み部品の扱い・移行の段取り・旧経路の削除 | 10.4〜10.5 | **仮置き**（R29） |
 
 ## 3. sys（配信管理）
@@ -118,7 +118,7 @@ LIMIT 1;
 
 ### 3.5 予約キーの行
 - 固定キー（`7777777777`・`8888888888`・`9999999999`）の `sys_deploy_master`・`sys_deploy_asset`: `deploy_date` = 登録日（NOT NULL のため）、`deploy_count` = 0、`deployed_by` = `master_build`（画面・CLI の build）か `master_import`。**仮置き**。
-- 録画用シーダーの行は `deploy_date` = `1900-01-01`・`deployed_by` = `recording`・`description` が `[REC]` で始まる（11.2。暫定）。
+- 録画用の行（`deploy_key` = `7777777777`）は、**build で作られる**ので他の固定キーの行と同じ形（`deployed_by` = `master_build`。`description` に `[REC]` は付かない）。旧設計のシーダーの行（`deployed_by` = `recording`・`[REC]` で始まる）は廃止。リセットの引き方は 11.2（**仮置き（AI）。人の確認待ち**）。
 
 ### 3.6 登録（C8）
 **登録は `sys` 接続の 1 トランザクション**（`DB::connection('sys')->transaction`）。中身は、`sys_deploy_master`（再利用でなければ）・`sys_deploy_master_table`・`sys_deploy_asset`（ダミー）・`sys_deploy` の INSERT（と、復元のときの `sys_deploy_master` の更新）だけ。**例外**（**仮置き**）: import の I5 が参照版 A の DB を復元するときの、A の `sys_deploy_master` の `mst_database`・`mst_dropped_at` の更新は、**登録より前に、登録とは別のトランザクション**で行う（A は登録済みの版で、新しい登録とは独立。6.6 の手順 4・6.7 の I5）。**mst の DB への書き込みは登録の前に済んでいる**（版の DB は完成・検証済みで、以後書き換えない）。登録が失敗しても DB は孤児として残るだけで、配信には影響しない。したがって、旧設計の「mst のトランザクションを開いたまま sys に登録 → 補償」は**不要**になる（C11）。**登録の前に、「版の DB が存在し、スキーマ版・往復検査が合う」ことを必ず確かめる**（6.6。成果物のディレクトリが有るかではなく、DB の状態で決める）。デプロイ操作は `MasterDeployLock` の中で行うので、登録の前提（予約済みの行の有無など）は登録までの間に変わらない。
@@ -219,14 +219,18 @@ CREATE TABLE `nexus-local-master-2026120101-0f3c1a2b3c4d5e6f`.`mst_item`
 - **スキーマ版は成果物の `hash` の入力に含まれる**（6.5.2）。したがって、同じデータでも**スキーマが変わると hash が変わる**（帰結は 4.8 の R34）。
 - **未確認**: MySQL のバージョンや TiDB の違いで、同じスキーマなのに `information_schema` の表記が違って指紋が食い違わないか。build（QA）と import（本番）で DB の種類・版が違う場合に問題になる。正規化（型の表示幅を落とす・既定値を文字列にそろえる）で吸収する方針だが、実機で確かめる（S3）。**食い違った場合の影響範囲**（**仮置き**）: ① import の I3 が `schema_mismatch` で拒否する（成果物は取り込めないが、環境の DB は壊れない）② 成果物の `hash` は `manifest.json` の内容から**再計算できる**ので（I1）、QA で作った hash が壊れるわけではない。ただし **hash の入力に指紋が入っている**ため、指紋の計算が環境で違うと、同じ成果物の hash を環境ごとに再計算した値が合わなくなりうる。そこで **I1 の hash の再計算は、マニフェストに記録された `schema_fingerprint` の値を入力にして行う**（自環境で計算し直さない）。自環境の指紋と比べるのは I3 だけ。
 
-### 4.5 必要な権限（**仮置き**）
+### 4.5 必要な権限（**決定**: 付ける側と付けない側。人。2026-11-24。R38。細部は**仮置き**）
+**決定（人。2026-11-24）**: tool の DB ユーザーには `CREATE DATABASE`（と、自分が作った版の `DROP`）の権限を付ける。**api の DB ユーザーには付けない**（読み取り専用）。
+
 | 利用者 | 対象 | 権限 |
 | --- | --- | --- |
-| tool（build・import・掃除） | 接頭辞 `{APP_NAME}-{env}-master-` の DB すべて（版の DB と作業用 DB）、基底 DB | `CREATE`・`DROP`・`ALTER`・`INDEX`・`INSERT`・`SELECT`・`DELETE`・`UPDATE`。基底 DB は `SELECT` だけでよい（雛形を読むだけ） |
-| api（ゲーム API） | 接頭辞 `{APP_NAME}-{env}-master-` の DB すべて、基底 DB（開発） | **`SELECT` だけ**（今も mst は読み取り専用。規約）。`CREATE DATABASE` は持たない |
+| tool（build・import・掃除） | 接頭辞 `{APP_NAME}-{env}-master-` の DB すべて（版の DB と作業用 DB）、基底 DB | **決定**: `CREATE`（`CREATE DATABASE`）と `DROP`（自分が作った版・作業用 DB）（決定は人の意図。実際の GRANT は接頭辞パターン全体の `DROP` になる。下の注記）。**仮置き**: 加えて `ALTER`・`INDEX`・`INSERT`・`SELECT`・`DELETE`・`UPDATE`（表の作成・投入・往復検査に要る）。基底 DB は `SELECT` だけでよい（雛形を読むだけ） |
+| api（ゲーム API） | 接頭辞 `{APP_NAME}-{env}-master-` の DB すべて、基底 DB（開発） | **決定**: **`SELECT` だけ**（今も mst は読み取り専用。規約）。`CREATE DATABASE`・`DROP` は持たない |
 
-- **`CREATE DATABASE` の権限が tool のユーザーに要る**（インフラの確認事項。ローカルは root なので問題無い。本番の権限分離は**未確認**）。`GRANT` のパターンは `` `{APP_NAME}-{env}-master-%`.* `` の形（`%` が末尾）で書く。パターンの `_` は 1 文字ワイルドカードなので、`APP_NAME` や env に `_` を含むときは `\_` で書く。
+- 「自分が作った版の `DROP`」は、MySQL の権限では**作成者で絞れない**（`GRANT` は DB 名のパターンの単位）。したがって権限は接頭辞のパターンに付け、**「この run が作った DB だけを `DROP` する」「登録済みの版は掃除の規則（4.6）でしか消さない」はアプリ側の規則で守る**（**仮置き**。4.7 と 4.1 の `DROP` の保護）。
+- `GRANT` のパターンは `` `{APP_NAME}-{env}-master-%`.* `` の形（`%` が末尾）で書く。パターンの `_` は 1 文字ワイルドカードなので、`APP_NAME` や env に `_` を含むときは `\_` で書く。
 - 接続は既存の `mst` 接続（tool の `config/database.php`）を DDL 可能なユーザーで使い、api は読み取り専用のユーザーを使う（接続の設定だけで分ける）。
+- **未確認**（インフラ）: 本番で実際にこの権限を付けられるか、プロキシ型の接続プールがあるか（14.2）。ローカルは root なので問題無い。
 
 ### 4.6 残す期間と掃除（R21。**仮置き**）
 - **消さない**: ① **いまの版（3.3 の最新の選択。`is_active` を見る）と、その直前に最新だった有効な版（フォールバック先。3.3 の並びで最新の選択の次に来る有効な行の master）**② `start_at` が現在より後の版（予約済み）③ 直近 **N 版**（巻き戻し先。**N = 3 を初期値**とする。N は運用で決める＝**未決**のまま）④ 基底 DB ⑤ **止めた行（`is_active = false` の `sys_deploy` 行）を指す版**（**仮置き**。R39 の緊急停止。再開・巻き戻し先になるため `DROP` しない）。**N の数え方**: `sys_deploy` の行数ではなく、**`sys_deploy_master` を重複排除した版の数**で数える。1 つの master を指す `sys_deploy` 行は巻き戻し・再予約で複数になりうるので、各 master について「**`is_active = true` で** `start_at <= 現在` の `sys_deploy` 行の最大の `start_at`」を取り、その新しい順に N 個。**止めた行は N の枠に数えない**（⑤ で別に保持する）。再現（これを防ぐ）: B が有効な最新で、B より新しい X1・X2・X3 が到達済みで全て停止中のとき、止めた行を枠に数えると B が N = 3 の枠の外になり、掃除で B の DB が `DROP` され、最新の選択（B）が掃除済みで 299 になる。**止めた行が未来から過去に変わったとき**（予約の行を止めたまま `start_at` が過ぎた）の扱い（再開の運用）: ② は `start_at > 現在` だけを見るが、⑤ が止めた行の版を保持するので、**到達後も先に消えない**。再開（3.6 の `master:activate`）は、その版の DB が残っていればそのまま、掃除済みなら成果物から復元して通す。
@@ -400,7 +404,7 @@ for 各 __l10n テーブル:
   - **シートを読めない・認証情報が無い**場合は、既定では拒否（`follow_check_unavailable`）。**`--allow-unverified`**（**仮置き**）を付けると、**拒否ではなく警告で通す**。通したことは**実行記録に残す**（`summary.follow_check = {status: unverified, reason}`・`summary.allow_unverified = true`・`adm_account_id`。監査のため）。`--allow-unverified` が使えるのは「読めない」場合だけ（「読めて違う」は通せない）。`final.json` の中身は変えない（`unverified` の印は成果物に付けない。実行記録だけに残る）。`require_finalized`（7.2）が true の import 環境（review・production・staging の既定。**仮置き**）は、**`final.json` が無い成果物、または `final.json` の `deploy_key`・`hash` がマニフェストと違う成果物の import を拒否する**（`not_finalized`。6.7 の I1）。最終 hash の確定の仕組み・ゲートの置き場は**未決**（R28）で、`final.json` はその提案の 1 つ。
 - **`manifest.json`**: `format_version`・`deploy_key`・`hash`・`schema_fingerprint`・表ごとの `{name, row_count, data_sha256}`・グループごとの `{group, file_name, sqlite_sha256, file_size}`。出所（hash に含めない）: `built_env`・`built_at`（UTC）・`source_kind`・T・**`row_digest`**（畳み後の行ダイジェスト。R28 提案。`deploy_key` ごとに、その `deploy_key` で採った行の NDJSON を表・主キーの順に連結して SHA-256 を取る）。
 
-#### 6.5.2 hash（長さ・作り方。**仮置き**。ディレクトリ名・DB 名に使う長さは先頭 16 文字で**決定**。R24 の本番のストレージの種類は未決）
+#### 6.5.2 hash（長さ・作り方。**仮置き**。ディレクトリ名・DB 名に使う長さは先頭 16 文字で**決定**。R24 の本番のストレージは「S3 のようなオブジェクトストレージに CDN」想定で**決定**。サービス名・細部は未決）
 - **`hash` = SHA-256（16 進 64 文字。完全な hash）**。ディレクトリ名・DB 名には**先頭 16 文字**を使う（決定）。入力は**データ＋スキーマ版**: `format_version`・`schema_fingerprint`・表ごとの `(name, row_count, data_sha256)` を、表名の順に並べた正規化 JSON。**`deploy_key`・時刻・配信 SQLite のバイト列を含めない**。理由: ① 同じ畳みなら同じ hash になる（R8）。SQLite のバイト列が毎回同じかに頼らずに済む ② `{deploy_key}_{hash}` の `deploy_key` と重複させない。
 - **帰結（スキーマ版が入力に入っている）**: スキーマ更新だけで、**同じデータでも hash が変わる**。review・production への受け渡しの詰まり（4.8 の R34）と、指紋の計算が環境で食い違ったときの影響（4.4）を参照。**検証（I1）の hash の再計算は、マニフェストに記録された `schema_fingerprint` を入力にして行う**（自環境で計算し直さない）。
 - 同じ `{deploy_key}_{hash}` のディレクトリが**既にある**ときは、build は成果物のファイルを**作り直さず既存を使う**（同じデータなので。配信 SQLite のバイトが違う場合でも既存が正）。**ただし、これは成果物のファイルの話だけで、版の DB が有ることは意味しない**。登録の前に、版の DB が使える状態かを必ず確かめる（6.6 の `version_db`）。
@@ -412,13 +416,13 @@ for 各 __l10n テーブル:
 
 | disk（仮称） | ローカル | 本番側 | 用途 |
 | --- | --- | --- | --- |
-| `master_artifact` | `local`、root = `tool/public/masterdata`（**決定**。tool-web の `/masterdata` で配る） | バケット（`s3` など。**種類は未決**。R24）。review・production・staging は**専用バケット**、develop・LD・QA は共通ストレージ | 自環境の成果物の置き場（書き込み可） |
+| `master_artifact` | `local`、root = `tool/public/masterdata`（**決定**。tool-web の `/masterdata` で配る） | **S3 のようなオブジェクトストレージのバケット**（**決定**: 人。2026-11-24。R24。`s3` の disk を想定。具体的なサービス名・設定の細部は**未決**）。review・production・staging は**専用バケット**、develop・LD・QA は共通ストレージ（この分け方は**仮置き**） | 自環境の成果物の置き場（書き込み可） |
 | `master_artifact_upstream` | 上流の置き場のディレクトリ（環境変数で指定） | 上流のバケット（**読み取りだけ**の資格情報） | import の pull 元（import 環境だけ） |
 | `asset_artifact` | `local`、root = `tool/public/asset`（**決定**） | バケット | アセット。**設計は別の機能**（R23）。disk の名前だけ予約する |
 
 - **完成の印は `manifest.json`**: S3 などのバケットにはディレクトリの原子的な rename が無いので、**全ファイルを書いてから最後に `manifest.json` を書く**。`manifest.json` が無いディレクトリは未完成として無視する（ローカルも同じ規則。実装は一時ディレクトリに書いて `rename` してよい）。書き込みは `MasterArtifactStore`（仮称）が包む。
 - **pull（下流が上流を読み取りだけで引く。R27 の提案）**: 上流の disk から `{deploy_key}_{hash}/` を一時の場所に写し、6.7 の検証を通ったものだけを自環境の disk に置く。**ローカルでも同じ操作**（上流 = 別のディレクトリ。ディレクトリのコピーで再現する。細部の運用は R27 の確認待ち）。
-- **URL**: `sys_deploy_master_table.public_url` は `/masterdata/{artifact_dir}/{file_name}`（相対パス。**決定**: ディレクトリ名が `{deploy_key}_{hash}` になり、パスがその分変わる。クライアントは `url` をそのまま使うので変更なしの見込み）。配信ホストは ADR 0001 のまま（ローカルは `localhost:8091`）。本番のバケットを `/masterdata/` の下で配る仕組み（CDN の設定）は**未確認**（インフラ）。
+- **URL**: `sys_deploy_master_table.public_url` は `/masterdata/{artifact_dir}/{file_name}`（相対パス。**決定**: ディレクトリ名が `{deploy_key}_{hash}` になり、パスがその分変わる。クライアントは `url` をそのまま使うので変更なしの見込み）。配信ホストは ADR 0001 のまま（ローカルは `localhost:8091`）。**本番は、オブジェクトストレージの前に CDN を立てて配る想定**（**決定**: 人。2026-11-24。R24）。CDN のサービス名・`/masterdata/` の下への割り当て・キャッシュの設定（成果物は `{deploy_key}_{hash}` で不変なので長いキャッシュにしやすい）は**未決・未確認**（インフラ）。
 - **配信に要るのは SQLite だけ**だが、`schema.json`・`data/`・`manifest.json`・`final.json` も同じディレクトリに置くので URL から見える。中身は SQLite と同じマスターデータで秘匿情報は無い（**仮置き**）。本番のバケットは公開範囲を SQLite に限ってよい（インフラ。**未確認**）。
 
 #### 6.5.4 ローカルの置き場と `.gitignore`（**決定**: 成果物は git に入れない。細部は**仮置き**）
@@ -490,7 +494,7 @@ for 各 __l10n テーブル:
 | 用途 | 値 | 使う環境 |
 | --- | --- | --- |
 | 本物 | `YYYYMMDDNN`（`2026010101`〜`2999123199`。NN は 01〜99） | LD で確定した V・QA の明示キー。review 以降は成果物のまま |
-| 録画 | `7777777777`（**決定**。Q2。録画用の mst を版の DB として作る方式の細部は**未決**。R19。11.2） | 録画を撮るローカル |
+| 録画 | `7777777777`（**決定**。Q2。録画用の mst は録画キー固定の build で作る＝**決定**。人。2026-11-24。R19。11.2） | 録画を撮るローカル |
 | レベルデザイン（仮） | `8888888888` | LD（確定後は V に書き換え） |
 | 開発 | `9999999999` | develop |
 
@@ -518,7 +522,7 @@ for 各 __l10n テーブル:
 
 - シートのディレクトリ: 既存の `TOL_GOOGLE_SPREADSHEET_DIR`（開発は環境別、LD と QA は共通）。**本番用のディレクトリがあるか**は未確認（import 環境はシートを読まないので、本番に要らなくなった）。
 - 同じ環境で T を切り替えても（develop `9999999999` → 録画 `7777777777`）、**mst は置き換わらない**。build のたびに新しい DB ができ、`start_at` で切り替わる（旧 8.1 の R14 は消える）。
-- 録画用（`7777777777`）のキーは決定（Q2）。録画用の mst を版の DB として作る方式の細部と、行の置き場所は**未決**（R19。11.2）。
+- 録画用（`7777777777`）のキーは決定（Q2）。録画用の mst は、シートを使える環境で `MASTER_DEPLOY_FIXED_KEY=7777777777` の build により作る（**決定**。人。2026-11-24。R19。11.2）。
 
 ### 7.3 本番に混ざらない保証（Nexus overview 8.2 のサーバーでの置き場）
 | 層 | 内容 | 置き場 |
@@ -662,7 +666,7 @@ sys の変更は新しいファイルで `ALTER TABLE`（列の追加は NULL �
 | `DeployRepositoryAdapter`（`api/app/Repositories/Sys/`）と `VersionService`（`packages/nexus-version`。台帳に記載なし） | **作り直し（小）** | `/auth/version` は `VersionService` が `DeployRepositoryInterface::selectLatestDownloadable()` で引き、実装が `DeployRepositoryAdapter`（`CheckMasterHash` とは**別の呼び出し元**）。`packages/` は `App\` を参照できない規約なので、**`CurrentMasterVersion`（App 側）を `DeployRepositoryAdapter` が仲介する**設計にする（`VersionService`・インターフェースは変えない）。`start_at` 基準の最新・schedule キャッシュ（3.3・8.3）をここで使う |
 | `CheckMasterHash`（api のミドルウェア。台帳に記載なし） | **作り直し（小）** | 今は `$next` の**後**に `selectLatestDownloadable()` を呼んで最新の hash と比べる（読んだ）。8.1 の **`CurrentMasterVersion`（リクエスト冒頭で固定した版）を使う**ように直す。呼び直すと、リクエストの途中で `start_at` を過ぎたときに、応答の版と比較対象の版がずれる |
 | `_BaseMstRepository`（キャッシュキー） | **作り直し** | 8.4。`mst:{DB名}:{表}:all` に変える。`MasterCacheKeyContractTest` と `clearCache()`（キーを組み直す）も追従 |
-| `RecordingDeploySeeder`（S3-4, #33） | **作り直し（保留）** | 録画の扱いが未決（R19）。暫定は 11.2 |
+| `RecordingDeploySeeder`（S3-4, #33） | **作り直し**（実装は別 PR） | 作り方は決定（R19。人。2026-11-24）: 録画用の版は build で作り、シーダーは「版の DB が実在しなければ中止」を正式な挙動にする（11.2） |
 | `tol_master_deploy_run`（S3-3, #32） | **変更** | 5 節 |
 
 ### 10.5 現行実装（#44〜#46）からの移行の段取り（**仮置き**。台帳の S3-14〜S3-17 の保留を解く順序）
@@ -676,7 +680,7 @@ api 側は、**基底 DB を 1 つの版として登録すれば今まで通り�
 | 3 | tool: 成果物・ストレージ（6.5）、版の DB の作成とローダー、build（6.6）、`MasterDeployRunner`・`MasterDeployService` の作り直し | S3-12a・S3-13 の置き換え |
 | 4 | tool: import・登録前の検査（6.6・6.7）、巻き戻し・掃除（3.6・4.6・4.7） | |
 | 5 | CLI（S3-14）・画面（S3-15） | build・import・巻き戻し・版の一覧 |
-| 6 | 旧経路の削除（S3-16）・docs（S3-17。R16 の設計 md 対応を含む。13 節） | |
+| 6 | 旧経路の削除（S3-16）・docs（S3-17。R16 の設計 md 対応を含む。13 節） | docs（S3-17）は**済み**（サーバーの `.claude/` ほか）。旧経路の削除は台帳のとおり |
 
 - **現行のデータ**: 開発の DB は `make migrate-fresh` で作り直し、旧い `tool/public/masterdata/{hash}/` は消す（6.5.4）。
 - **旧経路の削除（S3-16）**: `POST /master-import/execute`・`POST /master-import/export`・`MasterDeployService::register`・`MasterImportService::import`（TRUNCATE）・`reflect`・補償・採番・M1。画面の「インポート」「エクスポート」のボタンも build に統合する。
@@ -688,21 +692,27 @@ api 側は、**基底 DB を 1 つの版として登録すれば今まで通り�
 - 既定の「基本シード」の `sys_deploy` は本物の形のキー（`2026010101` など）で、**基底 DB を指す版**として登録する（3.1）。予約キーは使わない。
 - **シートを使えない CI・テスト・`make seed` は従来どおり `Mst*Seeder` で基底 DB を作る**。畳みを通すのは運営ツールの build だけ。
 
-### 11.2 録画用デプロイ（`RecordingDeploySeeder`。R19 の細部だけが**未決**）
+### 11.2 録画用デプロイ（`RecordingDeploySeeder`。R19 は**決定**。人。2026-11-24）
 **キーは `7777777777`**（**決定**。Q2 は変わらない）。**変わるのはキーの値ではなく、「最新」が `start_at` 基準になること**（**決定**。ADR 0007）。旧設計の「予約キーが大きいので本物があっても録画用が最新になる」（F15 の意図）は、`deploy_key` の大小では実現されなくなり、次のように置き換わる。
 
+**録画用の mst の作り方（決定。人。2026-11-24。R19）**: **(a) 録画キー固定の build**。シートを使える環境で `MASTER_DEPLOY_FIXED_KEY=7777777777` の build を行い、録画用の版を作る。
+- 版の DB の名前は他の版と同じ `{APP_NAME}-{env}-master-7777777777-{HASH16}`（人が過去に決めた統一規則。4.2）。成果物のディレクトリは `7777777777_{hash16}`（6.5）。特別な命名・特別な置き場所は無い。
+- T が `7777777777` なので、**開発・LD の行は畳みに入らず、本物の行 + 録画用の行だけの版**になる（6.4。sequence.md 7 節）。
+- **(b)（シーダーが基底 DB の現在の行から版の DB を作る方式）は採らない**（**決定**）。旧 `RecordingMasterExporter` の「基底 DB から書き出して版を作る」方式は引き継がない。成果物と hash の規則を build と二重に持たないため。
+
+**`RecordingDeploySeeder` の挙動（作り直しの前提。実装は別 PR）**:
+- 版の DB の作成も成果物の作成も**しない**。**build で作られた録画用の版の DB が実在することを前提に、`sys` の行（`sys_deploy_master`・`sys_deploy`）を登録する**だけ（**仮置き**: build も `start_at` 省略で sys に登録するので、シーダーの出番は、`make migrate-fresh` などで sys だけが消えて版の DB（と成果物）が残ったときの登録のやり直し。`make seed-recording` の入口は残す）。
+- **録画用の版の DB が実在しなければ、何もせず中止して理由を表示する**（「今の挙動」を**正式な挙動**にする。決定）。メッセージには「シートを使える環境で `MASTER_DEPLOY_FIXED_KEY=7777777777` の build を行う」ことを示す。
+- **シートが無い環境（CI・`make seed`）では録画用の版は作らない**（決定）。このとき録画用のシードは中止になるだけで、CI・`make seed` は失敗にしない。基底 DB は従来どおり `Mst*Seeder` で作る（11.1）。
 - **録画用は `start_at = 現在` で登録すれば最新になる**（`deploy_key` の大小は効かない。3.3）。
-- **シーダーの「何もしない」条件の変更**（**仮置き**）: 旧: 「`deploy_key > 7777777777` の有効なデプロイがある」。新: **「`start_at` が未来の行（予約済み）がある」とき、何もしない（または警告して中止する）**。理由: 予約済みの版が `start_at` に到達すると最新が入れ替わり、録画用が黙って無効になる（3.6 の巻き戻しと同じ型の問題）。既定は**何もせず理由を表示する**（強制する場合の指定は R19 で決める）。旧条件（`deploy_key` の大小）は廃止する。
+- **「何もしない」条件**（**仮置き**）: 旧: 「`deploy_key > 7777777777` の有効なデプロイがある」は廃止。新: **「`start_at` が未来の行（予約済み）がある」とき、何もしない（または警告して中止する）**。理由: 予約済みの版が `start_at` に到達すると最新が入れ替わり、録画用が黙って無効になる（3.6 の巻き戻しと同じ型の問題）。既定は**何もせず理由を表示する**。
 - 本番ガード（`APP_ENV=production` なら何もせず例外）は残す（予約帯。3.3）。
+- **元に戻す `RecordingResetSeeder`**（**仮置き（AI）。人の確認待ち**）: build で作った行には `[REC]` が付かないので、**`deploy_key = 7777777777` の行**（`sys_deploy`・`sys_deploy_master` と、対応する成果物 `7777777777_*`）で引いて消す。版の DB は消さず、4.6 の掃除に任せる。**`sys_deploy` の行を消すと前の版が最新に戻る**。
+- **録画用が黙って無効になる穴**（**仮置き（AI）。人の確認待ち**）: 録画用の版は build の時点で最新になるが、**その後に本物の build（`start_at` = 現在）が走るとそちらが最新になり、録画用は黙って無効になる**。build 側には「未来の予約を見て録画用を足さない」保護が無く、**シーダー側の保護（上の「何もしない」条件）だけでは build は素通りする**。運用は「**本物の版の登録の後に、録画用を build する**」とする。
+- **シーダーが複数の成果物から選ぶ規則**は sequence.md 7 節（仮置き）。
+- 関連: `start_at` を省略したときに現在で登録する規則は 3.6 と 6.6 の build の 8、同じ `(deploy_key, hash)` の版の DB を再利用する規則は 6.6 の `version_db` の 2。
 
-**録画用の mst の作り方（R19 の未決。細部だけ）**: 録画用の mst を**版の DB**（`{APP_NAME}-{env}-master-7777777777-{hash}`。4.2 の命名）として作る方式の細部が未決。候補は次のとおりで、決めるまで採用しない。
-- (a) シートを使える環境で、`MASTER_DEPLOY_FIXED_KEY=7777777777` の **build** で作る（畳みで開発・LD の行が外れ、本物 + 録画用の行だけの版になる）。この場合 `RecordingDeploySeeder` は流さない。
-- (b) シーダーが、基底 DB の現在の行から版の DB を作る（旧 `RecordingMasterExporter` の方式を引き継ぐ。シートを使えない環境向け）。成果物（`{deploy_key}_{hash}`）の作り方と hash の規則（6.5.2）を build と同じにしないと、`(deploy_key, hash)` が食い違う。
-
-**暫定の扱い**（決まるまでの最小限。**仮置き**）:
-- 保留中のブランチ `feature/recording-seeder-player-level`（未 commit の録画用シーダー拡張）は、決まるまで**止めたまま**。
-- main の `RecordingDeploySeeder`（S3-4, #33）は、sys の列追加（3.1）で**壊れない**ところまでだけ直す: `sys_deploy_master` に `mst_database`（暫定は基底 DB 名）・`artifact_dir`・`schema_fingerprint`・`source_kind` を入れる。ディレクトリ名は `{deploy_key}_{hash}`（`7777777777_{hash}`）にそろえる。`sys_deploy.start_at` は現在。「何もしない」条件は上のとおり未来の予約の有無に変える。
-- `RecordingMasterExporter` が使う書き出しの規則（主キー昇順・正規化）は、6.5.1 にそろえる。
+**未決・仮置きのまま**: 録画用の版の DB の保持（4.6 の N の枠に数えるか。既定案: 数える）。保留中のブランチ `feature/recording-seeder-player-level`（未 commit の録画用シーダー拡張）は、この方式への作り直しの後に再開する。
 
 ## 12. ER
 
@@ -802,12 +812,12 @@ erDiagram
 | 場所 | 直し方 |
 | --- | --- |
 | `docs/design/master-distribution/api.md`・`sequence.md`（**この PR で db.md に揃える**） | 運営ツールの入力・出力・エラーを build・import・巻き戻し・掃除・版の一覧に書き直す。ゲーム API の変更（動的な mst・schedule キャッシュ）。排他・補償・全破棄の記述を外す。冒頭に「ADR 0007 で置き換え」の 1 行（Nexus overview 10.0 の 2） |
-| `.claude/database.md` 7 節 | `deploy_key` を BIGINT・値の形 `YYYYMMDDNN`・既定値 `2026010101`・予約キーの表・畳み・削除印・`sys` の UNIQUE なし・**最新は `start_at` 基準**・**版ごとの mst DB と基底 DB・命名**。1 節（DB 構成）に版の DB を追記。3 節（書き換え期間）に、版の DB は `make migrate-fresh` の対象外であることと、凍結後は `mst:migrate-versions` を流すこと |
+| `.claude/database.md` 7 節 | `deploy_key` を BIGINT・値の形 `YYYYMMDDNN`・既定値 `2026010101`・予約キーの表・畳み・削除印・`sys` の UNIQUE なし・**最新は `start_at` 基準**・**版ごとの mst DB と基底 DB・命名**。1 節（DB 構成）に版の DB を追記。3 節（書き換え期間）に、版の DB は `make migrate-fresh` の対象外であることと、凍結後は `mst:migrate-versions` を流すこと（**`mst:migrate-versions` は未実装**。`.claude/database.md` には「未実装」と書いてある） |
 | `.claude/database.md` 5 節 | 整数列の型の一般則（`boolean` 以外は BigInt。ADR 0006）を追記（既存列の移行は別作業） |
 | `.claude/api.md`「バージョンチェック」 | 「最新」の定義（`start_at` 基準）、`latest_deploy_key` の意味（畳みの上限）、本番の予約帯除外、版の DB・schedule キャッシュ、`url` が `/masterdata/{deploy_key}_{hash}/...`、`sys_deploy_id` の説明 |
-| `.claude/tool.md`「マスターデータのインポートとデプロイ」 | build と import、T は環境設定、`role`、成果物とストレージ、版の DB、`start_at`、巻き戻し・掃除、実行記録、`MasterImportService` のコメントと挙動の不一致（F12）、CLI（`master:*`。**tool に `app/Console/Commands` は無く、`master:*` は 1 つも無いので CLI は新規**。台帳の S3-14 は保留中）ほか。**「廃止」は HTTP の `POST /master-import/deploy` ルートに限る**（build・import に分ける）。`execute`・`export` の記述の削除 |
+| `.claude/tool.md`「マスターデータのインポートとデプロイ」 | build と import、T は環境設定、`role`、成果物とストレージ、版の DB、`start_at`、巻き戻し・掃除、実行記録、`MasterImportService` のコメントと挙動の不一致（F12）、CLI（`master:*`。**`tool/app/Console/Commands` に `master:*` の 10 本が実装済み**（build・import・finalize・verify-sheet・rollback・cancel-schedule・cleanup・deactivate・activate・resolve-unknown）。S3-14 は済み）ほか。**「廃止」は HTTP の `POST /master-import/deploy` ルートに限る**（build・import に分ける）。`execute`・`export` の記述の削除 |
 | `CLAUDE.md`「DB構成」 | `mst` の説明に、基底 DB と版の DB（動的に切り替え）を追記 |
-| `.claude/development.md` | 版の DB の掃除・`mst:migrate-versions`・テストの 2 つ目の mst DB |
+| `.claude/development.md` | 版の DB の掃除・`mst:migrate-versions`（未実装）・テストの 2 つ目の mst DB |
 | `.env.example`・`docker-compose.yml`・`docker/mysql/init/` | 環境変数（`MASTER_DEPLOY_KEY`・`MASTER_DEPLOY_ROLE`・上流 disk）、テスト用 mst DB、`.gitignore`（6.5.4） |
 | `docs/design/title-to-home/{api,db}.md`、`docs/design/home-player-info/{db,api,sequence}.md`、`docs/design/free-diamond-item/db.md`、`docs/design/login-bonus-calendar/db.md` | `latest_deploy_key` の型と意味、既定値 `202601010` → `2026010101`、`RecordingDeploySeeder` の記述（11.2） |
 | `docs/vip_system_design.md`・`docs/event_platform_design.md` ほか | `deploy_key INT DEFAULT 202601010` の記述 |
@@ -815,7 +825,7 @@ erDiagram
 | `.claude/development.md` | 上の行に加え、**テスト用の 2 つ目の mst DB は、ボリュームの初回作成時だけ作られる**ので、既存の開発者環境は `docker compose down -v` で作り直す（8.6・10.1） |
 | **DB の命名の一般則（`{APP_NAME}-{env}-{役割}`。4.1）に伴う名前の変更**（別の実装・運用の作業。この PR の範囲外。**master 以外**） | 現行の名前（読んだ）: `docker-compose.yml` の `DB_NAMES` は `${APP_NAME}-${APP_ENV}-master`・`${APP_NAME}-testing-master`・`${APP_NAME}-testing-tool-master`（`db-master`）、`-system`・`-testing-system`・`-testing-tool-system`（`db-system`）、`-shard`・`-testing-shard`・`-testing-tool-shard`（シャード）、`-admin`・`-testing-admin`、`-tool`。api の `config/database.php` は `-master`・`-shard`・`-system`・**`-adm`**（admin の既定。`.env.example` は `-admin`）。tool の `config/database.php` は固定値の既定（`nexus-local-admin`・`nexus-local-tool`・`nexus-local-shard`・**`nexus-local-master`**・`nexus-local-system`）。`api/phpunit.xml` は `nexus-testing-*`。**変えるときの影響**: ① 各アプリの接続設定と `.env.example`（既定値を `{APP_NAME}-{APP_ENV}-{役割}` に）② `docker/mysql/init/create-databases.sh` と `DB_NAMES`（新しい名前の DB が作られる） ③ テスト用 DB 名（`phpunit.xml`・`{APP_NAME}-testing-…`）④ **既存の開発者環境の volume**（`create-databases.sh` は volume の初回作成時だけ動くので、名前を変えると `docker compose down -v` での作り直しか、手で `CREATE DATABASE` が要る。8.6・10.1 と同じ事情）⑤ 既存のデータ（名前を変えると別の DB になる）。**実装 PR で変えるのは master のうち tool の `mst` 接続の既定値（固定の `nexus-local-master` → `{APP_NAME}-{APP_ENV}-master`）だけ**（この設計の PR はドキュメントのみ） |
 | **コードのコメントの `db.md` 参照の追従**（実装 PR で直す。節番号は旧版と同じ番号を保ったが、**内容が変わった・消えた節への参照**は直す） | tool: `MasterDeployInventory`（8・14 行目。9.3）・`MasterSheetValidator`（29 行目。6.3）・`MasterDeployKeyPolicy`（10 行目。3.4 の 4 → 3.4）・`config/master_deploy.php`（11 行目。3.4 の 4 → 3.4、7.2 の設定の追加）・`MasterImportService`（277 行目）・`MasterDeployService`（14・58 行目。3.4・3.6 の R1〜R4 → R1〜R3、旧 8 節 M1）・`MasterCacheInvalidator`（27・111 行目。旧 8 節の M1・全破棄 → 8.4。クラスの大半が不要。10.4）・`MasterDeployRunner`（17 行目＝sequence.md 2〜6 節・api.md 4・11・12 節、176・209 行目＝sequence.md 2 節の手順 20、246・729 行目。旧 8 節・5.6・補償）・`MasterDeployTargetService`（14 行目。旧 8 節 M1）。api: `api/tests/Feature/Recording/RecordingDeployRegistrationTest.php`（14 行目。11.2）・`api/tests/Feature/Repositories/MasterCacheKeyContractTest.php`（`mst:{表}:all` を固定。8.4）・`_BaseMstRepository.php`（28 行目のコメント。8.4）。**行番号は 2026-11-23 時点（レビューの列挙）で、実装 PR の着手時に `grep "db.md"` で数え直す** |
-| **Nexus 側に決定・更新として残す**（次の Nexus の PR で直す一覧。M2） | ① **ADR 0007 の未決「版の DB 名の付け方と掃除」**: 命名 `{APP_NAME}-{env}-master-{deploy_key}-{HASH}` を決定として追記（HASH は先頭 16 文字で決定。最大長は `44 - len(APP_NAME) - len(env)` ≥ 16 → `len(APP_NAME) + len(env)` ≤ 28）。掃除は仮置きのまま ② **台帳**: R21（命名は決定。保持数 N・掃除は未決）・**R33 を決定済みに**（シートに行が無い表は空の表）・R19（キー `7777777777` は Q2 のまま決定。未決は録画用の mst を版の DB として作る方式の細部と、「何もしない」条件が `start_at` の予約の有無に変わること）・R38（権限の確認だけが残る。環境の同居は解消）・R25（I5 の限界の注記。14.4 の R37）の更新 ③ **overview**: 14.3 の 1（`hash` の UNIQUE は `(deploy_key, hash)`）・3（DB 名を引く列は `sys_deploy_master`。overview 4 節・ADR の「`sys_deploy` に DB 名を引く列が無い」の言い方）・4（trx と mst の JOIN は docker で成立しない＝確認済み）・5（hash が決まる前に DB 名が要る循環＝作業用 DB）の反映 ④ **glossary**: 「版ごとの DB」の命名 ⑤ 台帳の「版ごとの DB への変更」の区分に `MasterDeployInventory`・`MasterDeployTargetService`・`CheckMasterHash` を足す（10.4）⑥ `docs/workflow/recording.md`（録画の手順。11.2）⑦ **台帳の R34〜R45**（14.4。R33 は決定への格上げ）と **overview 14.3 の 8・9**（巻き戻しと予約の関係、hash にスキーマ版を含める帰結）⑧ **DB の命名の一般則**（`{APP_NAME}-{env}-{役割}`。4.1。ADR 0007 の命名の記述と glossary）。Nexus 側の別 PR |
+| **Nexus 側に決定・更新として残す**（次の Nexus の PR で直す一覧。M2） | ① **ADR 0007 の未決「版の DB 名の付け方と掃除」**: 命名 `{APP_NAME}-{env}-master-{deploy_key}-{HASH}` を決定として追記（HASH は先頭 16 文字で決定。最大長は `44 - len(APP_NAME) - len(env)` ≥ 16 → `len(APP_NAME) + len(env)` ≤ 28）。掃除は仮置きのまま ② **台帳**: R21（命名は決定。保持数 N・掃除は未決）・**R33 を決定済みに**（シートに行が無い表は空の表）・R19（**決定**: 録画キー固定の build。人。2026-11-24。残る仮置きは「何もしない」条件が `start_at` の予約の有無に変わること）・R24（本番のストレージは S3 のようなオブジェクトストレージ＋CDN の想定で決定。細部は未決）・R38（**決定**: tool に `CREATE DATABASE`、api は読み取り専用。環境の同居は解消。本番の付与の確認だけが残る）・R25（I5 の限界の注記。14.4 の R37）の更新 ③ **overview**: 14.3 の 1（`hash` の UNIQUE は `(deploy_key, hash)`）・3（DB 名を引く列は `sys_deploy_master`。overview 4 節・ADR の「`sys_deploy` に DB 名を引く列が無い」の言い方）・4（trx と mst の JOIN は docker で成立しない＝確認済み）・5（hash が決まる前に DB 名が要る循環＝作業用 DB）の反映 ④ **glossary**: 「版ごとの DB」の命名 ⑤ 台帳の「版ごとの DB への変更」の区分に `MasterDeployInventory`・`MasterDeployTargetService`・`CheckMasterHash` を足す（10.4）⑥ `docs/workflow/recording.md`（録画の手順。11.2）⑦ **台帳の R34〜R45**（14.4。R33 は決定への格上げ）と **overview 14.3 の 8・9**（巻き戻しと予約の関係、hash にスキーマ版を含める帰結）⑧ **DB の命名の一般則**（`{APP_NAME}-{env}-{役割}`。4.1。ADR 0007 の命名の記述と glossary）。Nexus 側の別 PR |
 
 ## 14. 仮置き・未確認・未決・overview との関係
 
@@ -839,14 +849,14 @@ erDiagram
 | P9 | 同じ `deploy_key` の別 hash は build で許可、**import は全環境（review・production・staging）で拒否**（`confirmed_key_modified`）。前進（`deploy_key_regression`）と I5 の不変性だけが production | 3.6・6.7 | R36 |
 | P10 | 基底 DB を雛形に `CREATE TABLE LIKE` で版の DB を作る（マイグレーションを流さない） | 4.3 | R26 |
 | P11 | スキーマ版は列・索引の構造の SHA-256（`schema_fingerprint`）。**hash の入力に含める**。import で一致を検査。I1 の再計算はマニフェストの値を入力にする | 4.4・6.5.2 | R26 |
-| P12 | 権限: tool に `CREATE`・`DROP` など（接頭辞 `{APP_NAME}-{env}-master-`）、api は `SELECT` だけ | 4.5 | R38 |
+| P12 | 権限: **決定**（人。2026-11-24）: tool に `CREATE DATABASE` と自分が作った版の `DROP`、api は `SELECT` だけ（付けない）。仮置きは、tool のその他の表の権限（`ALTER`・`INDEX`・`INSERT` など）と、「自分が作った」をアプリ側の規則で守ること（MySQL は作成者で絞れない） | 4.5 | R38 |
 | P13 | 保持: いまの版 + 予約済み + 直近 N=3 版（`sys_deploy_master` の重複排除後で数える）。DB だけ消して成果物は残す。復元は成果物から。掃除は手動 | 4.6 | R21・R40 |
 | P14 | 孤児は実行記録（`created_database_list`）で追う。サーバーを走査して消さない。24 時間経過後に掃除 | 4.7 | |
 | P15 | 古い DB のスキーマ: 凍結前は作り直し、凍結後は追加のみ + 全保持版にマイグレーション（`mst:migrate-versions`）。スキーマ更新で hash が変わる帰結（review の詰まり）は未決 | 4.8 | R26・R34 |
 | P16 | tool の基底 DB 名が `{APP_NAME}-{APP_ENV}-master` と一致しなければ `base_database_mismatch` で拒否。tool の既定値（固定の `nexus-local-master`）は実装 PR で直す | 4.1 | |
 | P17 | `tol_master_deploy_run` の変更（kind・mode・mst_database・created_database_list ほか。`inconsistent`・M1 を外す） | 5 | |
 | P18 | 成果物の構成（NDJSON・`schema.json`・SQLite・`manifest.json`）。値は文字列・`created_at`/`updated_at` は固定値 `1970-01-01 00:00:00`・圧縮なし。NDJSON の正規化（`ATTR_STRINGIFY_FETCHES`・`json_encode` のフラグ・LF・JSON 型は文字列のまま） | 6.5.1 | |
-| P19 | hash は**データ＋スキーマ版**から（`deploy_key`・SQLite のバイト列を含めない）。完全な 64 文字（ディレクトリ名・DB 名は先頭 16 文字。決定） | 6.5.2 | R24 |
+| P19 | hash は**データ＋スキーマ版**から（`deploy_key`・SQLite のバイト列を含めない）。完全な 64 文字（ディレクトリ名・DB 名は先頭 16 文字。決定。本番のストレージは S3 のようなオブジェクトストレージ＋CDN の想定で決定。サービス名・設定は未決） | 6.5.2・6.5.3 | R24 |
 | P20 | disk の名前（`master_artifact`・`master_artifact_upstream`・`asset_artifact`）、`manifest.json` を最後に書く完成の印、pull の形 | 6.5.3 | R27 |
 | P21 | `.gitkeep` を置く（`masterdata`・`asset`）。現行 `{hash}/` は作り直しで足りる | 6.5.4 | R31 |
 | P22 | build は作業用 DB → 成果物（一時）→ 版の DB の確定 → 成果物の配置 → 登録の順。往復検査 | 6.6 | |
@@ -858,7 +868,7 @@ erDiagram
 | P28 | キャッシュキー `mst:{DB名}:{表}:all`。mst の破棄は不要（基底 DB を除く） | 8.4 | |
 | P29 | テスト基盤: 基底 DB を指す版を入れる。2 つ目のテスト用 mst DB を `DB_NAMES` に足す（既存環境は `down -v` が要る）。実経路（ミドルウェア）を通すテストを別に置く | 8.6 | |
 | P30 | S3 部品の扱い表（10.4）と移行の段取り（10.5）。台帳に無い `MasterDeployInventory`（再利用）・`MasterDeployTargetService`（作り直し）・`CheckMasterHash`（作り直し・小）の区分 | 10.4・10.5 | R29 |
-| P31 | 録画: キーは決定（Q2）。「何もしない」条件は「`start_at` が未来の行（予約済み）があれば何もしない（または警告）」。録画用の mst を版の DB として作る方式（候補 a・b）は未決。暫定は列の追加に追従するだけ | 11.2 | R19 |
+| P31 | 録画: キー（Q2）と作り方（**決定**。人。2026-11-24。録画キー固定の build。シーダーが基底 DB から作る方式は採らない。シートの無い環境では録画用の版を作らず中止）。仮置きは、「何もしない」条件（`start_at` が未来の行があれば何もしない）と録画用の版の保持 | 11.2 | R19 |
 | P32 | 旧設計から残る仮置き: 読むタブは `mst_` 始まり、`is_active` の扱い、l10n の `deploy_key` の穴埋め、内容検査は採用行だけ、`id` の大文字小文字違いの拒否、予約帯 `7000000000`、9 桁の変換の担当・時期 | 6・7・9 | |
 | P33 | `sys_deploy_asset_id` は同じ `(deploy_key, hash)` の asset 行を使い、無ければ作る。同じ master・同じ `start_at` の二重登録は既存の行を返す（`already_registered`） | 3.6 | |
 | P34 | 同名の DB が実在し使えないとき、または完全な hash が別のときは、触らず `mst_database_collision` で止める。ディレクトリ名の衝突は `artifact_dir_collision`（仮称）で止める（HASH を 32 文字に伸ばす案は撤回。決定の 16 文字を超えるため） | 4.2・6.5.2 | |
@@ -882,7 +892,7 @@ erDiagram
 | P52 | 版の DB 名は 1 つの sys に対して一意が前提。同居する環境は `{env}` か `APP_NAME` で分ける。`.env` の `APP_NAME`・`APP_ENV` が api と tool で同じことが `base_database_mismatch` の前提 | 4.1・4.2 | R38 |
 | P53 | 巻き戻しの復元は、戻し先の成果物の `schema_fingerprint` が基底 DB と一致すれば復元、不一致は `schema_mismatch`（I3 と同じ） | 3.6 | R34 |
 | P54 | 旧キー `sys:sys_deploy:latest_downloadable` を廃止し、新キー `sys:sys_deploy:schedule` に（初回に旧キーを消す）。`MasterCacheKeyContractTest`・`clearCache()` の追従。`DeployRepositoryAdapter` が `CurrentMasterVersion` を仲介 | 8.3・8.4・10.4 | R22 |
-| P55 | Runner の名前は仮称（`MasterDeployRunner` を作り直し。build/import の分割は仮置き）。CLI は新規（`master:*` は未実装）。「廃止」は HTTP の `POST /master-import/deploy` に限る | 10.4・13 | R29 |
+| P55 | Runner の名前は仮称（`MasterDeployRunner` を作り直し。build/import の分割は仮置き）。CLI は実装済み（`tool/app/Console/Commands` に `master:*` が 10 本。`mst:migrate-versions` は未実装）。「廃止」は HTTP の `POST /master-import/deploy` に限る | 10.4・13 | R29 |
 | P56 | DB の命名の一般則 `{APP_NAME}-{env}-{役割}` は**決定**（方針）。master 以外の名前の変更は別作業（範囲外）。`DROP` の保護の接頭辞・環境の同居の衝突回避・`base_database_mismatch` の単純化は、この規則から導く（仮置き） | 4.1・13 | R47 |
 | P57 | **緊急停止**（R39 の決定を具体化した仮置き。再開は掃除済みなら復元してから通し、復元できなければ `activate_target_dropped`（仮称）。`already_in_state` でも `forget` を行う。掃除は止めた行の版を保持し、N の枠に数えない＝4.6）: 操作 `master:deactivate {sys_deploy.id}`・`master:activate {sys_deploy.id}`（名前・形は仮置き）。`is_active` を自動では変えない。排他のロックの中。止めた後に最新が空・掃除済みになるときは拒否（`deactivate_no_fallback`）。実行記録 `kind = deactivate`（phase: lock・check・register・done）。止めたあと `schedule` キーを `forget`（失敗は警告 `schedule_cache_not_invalidated`） | 3.3・3.6・5 | R39 |
 
@@ -892,7 +902,7 @@ erDiagram
 - **MySQL・TiDB の版**: `EXCEPT`（8.0.31 以降。14.0）が使えるか。`schema_fingerprint` が MySQL の版・TiDB の違いで食い違わないか（4.4）。TiDB で `CREATE TABLE LIKE` が同じ結果になるか（4.3）。
 - **往復検査（6.6）が、`float`・`double` 列や JSON 型の列の表記で、MySQL の版をまたいで食い違わないか**。build（QA）の版で書き出した行データを、別の版の MySQL（本番）に投入して書き出し直すと、表記が変わる可能性がある（`ATTR_STRINGIFY_FETCHES` は MySQL が返す表記をそのまま使うので、サーバーの版に依存する）。食い違えば `load_failed` になる。実機で確かめる（S3）。mst に `float`・`double`・JSON 型の列があるかも S3 で数える。
 - **クライアント・API が `created_at`・`updated_at` を読むか**（固定値にしてよいか。6.5.1）。モデルに `@property` はあるが、使う箇所は確かめていない。
-- **本番の `CREATE DATABASE` 権限と、api の読み取り専用ユーザーの分離**、プロキシ型の接続プールの有無（4.5・8.2）。インフラの確認（R38）。
+- **本番の `CREATE DATABASE` 権限と、api の読み取り専用ユーザーの分離**、プロキシ型の接続プールの有無（4.5・8.2）。インフラの確認。（権限の付け方そのものは R38 で**決定**。人。2026-11-24。本番での実際の付与の確認だけが残る）
 - **本番のバケットを `/masterdata/` で配る仕組み**、公開範囲を SQLite に限れるか（6.5.3）。
 - **tool と api が同じ Redis・同じ接頭辞か**（schedule キーの破棄が効くか。8.3。F13。R18 の再確認）。
 - **サーバー間の時計のずれ**（8.3）。
@@ -900,7 +910,7 @@ erDiagram
 - **`GET_LOCK` の名前が 64 文字に収まるか**（`MasterDeployLock` は超えたらハッシュで縮める実装。確認は S3）、接続断でロックが外れること。
 - **system・transaction の具体的な名前**（R47）: 一般則の役割名 `system`・`transaction` は例。**現行の trx（シャード）は `-shard`**（`.env.example`・docker）で、`transaction` とは違う。**シャードの番号の付け方**（`{APP_NAME}-{env}-transaction-{N}` など。現行は全シャードが同じ `-shard` の DB 名を別サーバーで使う）、**testing 環境での名前**（現行は `nexus-testing-*`・`nexus-testing-tool-*` の 2 系統）、admin の `-adm`（api の既定）と `-admin`（`.env.example`）の食い違いは**未確認・未決**。
 - **`require_finalized` の既定**（論点。R46）: R28（最終 hash の確定・ゲートの置き場）が未決の間は **false を既定**にし、運用開始時（QA 完了の運用が始まるとき）に true にする案もある。**仮置きは true のまま**（7.2）。true だと、`master:finalize` の運用が無い間は import が全部 `not_finalized` で拒否される。
-- 親と l10n の `deploy_key` が別の列にできるか。録画 `7777777777` の行の置き場所（R19）。同梱 `master.db` のテーブル（Nexus の未確認。この設計の範囲外）。開発の環境名と `fixed_key_forbidden_envs`（QA の `APP_ENV` の名前）。
+- 親と l10n の `deploy_key` が別の列にできるか。録画 `7777777777` の行は、build が通常どおり `sys_deploy_master` 等に置く（R19 の決定により、別の置き場所は要らない）。同梱 `master.db` のテーブル（Nexus の未確認。この設計の範囲外）。開発の環境名と `fixed_key_forbidden_envs`（QA の `APP_ENV` の名前）。
 - **確認済みに変わったもの**: 同じ MySQL サーバーに複数の環境の DB が同居するか → **確認済み**（`db-master` に `${APP_NAME}-${APP_ENV}-master`・`${APP_NAME}-testing-master`・`${APP_NAME}-testing-tool-master` が同居。`docker-compose.yml`）。命名に env を入れたので衝突しない（4.2）。trx と mst の JOIN が docker で成立しないこと（8.5）。運営シートが `mst_` の全表を持つか → **問わない**（R33 決定）。
 
 ### 14.3 Nexus の overview との食い違い・追加（設計は曲げていない。Nexus 側の直しの候補。13 節の「Nexus 側に決定・更新として残す」）
@@ -923,7 +933,7 @@ erDiagram
 | R35 | `start_at` の規則（import は必須・省略は「すぐ」・production は明示の過去を拒否し許容幅 60 秒・近すぎる警告・JST 併記）の確認 | 3.6 のとおり |
 | R36 | 同じ `deploy_key` で別 hash の扱い（build は許可・**import は全環境で拒否**。前進と I5 だけ production）。overview 9 節の未決（Q11 の範囲）を閉じる。**環境設定に依らず import 全体で拒否することの人の確認が要る** | 3.6・6.7 のとおり |
 | R37 | R25 の限界: 確定済みの行がシートから黙って消えるのは DB の比較で検出できない。`row_digest` で補うか | 検出しない。`row_digest` は R28 で |
-| R38 | **権限の確認だけが残る**: tool に `CREATE DATABASE` を与え、api は読み取り専用にする権限の分離（本番）。環境の同居は解消（命名に env を入れた。確認済み） | 4.5 のとおり。インフラの確認 |
+| R38 | **決定済み**（人。2026-11-24）: tool の DB ユーザーに `CREATE DATABASE`（と自分が作った版の `DROP`）を付け、api のユーザーには付けない（読み取り専用）。環境の同居は解消（命名に env を入れた。確認済み）。残るのは本番で実際に付けられるかのインフラの確認だけ。台帳を決定に直す | 4.5 のとおり |
 | R39 | **決定済み**（人。2026-11-23。A）: `is_active` を最新の選択で**見る**。位置づけは緊急停止専用（具体化は仮置き: 自動では変えない・`master:deactivate`／`activate`・止めたあと `forget`。P57）。台帳を決定に直す | 3.3・3.6 のとおり |
 | R40 | 版の DB の保持数 N（R21 の続き）と、成果物（バケット）の保管・掃除の方針 | N = 3（`sys_deploy_master` の重複排除後で数える）。成果物は消さない |
 | R41 | **予約の取り消し**（`master:cancel-schedule`。未到達の `sys_deploy` 行の削除）と、巻き戻しが予約済みの未来の行で拒否される規則の確認（3.6）。`is_active`（R39）に依存しない形。**直前（現在 + 2×`schedule_ttl` 以内）の取り消しは拒否**し、`forget` の失敗は警告で返す | 3.6 のとおり |
@@ -933,8 +943,9 @@ erDiagram
 | R45 | **`master:finalize` は追従検出の一致を前提にするか**（db.md は前提にすると決めた。api.md・sequence.md の食い違いを揃える）と、シートを読めないときの `--allow-unverified` の有無 | 前提にする・`--allow-unverified` あり（読めない場合だけ）・実行記録に残す（6.5.1） |
 | R41 の注記 | 近い予約（現在 + 2×`schedule_ttl` 以内）は取り消しも巻き戻しもできない窓が最大 120 秒。**緊急の手段は `is_active` を落とす操作（決定した R39。`master:deactivate`）** | 3.6 のとおり（緊急停止、または運用で待つ） |
 | R21 の注記 | 版の DB 名の HASH は先頭 **16 文字で決定**（2026-11-23。ディレクトリ名の hash も同じ 16 文字で決定。R24 の注記）。最大長の式 `44 - len(APP_NAME) - len(env) ≥ 16`（`len(APP_NAME) + len(env)` ≤ 28）は確定した制約。衝突時は別名にせず止める（仮置き） | 4.2 のとおり |
-| R24 の注記 | **決定**（人。2026-11-23）: 成果物のディレクトリ名の hash も、DB 名の HASH と同じく完全な hash の先頭 16 文字。完全な hash（64 文字）は `sys_deploy_master.hash`・`manifest.json`・I1・UNIQUE でそのまま使う。先頭 16 文字の衝突は別名にせず止める（`mst_database_collision`・`artifact_dir_collision`＝仮称）。R24 の未決は本番のストレージの種類だけ | 4.2・6.5.2 のとおり |
+| R24 の注記 | **決定**（人。2026-11-23）: 成果物のディレクトリ名の hash も、DB 名の HASH と同じく完全な hash の先頭 16 文字。完全な hash（64 文字）は `sys_deploy_master.hash`・`manifest.json`・I1・UNIQUE でそのまま使う。先頭 16 文字の衝突は別名にせず止める（`mst_database_collision`・`artifact_dir_collision`＝仮称）。R24 の本番のストレージは「S3 のようなオブジェクトストレージに CDN を立てる想定」（**決定**。人。2026-11-24）。サービス名・設定の細部は未決 | 4.2・6.5.2 のとおり |
 | R46 | **`require_finalized` の既定**。R28 が未決の間は false、運用開始時に true にする案（仮置きは true のまま） | 7.2（true）。論点として 14.2 |
 | R47 | **master 以外の DB の名前**（`{APP_NAME}-{env}-system`・`{APP_NAME}-{env}-transaction` などの具体名、シャードの番号の付け方、testing 環境の名前、admin の `-adm`/`-admin` の食い違い）。一般則は決定、名前の変更は別の実装・運用の作業（範囲外。13 節） | 一般則のみ決定。具体名は未決（14.2） |
 | R28 の細部 | `final.json`（QA 完了の印。成果物のディレクトリ。hash に含めない）・`require_finalized`・`master:finalize`・`master:verify-sheet` を提案として足した。ゲートの置き場・最終 hash の確定方法は未決のまま | 6.5.1・6.7 のとおり（提案） |
-| R19 の更新 | キー `7777777777` は決定（Q2）。録画シーダーの「何もしない」条件は「`start_at` が未来の行がある」に変わる。**未決は、録画用の mst を版の DB として作る方式の細部**（11.2 の候補 a・b） | 暫定は列の追加に追従するだけ |
+| R19 の更新 | **決定済み**（人。2026-11-24）: 録画用の mst は **(a) 録画キー固定の build**（`MASTER_DEPLOY_FIXED_KEY=7777777777`。命名は `{APP_NAME}-{env}-master-7777777777-{HASH16}`）で作る。(b)（シーダーが基底 DB から作る）は採らない。`RecordingDeploySeeder` は版の DB が実在しなければ中止（正式な挙動）。シートの無い環境（CI・`make seed`）では録画用の版を作らない。キー `7777777777` は Q2 のまま。残る仮置きは「何もしない」条件（`start_at` が未来の行）と録画用の版の保持。台帳を決定に直す | 11.2 のとおり。シーダーの作り直しは別 PR |
+| R24 の更新 | **決定済み（方針）**（人。2026-11-24）: 本番のストレージは「S3 のようなオブジェクトストレージに CDN を立てる想定」。**具体的なサービス名・disk の設定の細部・CDN の割り当てとキャッシュは未決**（仮置きと区別）。アセット（`asset_artifact`）の配信は別の機能（R23。変更なし） | 6.5.3 のとおり |

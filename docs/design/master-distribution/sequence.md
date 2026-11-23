@@ -776,7 +776,7 @@ sequenceDiagram
 - 切り替わり前後の schedule キャッシュと `start_at` の関係は 2.3。
 
 ## 7. 録画用デプロイ（`make seed-recording` 系。db.md 11.2）
-**キーは `7777777777`**（**決定**。Q2）。変わるのは、最新が `start_at` 基準になること。**録画用の `start_at` は現在**で登録すれば最新になる（`deploy_key` の大小は効かない）。**録画用の mst を版の DB としてどう作るかの細部（候補 a: シートを使える環境で `MASTER_DEPLOY_FIXED_KEY=7777777777` の build、b: シーダーが基底 DB の現在の行から版の DB を作る）は未決**（R19）。決めるまで次は**暫定（仮置き）**。
+**キーは `7777777777`**（**決定**。Q2）。変わるのは、最新が `start_at` 基準になること。**録画用の `start_at` は現在**で登録すれば最新になる（`deploy_key` の大小は効かない）。**録画用の mst は、シートを使える環境で `MASTER_DEPLOY_FIXED_KEY=7777777777` の build（2.1）で版の DB として作る**（**決定**。人。2026-11-24。R19。シーダーが基底 DB から作る方式は採らない）。版の DB の名前は他と同じ `{APP_NAME}-{env}-master-7777777777-{HASH16}`。シーダーは版の DB を作らず、**実在する録画用の版の DB を `sys` に登録するだけ**で、**版の DB が実在しなければ中止する**（正式な挙動）。シートが無い環境（CI・`make seed`）では録画用の版は作らない。下の図はこの前提（作り直しの実装は別 PR。「何もしない」条件と登録のやり直しの位置づけは**仮置き**）。
 
 ```mermaid
 sequenceDiagram
@@ -793,21 +793,27 @@ sequenceDiagram
     alt ある
         S-->>DEV: 何もしない。理由を表示（予約が到達すると録画用が黙って無効になるため）
     else ない
-        S->>S: 基底 DB の現在の行を主キー昇順に読み、配信 SQLite と hash を作る（規則は db.md 6.5.1 に揃える）
-        S->>ST: 7777777777_hash の成果物を配置
+        S->>ST: build が置いた 7777777777_hash の成果物（manifest.json）を探す
+        S->>S: 録画用の版の DB（…-master-7777777777-HASH16）が実在するか
+        alt 実在しない
+            S-->>DEV: 何もせず中止。理由を表示（シートを使える環境で MASTER_DEPLOY_FIXED_KEY=7777777777 の build が要る）
+        else 実在する
         S->>SYS: BEGIN
-        S->>SYS: 同じ deploy_key と hash の master があれば再利用、無ければ新しい行（mst_database は暫定で基底 DB の名前）
+        S->>SYS: 同じ deploy_key と hash の master があれば再利用、無ければ新しい行（mst_database は録画用の版の DB 名）
         S->>SYS: sys_deploy に新しい行（start_at は現在）
         S->>SYS: COMMIT
-        S->>RD: schedule キーと、基底 DB の player_level と config の mst キャッシュを forget
+        S->>RD: schedule キーを forget
         S-->>DEV: 完了
+        end
     end
 ```
 - **旧版の「`deploy_key` が 7777777777 より大きい有効な行があれば何もしない」は廃止**（予約キーの大小は最新に効かない）。LD・開発の固定キーの行があっても、録画用は `start_at = 現在` で最新になる。LD 仮 `8888888888`・開発 `9999999999` の `start_at` が**未来**のときだけ何もしない（予約の条件に含まれる）。
-- 基底 DB を指す版は**書き換えられる**ので、mst のキャッシュは従来どおりシーダーが破棄する（db.md 8.4 の「基底 DB は例外」）。
-- 元に戻すには `RecordingResetSeeder`（`[REC]` の行と成果物を消す）。**`sys_deploy` の行を消すと前の版が最新に戻る**（**仮置き**）。版の DB 方式が決まれば、作った版の DB の扱いを足す（R19）。
-- シートを使える環境では、`MASTER_DEPLOY_FIXED_KEY=7777777777` にして 2.1 の build を行う（候補 a）。この場合 `RecordingDeploySeeder` は流さない。T が `7777777777` なので、**開発・LD の行は畳みに入らず、本物の行 + 録画用の行だけの版**になる（**仮置き**。db.md 11.2 の候補 a の記述どおり）。
-- 暫定の範囲: `RecordingDeploySeeder` は、sys の列追加（`mst_database`・`artifact_dir`・`schema_fingerprint`・`source_kind`）で**壊れないところまで**だけ直す。保留中のブランチ `feature/recording-seeder-player-level` は決まるまで止めたまま（db.md 11.2）。
+- 録画用の版の DB は作成後に書き換えない（db.md 8.4）ので、mst のキャッシュの破棄は要らない。
+- 元に戻すには `RecordingResetSeeder`。build で作った行には `[REC]` が付かないので、**`deploy_key = 7777777777` の行（`sys_deploy`・`sys_deploy_master` と対応する成果物。版の DB は掃除に任せる）で引く**（**仮置き（AI）。人の確認待ち**。db.md 11.2）。**`sys_deploy` の行を消すと前の版が最新に戻る**（**仮置き**）。
+- **録画用の後に本物の build（`start_at` = 現在）が走ると録画用は黙って無効になる**（build に未来の予約を見る保護は無い）。手順は「本物の版の登録の後に録画用を build する」（**仮置き（AI）**。db.md 11.2）。
+- **`7777777777_*` の成果物が複数あるとき**、シーダーは `manifest.json` の `built_at` が最新のものを使う（**仮置き**）。作った版の DB の掃除は db.md 4.6 の規則に従う（**仮置き**）。
+- 録画用の版を作るのは、シートを使える環境の build（`MASTER_DEPLOY_FIXED_KEY=7777777777`）。T が `7777777777` なので、**開発・LD の行は畳みに入らず、本物の行 + 録画用の行だけの版**になる（db.md 11.2）。build は `start_at` 省略で sys にも登録するので、シーダーを流すのは、sys だけが消えて版の DB が残ったときの登録のやり直し（**仮置き**）。
+- 保留中のブランチ `feature/recording-seeder-player-level` は、シーダーの作り直しの後に再開する（db.md 11.2）。
 
 ## 8. 9 桁変換の手順（db.md 9 節。運営の作業と dry run）
 **手順は変わらない**（シートの変換は運営の作業。サーバーは書き換えない）。要点だけ。
@@ -839,7 +845,7 @@ sequenceDiagram
 ### 9.1 この文書で置いた仮置き（人の確認で変わりうる）
 | # | 内容 | 場所 |
 | --- | --- | --- |
-| S1 | 録画の暫定（予約済みの未来の行があれば何もしない・基底 DB を指す版・`RecordingResetSeeder` は `sys_deploy` の行を消す）。R19 が決まるまで | 7 節 |
+| S1 | 録画（R19 は**決定**: 録画キー固定の build。シーダーは版の DB が実在しなければ中止。「何もしない」条件・`RecordingResetSeeder` が `sys_deploy` の行を消すことは仮置き） | 7 節 |
 | S2 | `master:verify-sheet` と `master:finalize --dry-run` は読み取り専用で、ロックを取らない | 2.5 |
 | S3 | `master:finalize` の実行で、追従検出を先に行い、そのあとに `final.json` の既存を確認する（順序） | 2.5 |
 | S4 | 緊急停止（`master:deactivate`・`activate`）の流れ。名前・形は仮置き（db.md P57。R39 の決定は「`is_active` を見る」まで） | 2.4 |
@@ -850,5 +856,5 @@ sequenceDiagram
 
 ### 9.3 新しい未決（台帳に足す候補）
 - 古い build を review へ渡させないゲートの置き場と最終 hash の確定の仕組み（R28。既出）。
-- 切り替えの瞬間のクライアント（R20）、版の DB 方式の録画（R19）、N（R21・R40）、スキーマ更新と hash（R34）。いずれも既出。
+- 切り替えの瞬間のクライアント（R20）、録画の仮置き（R19 の方式は決定済み）、N（R21・R40）、スキーマ更新と hash（R34）。いずれも既出。
 - 上の 9.2 の 1・2 は、db.md の直しか、実装 PR での決めか。
