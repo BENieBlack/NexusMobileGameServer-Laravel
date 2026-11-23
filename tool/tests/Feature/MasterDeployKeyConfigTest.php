@@ -30,20 +30,36 @@ class MasterDeployKeyConfigTest extends TestCase
     public function test_config_は環境変数を読んで変換する(): void
     {
         $load = fn () => require base_path('config/master_deploy.php');
+        // .env（CI は .env.example のコピー）が MASTER_DEPLOY_FIXED_KEY= を $_SERVER にも読み込むため、
+        // env() が先に見る側に古い値が残らないよう $_ENV・$_SERVER・putenv の全てを差し替える
+        $set = function (?string $value): void {
+            if ($value === null) {
+                unset($_ENV['MASTER_DEPLOY_FIXED_KEY'], $_SERVER['MASTER_DEPLOY_FIXED_KEY']);
+                putenv('MASTER_DEPLOY_FIXED_KEY');
 
-        putenv('MASTER_DEPLOY_FIXED_KEY=8888888888');
-        $_ENV['MASTER_DEPLOY_FIXED_KEY'] = '8888888888';
+                return;
+            }
+            $_ENV['MASTER_DEPLOY_FIXED_KEY'] = $value;
+            $_SERVER['MASTER_DEPLOY_FIXED_KEY'] = $value;
+            putenv('MASTER_DEPLOY_FIXED_KEY='.$value);
+        };
+
+        $before = [$_ENV['MASTER_DEPLOY_FIXED_KEY'] ?? null, $_SERVER['MASTER_DEPLOY_FIXED_KEY'] ?? null];
         try {
+            $set('8888888888');
             $this->assertSame(8888888888, $load()['fixed_key']);
-            $_ENV['MASTER_DEPLOY_FIXED_KEY'] = '07777777777';
-            putenv('MASTER_DEPLOY_FIXED_KEY=07777777777');
+            $set('07777777777');
             $this->assertSame('07777777777', $load()['fixed_key']);
-            $_ENV['MASTER_DEPLOY_FIXED_KEY'] = '';
-            putenv('MASTER_DEPLOY_FIXED_KEY=');
+            $set('');
             $this->assertNull($load()['fixed_key']);
         } finally {
-            unset($_ENV['MASTER_DEPLOY_FIXED_KEY']);
-            putenv('MASTER_DEPLOY_FIXED_KEY');
+            $set(null);
+            if ($before[0] !== null) {
+                $_ENV['MASTER_DEPLOY_FIXED_KEY'] = $before[0];
+            }
+            if ($before[1] !== null) {
+                $_SERVER['MASTER_DEPLOY_FIXED_KEY'] = $before[1];
+            }
         }
     }
 }
