@@ -2,9 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\MasterDeployRunException;
 use App\Services\GoogleSpreadsheetService;
+use App\Services\MasterCacheInvalidator;
 use App\Services\MasterDataExporter;
+use App\Services\MasterDeployRunner;
 use App\Services\MasterDeployService;
+use App\Services\MasterDeployTargetService;
 use App\Services\MasterImportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -19,7 +23,10 @@ use Throwable;
  * Google スプレッドシートからマスターデータをインポートする。
  *
  * エンドポイント:
- * GET  /master-import                    インポート画面（キャッシュがあれば初期表示）
+ * GET  /master-import                    インポート画面（キャッシュがあれば初期表示。props に target を含む）
+ * GET  /master-import/target             デプロイの対象・状態 (JSON)
+ * POST /master-import/deploy             デプロイ（dry_run 可） (JSON)
+ * POST /master-import/clear-cache        API のキャッシュ破棄 (JSON)
  * GET  /master-import/all-sheets         全スプレッドシートの全シート一括取得・キャッシュ保存 (JSON)
  * GET  /master-import/spreadsheets       スプレッドシート一覧取得 (JSON)
  * GET  /master-import/sheets             シート一覧取得 (JSON)
@@ -31,22 +38,33 @@ class MasterImportController extends Controller
 {
     private const CACHE_FILE = 'master-import/sheet-list-cache.json';
 
+    private ?GoogleSpreadsheetService $sheetService = null;
+
     public function __construct(
-        private readonly GoogleSpreadsheetService $spreadsheetService,
         private readonly MasterImportService $importService,
         private readonly MasterDataExporter $exporter,
         private readonly MasterDeployService $deployService,
     ) {}
 
     /**
+     * 認証情報が無いと作れないので、使うときに解決する（deploy・target・clear-cache は未設定でも動く）
+     */
+    private function spreadsheetService(): GoogleSpreadsheetService
+    {
+        // Client と OAuth トークンを作り直さないよう、リクエスト内で使い回す
+        return $this->sheetService ??= app(GoogleSpreadsheetService::class);
+    }
+
+    /**
      * インポート画面を表示する
      *
      * キャッシュファイルが存在する場合は初期データとして渡す。
      */
-    public function index(Request $request): Response
+    public function index(Request $request, MasterDeployTargetService $targetService): Response
     {
         $cachedSheets = null;
         $cachedAt = null;
+        $configured = GoogleSpreadsheetService::checkConfigured();
 
         if (Storage::exists(self::CACHE_FILE)) {
             $raw = Storage::get(self::CACHE_FILE);
@@ -57,12 +75,103 @@ class MasterImportController extends Controller
             }
         }
 
+        // 対象の組み立て（DB 読み取り）に失敗しても画面ごと落とさない。画面は target=null で対象を出さない
+        try {
+            $target = $targetService->build($configured);
+        } catch (Throwable $e) {
+            report($e);
+            $target = null;
+        }
+
         return Inertia::render('MasterImport/Index', [
             'auth' => ['user' => $request->user()],
-            'is_configured' => $this->spreadsheetService->isConfigured(),
+            'is_configured' => $configured,
             'folder_id' => config('services.google_spreadsheet.folder_id'),
             'cached_sheets' => $cachedSheets,
             'cached_at' => $cachedAt,
+            'target' => $target,
+        ]);
+    }
+
+    /**
+     * デプロイの対象・状態を返す（DB と設定を読むだけ。シートは読まない）
+     *
+     * 設計: docs/design/master-distribution/api.md 3 節
+     */
+    public function target(MasterDeployTargetService $targetService): JsonResponse
+    {
+        return response()->json($targetService->build(GoogleSpreadsheetService::checkConfigured()));
+    }
+
+    /**
+     * デプロイを 1 回行う（dry_run なら検証だけ）
+     *
+     * 設計: docs/design/master-distribution/api.md 4 節。失敗は MasterDeployRunException の toArray() と httpStatus で返す。
+     */
+    public function deploy(Request $request, MasterDeployRunner $runner): JsonResponse
+    {
+        $validated = $request->validate([
+            'dry_run' => ['sometimes', 'boolean'],
+        ]);
+
+        // シートの全タブの読み込みが長引くため時間制限を外す（api.md 11.2 の既定案。nginx 側は S3 で実測）
+        set_time_limit(0);
+        // ブラウザが切れても、ロックを持った処理を途中で止めない
+        ignore_user_abort(true);
+
+        try {
+            $result = $runner->run([
+                'dry_run' => (bool) ($validated['dry_run'] ?? false),
+                'adm_account_id' => $request->user()?->getAuthIdentifier(),
+            ]);
+
+            return response()->json($result);
+        } catch (MasterDeployRunException $e) {
+            return response()->json($e->toArray(), $e->httpStatus);
+        } catch (Throwable $e) {
+            // runDry の準備段階の DB 例外など。詳細（SQL など）は画面に出さずログに残す（api.md 4 節 internal_error）
+            report($e);
+
+            return response()->json([
+                'status' => 'error',
+                'code' => MasterDeployRunException::INTERNAL_ERROR,
+                'message' => '想定外のエラーが発生しました。ログを確認してください。',
+                'error_list' => [],
+                'run_id' => null,
+            ], 500);
+        }
+    }
+
+    /**
+     * API のキャッシュ（sys_deploy の 3 種と mst の全表）を破棄する。ロックは取らない・冪等
+     *
+     * 設計: docs/design/master-distribution/api.md 5 節
+     */
+    public function clearCache(MasterCacheInvalidator $invalidator): JsonResponse
+    {
+        $message = 'キャッシュの破棄に失敗しました。Redis の接続を確認して、もう一度実行してください。';
+        try {
+            $cache = $invalidator->invalidateAll();
+        } catch (Throwable $e) {
+            // 破棄するキーを調べる段階（DB）や接続の障害。forget の失敗とは文言を分ける
+            report($e);
+            $cache = ['invalidated' => false, 'failed_key_list' => []];
+            $message = '破棄するキーを調べられませんでした（DB または Redis の障害）。ログを確認して、もう一度実行してください。';
+        }
+
+        if (! $cache['invalidated']) {
+            return response()->json([
+                'status' => 'error',
+                'code' => 'cache_clear_failed',
+                'message' => $message,
+                'cache' => $cache,
+            ], 502);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'キャッシュを破棄しました。',
+            'cache' => $cache,
         ]);
     }
 
@@ -75,11 +184,11 @@ class MasterImportController extends Controller
     public function allSheets(): JsonResponse
     {
         try {
-            $spreadsheets = $this->spreadsheetService->listSpreadsheets();
+            $spreadsheets = $this->spreadsheetService()->listSpreadsheets();
             $allSheets = [];
 
             foreach ($spreadsheets as $ss) {
-                $sheets = $this->spreadsheetService->listSheets($ss['id']);
+                $sheets = $this->spreadsheetService()->listSheets($ss['id']);
                 foreach ($sheets as $sheet) {
                     $allSheets[] = [
                         'spreadsheet_id' => $ss['id'],
@@ -114,7 +223,7 @@ class MasterImportController extends Controller
     public function spreadsheets(): JsonResponse
     {
         try {
-            $spreadsheets = $this->spreadsheetService->listSpreadsheets();
+            $spreadsheets = $this->spreadsheetService()->listSpreadsheets();
 
             return response()->json([
                 'status' => 'success',
@@ -135,7 +244,7 @@ class MasterImportController extends Controller
         ]);
 
         try {
-            $sheets = $this->spreadsheetService->listSheets(
+            $sheets = $this->spreadsheetService()->listSheets(
                 $request->input('spreadsheet_id'),
             );
 
@@ -159,7 +268,7 @@ class MasterImportController extends Controller
         ]);
 
         try {
-            $preview = $this->spreadsheetService->getPreviewData(
+            $preview = $this->spreadsheetService()->getPreviewData(
                 $request->input('spreadsheet_id'),
                 $request->input('sheet_title'),
             );
@@ -191,7 +300,7 @@ class MasterImportController extends Controller
 
         try {
             // スプレッドシートからデータ取得（テーブルごとにグループ化済み）
-            $tableData = $this->spreadsheetService->getSheetData($spreadsheetId, $sheetTitle);
+            $tableData = $this->spreadsheetService()->getSheetData($spreadsheetId, $sheetTitle);
 
             if (empty($tableData)) {
                 return response()->json([
