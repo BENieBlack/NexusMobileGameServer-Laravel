@@ -55,7 +55,7 @@
 | `POST /master-import/cleanup` | 版の DB の掃除（9.3 節） | 新 |
 | `POST /master-import/clear-cache` | schedule キーの破棄（9.4 節） | 縮める |
 | `POST /master-import/deploy` | 旧 1 操作 | **廃止**（404。S3-16。build・import に置き換わる） |
-| `POST /master-import/execute`・`/export` | 旧の取り込み・書き出し | **廃止**（404。S3-16。`TRUNCATE` する方式は残さない。`MasterImportService::import()`・`reflect()` も不要。db.md 10.4） |
+| `POST /master-import/execute`・`/export` | 旧の取り込み・書き出し | **廃止**（404。S3-16。`TRUNCATE` する方式は残さない。`MasterImportService::import()`・`reflect()` はルートから呼ばない。実装は行の変換・ID の検査の部品として残している。db.md 10.4） |
 
 - `all-sheets`・`spreadsheets`・`sheets`・`preview` は**維持**（一覧・内容の確認。build の環境だけで使う。import の環境では `role_forbidden`）。`preview` は列に `deploy_key`・`__deleted` が含まれたらそのまま表示する。`is_mst` は「build が読むタブか」の表示に使う（db.md 6.1）。
 - 旧 URL（`deploy`）を build に残す（互換）案は採らない（画面とテストだけが呼ぶ内部の口なので、残す意味が無い。**仮置き**）。
@@ -195,7 +195,7 @@ import の環境（review・production・staging）で、**上流の成果物を
 ### Post
 | 項目 | 型 | 必須 | 検証 | 意味 |
 | --- | --- | --- | --- | --- |
-| artifact_dir | string | 必須 | `regex:/^[0-9]{10}_[0-9a-f]{64}$/` | 取り込む成果物（`{deploy_key}_{hash}`）。`artifact-list` から選ぶ。パスの区切り・`..` を許さない形にしている（ストレージのパスに使うため） |
+| artifact_dir | string | 必須 | `regex:/^[0-9]{10}_[0-9a-f]{16}$/` | 取り込む成果物（`{deploy_key}_{hash の先頭 16 文字}`。完全な hash は `manifest.json`・`sys_deploy_master.hash` に持つ。db.md 4.2・6.5.2）。`artifact-list` から選ぶ。パスの区切り・`..` を許さない形にしている（ストレージのパスに使うため） |
 | start_at | string\|null | 必須（キーを必ず送る。値は null 可） | `present\|nullable\|date_format:Y-m-d H:i:s` | `sys_deploy.start_at`（UTC）。**null（画面の「すぐ」）= 登録の直前の現在時刻**。ADR 0007 の「取り込む成果物と `start_at` を指定」に沿って、**指定を省略できない形**にした（誤って即時にしないため。**仮置き**）。production は例えば 0 時 UTC、staging は production と同じ値（取り込み時点で既に過ぎていてもよい） |
 | dry_run | bool | 任意（既定 false） | `boolean` | true なら、pull・検証（I1〜I3）・DB を要しない検査（I4・I6）・一時の DB を作っての `version_db` と I5 までを行い、**この run が作った一時の DB と一時の場所を必ず片付け、ストレージ・sys・キャッシュを変えない**（db.md 6.6）。ロックは取る（一時の DB と一時の場所を作るため。**build の dry_run と違う**）。実行記録は書かない |
 
@@ -369,7 +369,7 @@ Response: `status`・`message`・`run_id`・`code`・`deploy`（`sys_deploy_id`�
 
 ## 10. CLI
 
-tool 側（`tool/app/Console/Commands/` は**まだ無い**。CLI は新規で、台帳の S3-14 は保留中。**仮置き**。名前は S3 で決めてよい）。画面と同じ部品（`MasterDeployRunner` など。db.md 10.4）を呼ぶ。`adm_account_id` は null で記録する。
+tool 側（`tool/app/Console/Commands/` に `master:*` を実装済み。**仮置き**）。画面と同じ部品（`MasterBuildRunner`・`MasterImportRunner`・`MasterFinalizeRunner` と各 Service。17 節）を呼ぶ。引数の欠落は Symfony が終了コード 1 を返す。値の形式の誤りは、各コマンドが 2 を返す。`adm_account_id` は null で記録する。
 
 | コマンド | 引数・オプション | 対応する操作 |
 | --- | --- | --- |
@@ -609,8 +609,8 @@ db.md 7.2 の `tool/config/master_deploy.php` を使う（キーは db.md のと
 | --- | --- |
 | `MasterImportController`（既存を作り直し） | 上の各エンドポイント。入力の検査・`MasterDeployRunException` の HTTP への変換。`execute`・`export`・`deploy` は削除 |
 | `MasterDeployTargetService`（作り直し） | `target`（版の一覧・予約・警告・追従検出の直近の結果）・`artifact-list` |
-| `MasterDeployRunner`（既存を作り直す。db.md 10.4） | build・import の順序・排他・実行記録（db.md 6.6）。画面・CLI から呼ぶ。**build と import の Runner を分けるか 1 つにするかは実装 PR で決める**（`MasterBuildRunner`・`MasterImportRunner` に分ける案は仮称。台帳は新名を決めていない） |
-| `MasterVersionAdmin`（新。仮称） | rollback・cancel-schedule・deactivate・activate・cleanup・finalize・resolve-unknown（短い操作。ロック・run の記録は共通） |
+| `MasterBuildRunner`・`MasterImportRunner`・`MasterFinalizeRunner`（実装済み） | build・import・finalize の順序・排他・実行記録（db.md 6.6）。画面・CLI から呼ぶ。import・finalize は共通基底 `MasterDeployOperation` を使う |
+| `MasterRollbackService`・`MasterCancelScheduleService`・`MasterCleanupService`・`MasterActivationService`（deactivate・activate）・`MasterResolveUnknownService`（実装済み） | 短い操作。ロック・run の記録は `MasterDeployOperation` で共通 |
 | `MasterDeployService`（作り直し） | 登録（db.md 3.6 の R1〜R3。1 つの sys トランザクション） |
 | `MasterVersionDatabase`（新。仮称） | 版の DB の作成・復元・`DROP` の保護・往復検査（db.md 4.2・4.3・4.6・6.6 の `version_db`） |
 | `MasterArtifactStore`（新。仮称） | 成果物の書き込み・pull・`manifest.json` を最後に書く（db.md 6.5.3） |

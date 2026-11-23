@@ -762,10 +762,7 @@ class MasterBuildRunnerTest extends TestCase
     {
         return new class($mode) extends MasterDeployService
         {
-            public function __construct(private readonly string $mode)
-            {
-                parent::__construct();
-            }
+            public function __construct(private readonly string $mode) {}
 
             protected function commitSys(ConnectionInterface $sys): void
             {

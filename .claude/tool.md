@@ -8,6 +8,7 @@
 - `tool/` は api とは別の Laravel アプリで、composer の依存も別。api のクラスや packages の Repository は使わず、`DB::connection()` で各DBを直接読み書きする
 - URL は http://localhost:8091（tool-web / tool-php）。ルートは `tool/routes/web.php` だけ
 - 画面は Inertia + Vue（`resources/js/Pages/`）と Blade（`resources/views/`。管理者管理とプレイヤー画面）が混在している
+- `app/Console/Commands/` に `master:*` コマンドがある（下の「マスターデータの build・import・切り替え」）
 - ログインはセッション認証で、ユーザーモデルは `App\Models\Adm\AdmAccount`（`config/auth.php`）。`AdminAccountSeeder` が `admin@example.com` / `admin` を作る
 
 ## DB 接続
@@ -18,8 +19,8 @@
 |---|---|---|
 | `admin` | db-admin（`-admin`） | `adm_*`。既定の接続 |
 | `tool` | db-tool（`-tool`） | `tol_*` |
-| `sys` | db-system | `sys_player` の参照、`sys_deploy*` への登録 |
-| `mst` | db-master | マスターデータのインポート先・エクスポート元 |
+| `sys` | db-system | `sys_player` の参照、`sys_deploy*` への登録・切り替え、`MasterDeployLock`（`GET_LOCK`） |
+| `mst` | db-master | **基底 DB**（`{APP_NAME}-{APP_ENV}-master`。版の DB の雛形）。版の DB（`{基底}-{deploy_key}-{hash16}`）・作業用 DB は、この接続のサーバー上に作る |
 | `trx` / `trx2` / `trx3` | db-shard1〜3 | プレイヤーのログ参照、ダッシュボードの集計 |
 
 - 既定接続は `TOOL_DB_CONNECTION`（既定 `admin`）。共有の `.env` にある `DB_CONNECTION=sqlite` は読まない
@@ -45,17 +46,52 @@ docker compose exec -T tool-php php artisan migrate --path=database/migrations/t
 
 ## 主な機能
 
-### マスターデータのインポートとデプロイ（`/master-import`）
+### マスターデータの build・import・切り替え（`/master-import`）
 
-`MasterImportController`。
+版ごとの mst DB 設計（ADR 0007）。設計の正本は `docs/design/master-distribution/`（`api.md` が HTTP・CLI・エラー表、`db.md` が DB・成果物・登録）。`MasterImportController` は薄い層で、操作は次のクラスが行う（`app/Services/`）。
 
-1. Google スプレッドシートの一覧・シート・プレビューを取る（`GoogleSpreadsheetService`。`TOL_GOOGLE_SPREADSHEET_DIR` と `TOL_GOOGLE_SERVICE_ACCOUNT_JSON` か `TOL_GOOGLE_SERVICE_ACCOUNT_JSON_CONTENT` が必要）。`.言語コード` の付いた列は `<親>__l10n` の行に展開する
-2. インポート（`POST /master-import/execute`）: `MasterImportService` が対象の mst テーブルを TRUNCATE し、500行ずつ INSERT する。`rarity` / `bonus_rarity` は列の実際の型で扱う（ENUM は `UR` 等の文字列のまま、整数列は UR=6 … C=1 の数値へ変換）。列に入れられない値は TRUNCATE の前にエラーにする
-3. エクスポート（`POST /master-import/export`）:
-   - `MasterDataExporter` が mst の `mst_*` テーブルをグループ（親テーブルと `__l10n`）ごとの SQLite に書き出し、`tool/public/masterdata/{マニフェストハッシュ}/{グループ}_{ハッシュ}.sqlite` に置く
-   - `MasterDeployService::register()` が `sys_deploy_master` と `sys_deploy_master_table` に登録し、ダミーの `sys_deploy_asset` を作る。既存の `sys_deploy` を全て `is_active = false` にし、新しい `sys_deploy` を `start_at` = 現在時刻・`is_active = true` で入れる（即時公開）
-   - 同じハッシュが登録済みなら新しく作らず、既存の deploy_key を返す
-   - deploy_key は `YYYYMMDD × 100 + 当日の連番`
+| 操作 | クラス | 環境（`MASTER_DEPLOY_ROLE`） |
+| --- | --- | --- |
+| build（シート → 成果物と版の DB → sys に登録） | `MasterBuildRunner` | build（develop・LD・QA） |
+| import（上流の成果物 → 版の DB → sys に登録） | `MasterImportRunner` | import（review・production・staging） |
+| finalize（追従検出 → `final.json`） | `MasterFinalizeRunner` | build |
+| rollback・cancel-schedule・cleanup・deactivate / activate・resolve-unknown | `MasterRollbackService`・`MasterCancelScheduleService`・`MasterCleanupService`・`MasterActivationService`・`MasterResolveUnknownService`（共通部分は `MasterDeployOperation`） | どちらも可 |
+| target・artifact-list（読み取りだけ） | `MasterDeployTargetService` | どちらも可 |
+
+- 順序と排他: 環境設定の検査（role・T・本番ガード）→ `GET_LOCK`（待たない。取れなければ `deploy_locked`）→ 実行記録 `tol_master_deploy_run` → 本処理。登録は sys の 1 トランザクション。失敗したときはその run が新規に作った DB だけ `DROP` する。`dry_run` は実行記録を書かない（import の dry_run だけロックを取る）
+- T（畳みの上限）はリクエストにも CLI にも渡さない。`MASTER_DEPLOY_FIXED_KEY`（予約キー）か `MASTER_DEPLOY_KEY`（本物の形）のどちらか 1 つで決める
+- 切り替えは `sys_deploy.start_at`（UTC）。ゲーム API は `start_at` 基準で版の DB に切り替わる。`is_active` を落とすのは `deactivate`（緊急停止）だけ
+- 成果物は `master_artifact` disk（ローカルは `tool/public/masterdata/{deploy_key}_{hash16}/`、git に入れない）。import の上流は `master_artifact_upstream` disk（`MASTER_ARTIFACT_UPSTREAM_ROOT`）
+- 時間のかかる HTTP（build・import など）は nginx の既定 60 秒を超えると 504 になるが、処理は `ignore_user_abort` で最後まで続く。結果は `target` の `last_run`（と実行記録）で見る
+- キャッシュ: 操作の後に `sys:sys_deploy:schedule` だけを `forget` する（`MasterCacheInvalidator`）。mst のキャッシュは版つきキーなので破棄しない。失敗しても操作は成功のまま警告 `schedule_cache_not_invalidated`（`clear-cache` で再試行）
+- `MasterCacheInvalidator` と各 Runner はコンテナに明示的に登録してある（`AppServiceProvider`）。自動解決に任せると、キャッシュストアが既定のものになる
+
+#### HTTP
+
+| ルート | 内容 |
+| --- | --- |
+| `GET /master-import` | 画面（Inertia。props に `target`）。**画面（`Index.vue`）はまだ旧 API（`execute`・`export`）を呼んでおり、動かない。作り直しは次の段階** |
+| `GET /master-import/target`・`/artifact-list?source=upstream\|own` | 対象・版の一覧・予約・警告 / 成果物の一覧 |
+| `POST /master-import/build`・`/import`・`/finalize`・`/rollback` | `dry_run` 可。import は `start_at` のキーが必須（値は null 可） |
+| `POST /master-import/cancel-schedule`・`/deactivate`・`/activate` | `sys_deploy_id` |
+| `POST /master-import/cleanup` | 既定は `dry_run`（`dry_run=false` で実行） |
+| `POST /master-import/clear-cache`・`/resolve-unknown` | schedule キー（と `id`・`deploy_key`・`tables`・旧キー）の破棄 / `register_unknown` の片付け（`run_id`） |
+| `GET /master-import/all-sheets`・`/spreadsheets`・`/sheets`・`/preview` | シートの一覧・内容の確認。build の環境だけ（import の環境は `role_forbidden`） |
+
+- 失敗は `{status: error, code, message, error_list, run_id}` を、`api.md` 13.1 の HTTP ステータスで返す（`MasterDeployRunException`）。入力の形式の誤りは Laravel 標準の 422。入力は `app/Http/Requests/MasterImport/`
+- `POST /master-import/deploy`・`execute`・`export` は廃止（404）
+
+#### CLI（`php artisan`。tool-php コンテナで実行）
+
+`master:build [--dry-run] [--start-at=]`・`master:import {artifact_dir} --start-at= [--dry-run]`（`--start-at=now` で「すぐ」）・`master:finalize {artifact_dir} [--dry-run] [--allow-unverified]`・`master:verify-sheet {artifact_dir}`・`master:rollback {sys_deploy_master_id} [--dry-run]`・`master:cancel-schedule {sys_deploy_id}`・`master:deactivate {sys_deploy_id}`・`master:activate {sys_deploy_id}`・`master:resolve-unknown {run_id}`・`master:cleanup [--execute]`（付けないと dry run）。
+
+- 終了コード: 0 成功（警告つきを含む）/ 1 実行中の失敗・想定外 / 2 入力・検証の失敗 / 3 排他 / 4 環境・状態の前提で拒否（対応表は `App\Support\MasterDeployFailure::exitCode`）
+- 出力は結果の表と `error_list` を標準出力に。日時は UTC に JST を併記する。`adm_account_id` は null で記録される
+- `mst:migrate-versions`（api 側。版の DB 全部にマイグレーションを流す）は凍結後に使うもので、未作成
+
+#### テスト
+
+mst を使うテストは実 MySQL（db-master）に、テストごとの使い捨て `APP_NAME`（`nxt` + 乱数）の基底 DB・版の DB を作り、終了時に接頭辞で全部消す（`tests/Feature/MasterVersionedTestCase.php`）。sys・tool は SQLite のメモリ、ロックと schedule キャッシュはモック。
 
 ### ダッシュボード（`/dashboard`）
 

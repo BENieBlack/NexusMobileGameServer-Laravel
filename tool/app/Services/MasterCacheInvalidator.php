@@ -8,43 +8,26 @@ use Illuminate\Support\Facades\DB;
 use Throwable;
 
 /**
- * マスター配信のあとに API 側の Redis キャッシュを破棄する（設計: docs/design/master-distribution/db.md 8 節）
+ * マスター配信のあとに API 側の Redis キャッシュを破棄する（版ごとの mst DB 設計。設計: docs/design/master-distribution/db.md 8.3・api.md 9.4）
  *
- * キー文字列は api 側のコードが決めており、ここは同じ文字列を持つ。変えるときは両方を直す。
- * 対応: `{cachePrefix}:{テーブル名}:{キー}` を組む packages/nexus-core の `_BaseMstRepository`（cachePrefix = mst、キーは DB名 + all）と
- * `_BaseSysRepository::buildCacheKey()`（cachePrefix = sys。キーは SysDeployRepository が渡す）。
- * - mst の全件: `mst:{DB名}:{テーブル名}:all`（packages/nexus-core の `_BaseMstRepository`。段階 3 で mst 側は不要になる）
- * - sys_deploy: `sys:sys_deploy:schedule`（旧 `sys:sys_deploy:latest_downloadable` も消す）/ `sys:sys_deploy:deploy_key:{キー}` /
- *   `sys:sys_deploy:id:{id}`（api の `SysDeployRepository`）
+ * mst のキャッシュは破棄しない（キーに版の DB 名が入り、版の DB は書き換えないため。db.md 8.4）。破棄するのは sys_deploy の
+ * 切り替え予定の一覧（schedule キー）だけ。キー文字列は api 側のコードが決めており、ここは同じ文字列を持つ。変えるときは両方を直す。
+ * - `sys:sys_deploy:schedule`（api の `SysDeployRepository::scheduleCacheKey`）
+ * - `clear-cache` だけ、緊急停止の運用のために `sys:sys_deploy:id:{id}`・`sys:sys_deploy:deploy_key:{キー}`・`sys:sys_deploy_master:{id}:tables` と
+ *   旧キー `sys:sys_deploy:latest_downloadable`（廃止。切り替えの初回に Redis に残るぶんを消す。db.md 8.3）も破棄する
  *
  * 破棄の失敗（Redis に届かない等の例外）は止めず、失敗したキーを返す。
  * なお Redis の forget は「キーが無かった」ときも false を返すので、false は失敗として扱わない。
  */
 class MasterCacheInvalidator
 {
-    /** 旧キー（廃止。api は読まない）。切り替えの初回に Redis に残るぶんを消すため、破棄の対象には残す */
-    public const SYS_DEPLOY_LATEST_KEY = 'sys:sys_deploy:latest_downloadable';
-
     /** 切り替え予定の一覧（api の SysDeployRepository::scheduleCacheKey。db.md 8.3） */
     public const SYS_DEPLOY_SCHEDULE_KEY = 'sys:sys_deploy:schedule';
 
-    /** 実行記録の phase のうち「sys の COMMIT 前後より先へ進んだ」もの（db.md 8 節 M1） */
-    public const COMMIT_REACHED_PHASES = ['commit', 'invalidate', 'done'];
+    /** 旧キー（廃止。api は読まない）。clear-cache だけが、切り替えの初回に残りを消す */
+    private const LEGACY_LATEST_KEY = 'sys:sys_deploy:latest_downloadable';
 
     public function __construct(private readonly ?Repository $cache = null) {}
-
-    /**
-     * mst の全件キャッシュのキー（`mst:{DB名}:{テーブル名}:all`）
-     *
-     * 段階 3 で作り直す（版の DB は作成後に書き換えないので mst 側の破棄は不要になる。db.md 8.4・10.4）。
-     * それまでの暫定: DB名を省くと tool の mst 接続（基底 DB）の名前を使う。
-     */
-    public static function mstAllKey(string $table, ?string $database = null): string
-    {
-        $database ??= DB::connection('mst')->getDatabaseName();
-
-        return "mst:{$database}:{$table}:all";
-    }
 
     public static function sysDeployDeployKeyKey(int $deployKey): string
     {
@@ -56,143 +39,13 @@ class MasterCacheInvalidator
         return "sys:sys_deploy:id:{$sysDeployId}";
     }
 
-    /**
-     * 直前の実行の結果から、mst の全表と sys_deploy を破棄すべきかを返す（純粋な判定）
-     *
-     * 引数は「最後に phase が commit 以降へ進んだ run」（無ければ null）。
-     * 無ければ通常（false）。`succeeded` かつ `summary.cache_invalidated = true` なら通常（false）。
-     * それ以外（aborted・inconsistent・failed・cache_invalidated が false か無い succeeded）は全破棄（true）。
-     *
-     * @param  array{status: string, summary?: array<string, mixed>|string|null}|null  $lastCommitReachedRun
-     */
-    public static function needsFullInvalidation(?array $lastCommitReachedRun): bool
+    public static function sysDeployMasterTablesKey(int $sysDeployMasterId): string
     {
-        if ($lastCommitReachedRun === null) {
-            return false;
-        }
-        if ($lastCommitReachedRun['status'] !== 'succeeded') {
-            return true;
-        }
-
-        $summary = $lastCommitReachedRun['summary'] ?? null;
-        if (is_string($summary)) {
-            $summary = json_decode($summary, true);
-        }
-
-        return ! (is_array($summary) && ($summary['cache_invalidated'] ?? false) === true);
+        return "sys:sys_deploy_master:{$sysDeployMasterId}:tables";
     }
 
     /**
-     * tol_master_deploy_run から「最後に phase が commit 以降へ進んだ run」を探す
-     *
-     * 直近の run ではない（間に sheet_invalid などの早期失敗の run が挟まっても見落とさない）。
-     * 実行中（running）の run は自分自身のことがあるので、呼び出し側が自分の run を作る前に呼ぶか、
-     * `$excludeRunId` で除く。
-     *
-     * @return array{status: string, summary: array<string, mixed>|string|null}|null
-     */
-    public function findLastCommitReachedRun(?int $excludeRunId = null): ?array
-    {
-        $query = DB::connection('tool')
-            ->table('tol_master_deploy_run')
-            ->whereIn('phase', self::COMMIT_REACHED_PHASES)
-            ->orderByDesc('id');
-        if ($excludeRunId !== null) {
-            $query->where('id', '!=', $excludeRunId);
-        }
-
-        $row = $query->first(['status', 'summary']);
-        if ($row === null) {
-            return null;
-        }
-
-        return ['status' => (string) $row->status, 'summary' => $row->summary];
-    }
-
-    /**
-     * 今回、全破棄が要るか（実行記録を読んで判定する）
-     */
-    public function shouldInvalidateAll(?int $excludeRunId = null): bool
-    {
-        return self::needsFullInvalidation($this->findLastCommitReachedRun($excludeRunId));
-    }
-
-    /**
-     * 反映の結果（表ごとの件数）から、キャッシュを破棄する表を選ぶ
-     *
-     * `inserted`・`updated`・`deleted` のどれかが 0 でない表だけ（db.md 8 節）。
-     *
-     * @param  array<string, array{inserted?: int, updated?: int, deleted?: int}>  $tableSummary  表名 => 件数
-     * @return list<string>
-     */
-    public static function changedTables(array $tableSummary): array
-    {
-        $changed = [];
-        foreach ($tableSummary as $table => $counts) {
-            if (($counts['inserted'] ?? 0) > 0 || ($counts['updated'] ?? 0) > 0 || ($counts['deleted'] ?? 0) > 0) {
-                $changed[] = $table;
-            }
-        }
-
-        return $changed;
-    }
-
-    /**
-     * mst 接続の `mst_*` テーブル名の一覧（`__l10n` を含む）
-     *
-     * @return list<string>
-     */
-    public function listMstTables(): array
-    {
-        $tables = [];
-        foreach (DB::connection('mst')->select("SHOW TABLES LIKE 'mst\\_%'") as $row) {
-            $name = (string) array_values((array) $row)[0];
-            if (str_starts_with($name, 'mst_')) {
-                $tables[] = $name;
-            }
-        }
-        sort($tables);
-
-        return $tables;
-    }
-
-    /**
-     * 有効な（is_active）sys_deploy 行の deploy_key と id（clear-cache と全破棄で使う）
-     *
-     * @return array{deploy_key_list: list<int>, id_list: list<int>}
-     */
-    public function selectActiveSysDeploy(): array
-    {
-        $rowList = DB::connection('sys')
-            ->table('sys_deploy')
-            ->where('is_active', true)
-            ->get(['id', 'deploy_key']);
-
-        $deployKeyList = [];
-        $idList = [];
-        foreach ($rowList as $row) {
-            $deployKeyList[] = (int) $row->deploy_key;
-            $idList[] = (int) $row->id;
-        }
-
-        return ['deploy_key_list' => array_values(array_unique($deployKeyList)), 'id_list' => $idList];
-    }
-
-    /**
-     * 通常の破棄: 変更のあった mst の表と、sys_deploy の 3 種
-     *
-     * @param  list<string>  $changedMstTableList  `changedTables()` の結果
-     * @param  list<int>  $deployKeyList  登録した（または有効に戻した）行と、有効・無効が変わった行の deploy_key
-     * @param  list<int>  $sysDeployIdList  同じ行の id
-     * @return array{invalidated: bool, failed_key_list: list<string>}
-     */
-    public function invalidate(array $changedMstTableList, array $deployKeyList, array $sysDeployIdList): array
-    {
-        return $this->forgetAll($this->buildKeyList($changedMstTableList, $deployKeyList, $sysDeployIdList));
-    }
-
-    /**
-     * 切り替え予定の一覧（`sys:sys_deploy:schedule`）だけを破棄する（版ごとの mst DB 設計。mst のキャッシュは破棄しない。db.md 3.6・8.3）
+     * 切り替え予定の一覧（`sys:sys_deploy:schedule`）だけを破棄する（登録・巻き戻し・取り消し・停止・再開の後。mst のキャッシュは破棄しない）
      *
      * @return array{invalidated: bool, failed_key_list: list<string>}
      */
@@ -202,47 +55,31 @@ class MasterCacheInvalidator
     }
 
     /**
-     * 全破棄: mst の全表（`mst_%`）と、有効な sys_deploy 行の 3 種
+     * clear-cache（api.md 9.4）: schedule キーと旧キーを先に、続けて id・deploy_key・tables のキーを破棄する（列挙で DB が失敗したら例外。固定のキーは破棄済み）
      *
-     * 全破棄が要るとき（`shouldInvalidateAll()`）と、`POST /master-import/clear-cache` で使う。
-     *
-     * @param  list<int>  $extraDeployKeyList  今回登録した行など、is_active に頼らず足したい deploy_key
-     * @param  list<int>  $extraSysDeployIdList  同じ行の id
      * @return array{invalidated: bool, failed_key_list: list<string>}
      */
-    public function invalidateAll(array $extraDeployKeyList = [], array $extraSysDeployIdList = []): array
+    public function forgetScheduleAndRelated(): array
     {
-        $active = $this->selectActiveSysDeploy();
+        // 固定のキー（schedule・旧キー）を先に破棄する。後の id・deploy_key・tables の列挙で DB が落ちていても、これは消える
+        $fixed = $this->forgetAll([self::SYS_DEPLOY_SCHEDULE_KEY, self::LEGACY_LATEST_KEY]);
 
-        return $this->forgetAll($this->buildKeyList(
-            $this->listMstTables(),
-            array_merge($active['deploy_key_list'], $extraDeployKeyList),
-            array_merge($active['id_list'], $extraSysDeployIdList),
-        ));
-    }
-
-    /**
-     * 破棄するキーの一覧を作る（重複なし。順序は sys_deploy → mst）
-     *
-     * @param  list<string>  $mstTableList
-     * @param  list<int>  $deployKeyList
-     * @param  list<int>  $sysDeployIdList
-     * @return list<string>
-     */
-    public function buildKeyList(array $mstTableList, array $deployKeyList, array $sysDeployIdList): array
-    {
-        $keyList = [self::SYS_DEPLOY_SCHEDULE_KEY, self::SYS_DEPLOY_LATEST_KEY];
-        foreach (array_unique($deployKeyList) as $deployKey) {
-            $keyList[] = self::sysDeployDeployKeyKey($deployKey);
+        $sys = DB::connection('sys');
+        $keyList = [];
+        foreach ($sys->table('sys_deploy')->get(['id', 'deploy_key']) as $row) {
+            $keyList[] = self::sysDeployIdKey((int) $row->id);
+            $keyList[] = self::sysDeployDeployKeyKey((int) $row->deploy_key);
         }
-        foreach (array_unique($sysDeployIdList) as $sysDeployId) {
-            $keyList[] = self::sysDeployIdKey($sysDeployId);
-        }
-        foreach (array_unique($mstTableList) as $table) {
-            $keyList[] = self::mstAllKey($table);
+        foreach ($sys->table('sys_deploy_master')->pluck('id') as $id) {
+            $keyList[] = self::sysDeployMasterTablesKey((int) $id);
         }
 
-        return $keyList;
+        $related = $this->forgetAll(array_values(array_unique($keyList)));
+
+        return [
+            'invalidated' => $fixed['invalidated'] && $related['invalidated'],
+            'failed_key_list' => [...$fixed['failed_key_list'], ...$related['failed_key_list']],
+        ];
     }
 
     /**

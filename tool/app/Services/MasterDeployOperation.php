@@ -22,7 +22,7 @@ use Throwable;
  * - 版の DB の確定（`version_db`）: 既存の使える DB の再利用・孤児の採用・成果物の行データからの新規作成（6.6）
  * - schedule キーの破棄の失敗は成功のまま警告にする（3.6）
  *
- * 旧 MasterBuildRunner は触らない（同じ部品を共有せず、この基底クラスが同じ規則を持つ。統合は段階 5 以降）。
+ * MasterBuildRunner は別のクラスで、この基底クラスと同じ規則を自分で持つ（統合は未実施。実装の重複は残っている）。
  */
 abstract class MasterDeployOperation
 {

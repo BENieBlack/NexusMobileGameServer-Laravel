@@ -13,10 +13,10 @@ use JsonException;
 use Throwable;
 
 /**
- * build（develop・LD・QA）の順序・排他・実行記録（版ごとの mst DB 設計。画面・CLI から呼ぶ）
+ * build（develop・LD・QA）の順序・排他・実行記録（版ごとの mst DB 設計。画面（MasterImportController）・CLI（master:build）から呼ぶ）
  *
  * 設計: docs/design/master-distribution/db.md 6.6（build）・4.2〜4.7・5 節、api.md 6 節・13 節
- * 旧 MasterDeployRunner（TRUNCATE + 差分反映 + 補償）は S3-15・S3-16 まで残る。この Runner は新しい経路で、画面・CLI の接続は後の段階。
+ * 旧 MasterDeployRunner（TRUNCATE + 差分反映 + 補償）は S3-16 で削除した。
  *
  * 順序: 環境設定の検査（role・T・本番ガード・DB 名。ロックの前）→ GET_LOCK（sys。待たない）→ 実行記録 `kind = build` を running で作る（lock）
  * → start_at の検査（I6。DB を作る前）→ 読む（read）→ 検証（validate）→ 畳み（fold）→ 作業用 DB（work_db）→ 成果物（artifact。hash 確定）
@@ -81,7 +81,7 @@ class MasterBuildRunner
         $this->databases = $databases ?? new MasterVersionDatabase($this->importService);
         $this->builder = $builder ?? new MasterArtifactBuilder($this->databases, new MasterDataExporter);
         $this->store = $store ?? new MasterArtifactStore;
-        $this->deployService = $deployService ?? new MasterDeployService($this->policy);
+        $this->deployService = $deployService ?? new MasterDeployService;
         $this->invalidator = $invalidator ?? new MasterCacheInvalidator;
     }
 

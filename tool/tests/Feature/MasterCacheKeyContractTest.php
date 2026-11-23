@@ -4,12 +4,13 @@ namespace Tests\Feature;
 
 use App\Services\MasterCacheInvalidator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use PHPUnit\Framework\Attributes\Test;
 use Redis;
 use Tests\TestCase;
 
 /**
- * MasterCacheInvalidator が消す実キーが、api のリポジトリが書く実キーと一致することの確認（docs/design/master-distribution/db.md の 8 節）
+ * MasterCacheInvalidator が消す実キー（schedule・id・deploy_key・tables・旧キー）が、api のリポジトリが書く実キーと一致することの確認（docs/design/master-distribution/db.md の 8 節）
  *
  * api の `api/tests/Feature/Repositories/MasterCacheKeyContractTest.php` が、api のリポジトリで書いたキーを
  * 同じ固定文字列で確かめている。ここは同じ文字列を接頭辞なしの生の接続で Redis に置き、
@@ -56,38 +57,62 @@ class MasterCacheKeyContractTest extends TestCase
     public function 破棄がapiの書く実キーを消し_関係のないキーは残す(): void
     {
         $physicalKeyList = [
-            'mst:nexus-testing-master:mst_item:all',
-            'mst:nexus-testing-master:mst_item__l10n:all',
             'sys:sys_deploy:schedule',
             'sys:sys_deploy:latest_downloadable',
             'sys:sys_deploy:deploy_key:2026010101',
             'sys:sys_deploy:id:7',
+            'sys:sys_deploy_master:3:tables',
         ];
         foreach ($physicalKeyList as $key) {
             $this->raw->set(self::PHYSICAL_PREFIX.$key, 'x');
         }
-        $this->raw->set(self::PHYSICAL_PREFIX.'mst:nexus-testing-master:mst_other:all', 'x');
+        // mst のキャッシュは破棄しない（キーに版の DB 名が入る。db.md 8.4）
+        $this->raw->set(self::PHYSICAL_PREFIX.'mst:nexus-testing-master:mst_item:all', 'x');
+        $this->raw->set(self::PHYSICAL_PREFIX.'sys:sys_deploy:id:999', 'x');
 
-        // tool の mst 接続（基底 DB）の名前を使うので、api のテストの基底 DB と同じ名前の接続で組む
-        config(['database.connections.mst.database' => 'nexus-testing-master']);
-        DB::purge('mst');
-        $result = (new MasterCacheInvalidator)->invalidate(['mst_item', 'mst_item__l10n'], [2026010101], [7]);
+        // clear-cache が調べる sys は、最小のテーブルだけをメモリの SQLite に作る
+        config(['database.connections.sys' => ['driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '']]);
+        DB::purge('sys');
+        Schema::connection('sys')->create('sys_deploy', function ($t) {
+            $t->unsignedBigInteger('id');
+            $t->bigInteger('deploy_key');
+        });
+        Schema::connection('sys')->create('sys_deploy_master', function ($t) {
+            $t->unsignedBigInteger('id');
+        });
+        DB::connection('sys')->table('sys_deploy')->insert(['id' => 7, 'deploy_key' => 2026010101]);
+        DB::connection('sys')->table('sys_deploy_master')->insert(['id' => 3]);
+
+        $result = (new MasterCacheInvalidator)->forgetScheduleAndRelated();
 
         $this->assertTrue($result['invalidated']);
         foreach ($physicalKeyList as $key) {
             $this->assertSame(0, $this->raw->exists(self::PHYSICAL_PREFIX.$key), $key);
         }
-        $this->assertSame(1, $this->raw->exists(self::PHYSICAL_PREFIX.'mst:nexus-testing-master:mst_other:all'));
+        $this->assertSame(1, $this->raw->exists(self::PHYSICAL_PREFIX.'mst:nexus-testing-master:mst_item:all'));
+        $this->assertSame(1, $this->raw->exists(self::PHYSICAL_PREFIX.'sys:sys_deploy:id:999'));
+        DB::purge('sys');
+    }
+
+    #[Test]
+    public function forget_scheduleはscheduleキーだけを消す(): void
+    {
+        $this->raw->set(self::PHYSICAL_PREFIX.'sys:sys_deploy:schedule', 'x');
+        $this->raw->set(self::PHYSICAL_PREFIX.'sys:sys_deploy:id:7', 'x');
+
+        $this->assertTrue((new MasterCacheInvalidator)->forgetSchedule()['invalidated']);
+
+        $this->assertSame(0, $this->raw->exists(self::PHYSICAL_PREFIX.'sys:sys_deploy:schedule'));
+        $this->assertSame(1, $this->raw->exists(self::PHYSICAL_PREFIX.'sys:sys_deploy:id:7'));
     }
 
     #[Test]
     public function 固定文字列が組み立て関数と一致する(): void
     {
-        $this->assertSame('mst:nexus-testing-master:mst_item:all', MasterCacheInvalidator::mstAllKey('mst_item', 'nexus-testing-master'));
         // api の SysDeployRepository::scheduleCacheKey() と同じ文字列（api 側の契約テストが固定）
         $this->assertSame('sys:sys_deploy:schedule', MasterCacheInvalidator::SYS_DEPLOY_SCHEDULE_KEY);
-        $this->assertSame('sys:sys_deploy:latest_downloadable', MasterCacheInvalidator::SYS_DEPLOY_LATEST_KEY);
         $this->assertSame('sys:sys_deploy:deploy_key:2026010101', MasterCacheInvalidator::sysDeployDeployKeyKey(2026010101));
         $this->assertSame('sys:sys_deploy:id:7', MasterCacheInvalidator::sysDeployIdKey(7));
+        $this->assertSame('sys:sys_deploy_master:3:tables', MasterCacheInvalidator::sysDeployMasterTablesKey(3));
     }
 }

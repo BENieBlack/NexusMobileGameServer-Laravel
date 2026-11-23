@@ -55,9 +55,17 @@ Route::middleware('auth')->group(function () {
         Route::get('/sheets', [MasterImportController::class, 'sheets'])->name('sheets');
         Route::get('/preview', [MasterImportController::class, 'preview'])->name('preview');
         Route::get('/target', [MasterImportController::class, 'target'])->name('target');
-        Route::post('/deploy', [MasterImportController::class, 'deploy'])->name('deploy');
+        Route::get('/artifact-list', [MasterImportController::class, 'artifactList'])->name('artifact-list');
+        Route::post('/build', [MasterImportController::class, 'build'])->name('build');
+        Route::post('/import', [MasterImportController::class, 'import'])->name('import');
+        Route::post('/finalize', [MasterImportController::class, 'finalize'])->name('finalize');
+        Route::post('/rollback', [MasterImportController::class, 'rollback'])->name('rollback');
+        Route::post('/cancel-schedule', [MasterImportController::class, 'cancelSchedule'])->name('cancel-schedule');
+        Route::post('/cleanup', [MasterImportController::class, 'cleanup'])->name('cleanup');
         Route::post('/clear-cache', [MasterImportController::class, 'clearCache'])->name('clear-cache');
-        Route::post('/execute', [MasterImportController::class, 'execute'])->name('execute');
-        Route::post('/export', [MasterImportController::class, 'export'])->name('export');
+        Route::post('/resolve-unknown', [MasterImportController::class, 'resolveUnknown'])->name('resolve-unknown');
+        Route::post('/deactivate', [MasterImportController::class, 'deactivate'])->name('deactivate');
+        Route::post('/activate', [MasterImportController::class, 'activate'])->name('activate');
+        // 旧 deploy・execute・export は廃止（404。S3-16）
     });
 });

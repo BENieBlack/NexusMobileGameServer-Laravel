@@ -27,7 +27,7 @@ class MasterArtifactVerifier
     {
         $path = static fn (string $relative): string => $prefix === '' ? $relative : rtrim($prefix, '/').'/'.$relative;
 
-        if (preg_match('/^[0-9]{10}_[0-9a-f]{16}$/D', $artifactDir) !== 1) {
+        if (preg_match(MasterArtifactStore::DIR_PATTERN, $artifactDir) !== 1) {
             throw $this->invalid("成果物のディレクトリ名の形が不正です: {$artifactDir}");
         }
         if (! $disk->exists($path('manifest.json'))) {

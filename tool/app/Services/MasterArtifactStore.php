@@ -19,6 +19,9 @@ class MasterArtifactStore
 
     public const MANIFEST = 'manifest.json';
 
+    /** 成果物のディレクトリ名 `{deploy_key}_{hash の先頭 16 文字}`（db.md 4.2・6.5.2）。検証・入力の検査はすべてこの 1 か所 */
+    public const DIR_PATTERN = '/^[0-9]{10}_[0-9a-f]{16}$/D';
+
     public function __construct(private readonly string $diskName = self::DISK) {}
 
     public function disk(): Filesystem
