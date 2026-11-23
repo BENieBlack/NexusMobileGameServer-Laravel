@@ -2,6 +2,7 @@
 
 namespace Database\Seeders\Recording;
 
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -10,7 +11,7 @@ use Illuminate\Support\Facades\Schema;
  *
  * 動画撮影用に、mst の指定テーブルグループだけを SQLite に書き出して配信ディレクトリに置く。
  * 運営ツールの MasterDataExporter（tool/app/Services/MasterDataExporter.php）と同じ規則
- * （ファイル名 `{グループ}_{ハッシュ}.sqlite`、置き場 `{出力先}/{マニフェストハッシュ}/`、
+ * （行は主キー昇順、bigint は整数で書く、ファイル名 `{グループ}_{ハッシュ}.sqlite`、置き場 `{出力先}/{マニフェストハッシュ}/`、
  * マニフェストハッシュ = グループ名 => ファイルのハッシュ の JSON の sha256）に揃える。
  * tool は別アプリで api から呼べないため、必要な最小限だけをここに持つ。
  * `mst_xxx__l10n` があれば親と同じファイルに入れる。
@@ -98,10 +99,9 @@ class RecordingMasterExporter
             $columns = DB::connection('mst')->select("SHOW COLUMNS FROM `{$table}`");
             $sqlite->exec($this->buildCreateTableSql($table, $columns));
 
-            // 行の並びが変わるとハッシュが変わるので、並びを固定する（再実行で同じファイルになる）
-            $rows = DB::connection('mst')->table($table)->get()
-                ->sortBy(fn ($row) => json_encode(array_values((array) $row)))
-                ->values();
+            // 行は主キー昇順（文字列は BINARY、数値は数値順。tool の MasterDataExporter と同じ規則）に読む。
+            // 並びが固定なので、同じ mst なら同じファイル（同じ hash）になる
+            $rows = $this->orderByPrimaryKey(DB::connection('mst')->table($table), $columns)->get();
             if ($rows->isEmpty()) {
                 continue;
             }
@@ -110,8 +110,16 @@ class RecordingMasterExporter
             $columnSql = implode(', ', array_map(static fn (string $c): string => "`{$c}`", $names));
             $placeholders = implode(', ', array_fill(0, count($names), '?'));
             $statement = $sqlite->prepare("INSERT INTO `{$table}` ({$columnSql}) VALUES ({$placeholders})");
+            $integerColumns = $this->integerColumnFlags($columns, $names);
             foreach ($rows as $row) {
-                $statement->execute(array_values((array) $row));
+                $values = array_values((array) $row);
+                // bigint も整数で書く（文字列のまま束縛しない）
+                foreach ($values as $i => $value) {
+                    if ($integerColumns[$i] && $value !== null && is_numeric($value)) {
+                        $values[$i] = (int) $value;
+                    }
+                }
+                $statement->execute($values);
             }
         }
 
@@ -131,6 +139,54 @@ class RecordingMasterExporter
     }
 
     /**
+     * 行を主キー列（複合も）の昇順で読む。文字列列は BINARY で照合順序に依らない並びにし、
+     * 数値列は BINARY にせず数値順にする（"10" が "9" より前にならないように）。主キーが無い表は全列で並べる。
+     * tool/app/Services/MasterDataExporter.php の orderByPrimaryKey と同じ規則（変えるときは両方）。
+     *
+     * @param  array<int, object>  $columns  SHOW COLUMNS の結果
+     */
+    private function orderByPrimaryKey(Builder $query, array $columns): Builder
+    {
+        $columns = array_map(static fn (object $c): array => (array) $c, $columns);
+        $keys = array_values(array_filter($columns, static fn (array $c): bool => $c['Key'] === 'PRI'));
+
+        foreach ($keys !== [] ? $keys : $columns as $column) {
+            $name = str_replace('`', '``', (string) $column['Field']);
+            $query->orderByRaw($this->isIntegerType((string) $column['Type']) || $this->isDecimalType((string) $column['Type'])
+                ? "`{$name}` ASC"
+                : "BINARY `{$name}` ASC");
+        }
+
+        return $query;
+    }
+
+    /**
+     * @param  array<int, object>  $columns  SHOW COLUMNS の結果
+     * @param  list<string>  $names  行の列名（並び順）
+     * @return list<bool>
+     */
+    private function integerColumnFlags(array $columns, array $names): array
+    {
+        $types = [];
+        foreach ($columns as $column) {
+            $column = (array) $column;
+            $types[(string) $column['Field']] = (string) $column['Type'];
+        }
+
+        return array_map(fn (string $n): bool => isset($types[$n]) && $this->isIntegerType($types[$n]), $names);
+    }
+
+    private function isIntegerType(string $type): bool
+    {
+        return preg_match('/^(int|bigint|tinyint|smallint|mediumint)/', strtolower($type)) === 1;
+    }
+
+    private function isDecimalType(string $type): bool
+    {
+        return preg_match('/^(decimal|float|double|numeric)/', strtolower($type)) === 1;
+    }
+
+    /**
      * MasterDataExporter::buildCreateTableSql と同じ型の対応（整数 → INTEGER、小数 → REAL、他 → TEXT）。
      *
      * @param  array<int, object>  $columns
@@ -139,9 +195,13 @@ class RecordingMasterExporter
     {
         $columns = array_map(static fn (object $c): array => (array) $c, $columns);
         $primaryKeys = [];
+        $autoIncrement = null;
         foreach ($columns as $column) {
             if ($column['Key'] === 'PRI') {
                 $primaryKeys[] = $column['Field'];
+                if (str_contains((string) ($column['Extra'] ?? ''), 'auto_increment')) {
+                    $autoIncrement = $column['Field'];
+                }
             }
         }
 
@@ -153,6 +213,11 @@ class RecordingMasterExporter
                 ? 'INTEGER'
                 : (preg_match('/^(decimal|float|double|numeric)/', $type) === 1 ? 'REAL' : 'TEXT');
             $null = $column['Null'] === 'YES' ? '' : ' NOT NULL';
+            if (! $composite && $column['Key'] === 'PRI' && $autoIncrement === $column['Field']) {
+                $definitions[] = "`{$column['Field']}` INTEGER PRIMARY KEY AUTOINCREMENT";
+
+                continue;
+            }
             $primary = ! $composite && $column['Key'] === 'PRI' ? ' PRIMARY KEY' : '';
             $definitions[] = "`{$column['Field']}` {$sqliteType}{$null}{$primary}";
         }

@@ -8,6 +8,7 @@ use Database\Seeders\Recording\RecordingMasterExporter;
 use Database\Seeders\Recording\RecordingScenarioSeeder;
 use Illuminate\Support\Facades\DB;
 use Nexus\Core\Utilities\ClockUtility;
+use NexusVersion\Constants\DeployKeyConst;
 
 /**
  * RecordingDeploySeeder
@@ -39,17 +40,21 @@ use Nexus\Core\Utilities\ClockUtility;
  * （録画用の配信ファイルだけになる）。
  * 既存のデプロイの is_active は変えない。元に戻すには RecordingResetSeeder。
  * sys_deploy_master の deploy_date は 1900-01-01 で、運営ツールの連番（今日の deploy_date の件数）を増やさない。
- * 運営ツールと同じ畳み・登録の経路に乗せる作り直しは deploy_key 上乗せの S3-4 で行う（今は mst の現在の行を書き出すつなぎ）。
+ * シートを使える環境では、このシーダーを流さず運営ツールの経路（MASTER_DEPLOY_FIXED_KEY=7777777777 で
+ * 画面か `php artisan master:deploy`）で行う。流すと、mst の今の行を別の hash で登録しうる。
  *
  * 使うケース（client_design.md 7節）: 1〜15 すべての前提（version API を通す）。
  * ケース 14（未取得の版の取得）は、このデプロイが配信ファイルを持つので、クライアントを同梱の版のまま
  * 起動すれば撮れる。
  *
- * 冪等性: deploy_key 固定の updateOrInsert。何度流しても各 1 行（master_table は入れ替え）。mst の内容が
- * 変わっていればファイルは新しいハッシュで作り直し、古い録画用ディレクトリは消す。
+ * 冪等性: 登録は hash で引く。同じ hash の master があれば再利用して sys_deploy を有効に戻し、無ければ新しい行
+ * （新しい sys_deploy.id）。同じキーの古い sys_deploy は is_active=false にし、他のキーの行は触らない。
+ * 同じ mst なら何度流しても行は増えない。mst が変われば新しい hash の行が増え、古い行と配信ファイルは
+ * 無効なまま残る（RecordingResetSeeder が消す）。
+ * 本番: APP_ENV=production なら何もせず例外（予約帯。DeployKeyConst::RESERVED_FLOOR）。
  * 副作用: deploy_key が DEPLOY_KEY より大きい有効なデプロイがあれば何もしない。
  * 追加する行は description が `[REC]` で始まり、RecordingResetSeeder が行とファイルを消す。
- * キャッシュ: 最新デプロイは Redis に最大 1 時間キャッシュされるため、追加後に消して即時に反映する。
+ * キャッシュ: 最新デプロイ・deploy_key・sys_deploy.id は Redis に最大 1 時間キャッシュされるため、追加後に消して即時に反映する。
  *
  * @throws \RuntimeException 配信ファイルの出力先が無いとき
  */
@@ -59,12 +64,27 @@ class RecordingDeploySeeder extends RecordingScenarioSeeder
      * 予約帯（7000000000 以上。DeployKeyConst::FIXED_KEY_RECORDING）の固定キー。本物の 10 桁（例 2026112201）より
      * 大きいので、本物が有効でも録画用が最新になる（本番では予約帯が除かれる）。レベルデザイン用（8888888888）・
      * 開発用（9999999999）より小さい。最新の判定は deploy_key 降順 → id 降順（SysDeployRepository::
-     * selectLatestDownloadable）。列は bigInteger。登録の作り直しは S3-4 で行う。
+     * selectLatestDownloadable）。列は bigInteger。
      */
-    public const DEPLOY_KEY = 7777777777;
+    public const DEPLOY_KEY = DeployKeyConst::FIXED_KEY_RECORDING;
 
     /** 配信に必ず含めるテーブルグループ（親テーブル名）。home-player-info のスタミナ最大値と回復間隔 */
     public const REQUIRED_GROUPS = ['mst_player_level', 'mst_config'];
+
+    /**
+     * 本番（APP_ENV=production）では、予約帯の行を作らないよう、環境ガードより先に何もせず例外で止める。
+     * 値は DeployKeyConst::RESERVED_FLOOR（予約帯の下限）から読む。
+     *
+     * @throws \RuntimeException
+     */
+    protected function assertSafeEnvironment(): void
+    {
+        if (app()->environment('production') && self::DEPLOY_KEY >= DeployKeyConst::RESERVED_FLOOR) {
+            throw new \RuntimeException('録画用のデプロイは予約帯（'.DeployKeyConst::RESERVED_FLOOR.' 以上）の deploy_key を使うため、本番では実行できません');
+        }
+
+        parent::assertSafeEnvironment();
+    }
 
     protected function apply(): void
     {
@@ -82,69 +102,87 @@ class RecordingDeploySeeder extends RecordingScenarioSeeder
 
         $description = self::DEPLOY_DESCRIPTION_PREFIX.' 動画撮影用のデプロイ（mst の全テーブルを配信）';
         $connection = DB::connection('sys');
+        $changedDeployIds = [];
 
-        // 前回と内容が変わったら、古いファイルのディレクトリを消す
-        $previousHash = $connection->table('sys_deploy_master')->where('deploy_key', self::DEPLOY_KEY)->value('hash');
+        // 登録は hash で引く（deploy_key では引かない。同じ deploy_key の行が複数ありうる）
+        $connection->transaction(function () use ($connection, $exported, $description, $now, &$changedDeployIds): void {
+            $masterId = $connection->table('sys_deploy_master')->where('hash', $exported['hash'])->value('id');
+            if ($masterId === null) {
+                $masterId = $connection->table('sys_deploy_master')->insertGetId([
+                    'deploy_key' => self::DEPLOY_KEY,
+                    'hash' => $exported['hash'],
+                    'deploy_date' => '1900-01-01',
+                    'deploy_count' => 0,
+                    'status' => 'completed',
+                    'deployed_by' => 'recording',
+                    'deployed_at' => '1900-01-01 00:00:00',
+                    'description' => $description,
+                ]);
+            }
 
-        $connection->table('sys_deploy_master')->updateOrInsert(
-            ['deploy_key' => self::DEPLOY_KEY],
-            [
-                'hash' => $exported['hash'],
-                'deploy_date' => '1900-01-01',
-                'deploy_count' => 0,
-                'status' => 'completed',
-                'deployed_by' => 'recording',
-                'deployed_at' => '1900-01-01 00:00:00',
-                'description' => $description,
-                'updated_at' => $now,
-            ],
-        );
-        $connection->table('sys_deploy_asset')->updateOrInsert(
-            ['deploy_key' => self::DEPLOY_KEY],
-            [
-                'hash' => hash('sha256', 'recording_asset'),
-                'deploy_date' => '1900-01-01',
-                'deploy_count' => 0,
-                'status' => 'completed',
-                'deployed_by' => 'recording',
-                'deployed_at' => '1900-01-01 00:00:00',
-                'description' => $description,
-                'updated_at' => $now,
-            ],
-        );
+            // 配信ファイルの一覧は入れ替える（主キーは master_id + table_name。public_url も書き直す）
+            $connection->table('sys_deploy_master_table')->where('sys_deploy_master_id', $masterId)->delete();
+            foreach ($exported['tables'] as $tableName => $table) {
+                $connection->table('sys_deploy_master_table')->insert([
+                    'sys_deploy_master_id' => $masterId,
+                    'table_name' => $tableName,
+                    'hash' => $table['hash'],
+                    'file_size' => $table['file_size'],
+                    'file_name' => $table['file_name'],
+                    'public_url' => $table['public_url'],
+                ]);
+            }
 
-        $masterId = $connection->table('sys_deploy_master')->where('deploy_key', self::DEPLOY_KEY)->value('id');
-        $assetId = $connection->table('sys_deploy_asset')->where('deploy_key', self::DEPLOY_KEY)->value('id');
+            $assetHash = hash('sha256', 'recording_asset');
+            $assetId = $connection->table('sys_deploy_asset')->where('hash', $assetHash)->value('id');
+            if ($assetId === null) {
+                $assetId = $connection->table('sys_deploy_asset')->insertGetId([
+                    'deploy_key' => self::DEPLOY_KEY,
+                    'hash' => $assetHash,
+                    'deploy_date' => '1900-01-01',
+                    'deploy_count' => 0,
+                    'status' => 'completed',
+                    'deployed_by' => 'recording',
+                    'deployed_at' => '1900-01-01 00:00:00',
+                    'description' => $description,
+                ]);
+            }
 
-        // 配信ファイルの一覧は入れ替える（主キーは master_id + table_name）
-        $connection->table('sys_deploy_master_table')->where('sys_deploy_master_id', $masterId)->delete();
-        foreach ($exported['tables'] as $tableName => $table) {
-            $connection->table('sys_deploy_master_table')->insert([
-                'sys_deploy_master_id' => $masterId,
-                'table_name' => $tableName,
-                'hash' => $table['hash'],
-                'file_size' => $table['file_size'],
-                'file_name' => $table['file_name'],
-                'public_url' => $table['public_url'],
-            ]);
-        }
+            // 同じ master を指す録画用の sys_deploy があれば（id 最大の行を）有効に戻し、無ければ新しい行にする
+            $deployId = $connection->table('sys_deploy')
+                ->where('deploy_key', self::DEPLOY_KEY)
+                ->where('sys_deploy_master_id', $masterId)
+                ->max('id');
+            if ($deployId === null) {
+                $deployId = $connection->table('sys_deploy')->insertGetId([
+                    'deploy_key' => self::DEPLOY_KEY,
+                    'start_at' => '1900-01-01 00:00:00',
+                    'sys_deploy_master_id' => $masterId,
+                    'sys_deploy_asset_id' => $assetId,
+                    'is_active' => true,
+                ]);
+                $changedDeployIds[] = (int) $deployId;
+            } else {
+                $connection->table('sys_deploy')->where('id', $deployId)
+                    ->update(['is_active' => true, 'updated_at' => $now]);
+                $changedDeployIds[] = (int) $deployId;
+            }
 
-        $connection->table('sys_deploy')->updateOrInsert(
-            ['deploy_key' => self::DEPLOY_KEY],
-            [
-                'start_at' => '1900-01-01 00:00:00',
-                'sys_deploy_master_id' => $masterId,
-                'sys_deploy_asset_id' => $assetId,
-                'is_active' => true,
-                'updated_at' => $now,
-            ],
-        );
+            // 同じキーの他の行は無効にする。他のキーの行は触らない
+            $others = $connection->table('sys_deploy')
+                ->where('deploy_key', self::DEPLOY_KEY)
+                ->where('id', '!=', $deployId)
+                ->where('is_active', true);
+            foreach ($others->pluck('id') as $otherId) {
+                $changedDeployIds[] = (int) $otherId;
+            }
+            $others->update(['is_active' => false, 'updated_at' => $now]);
+        });
 
-        if (is_string($previousHash) && $previousHash !== $exported['hash']) {
-            (new RecordingMasterExporter(self::masterDataDir()))->deleteDeployment($previousHash);
-        }
+        // 古い版のディレクトリは消さない（無効にした sys_deploy が指していて、内容アドレスなので残しても害がない。
+        // 消すのは RecordingResetSeeder）
 
-        $this->clearApiCaches();
+        $this->clearApiCaches($changedDeployIds);
 
         $this->report('録画用のデプロイを用意しました（deploy_key='.self::DEPLOY_KEY.'、配信: '.count($exported['tables']).' ファイル、'.implode('・', self::REQUIRED_GROUPS).' を含む）。');
     }
