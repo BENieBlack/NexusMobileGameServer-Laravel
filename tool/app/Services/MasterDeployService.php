@@ -143,6 +143,7 @@ class MasterDeployService
      *   mst_database: string,
      *   mode: 'fixed'|'explicit',
      *   restored: bool,
+     *   source_kind?: 'build'|'import',
      *   start_at: string,
      *   start_at_explicit: bool,
      *   table_count: int,
@@ -196,6 +197,7 @@ class MasterDeployService
         $hash = (string) $input['hash'];
         $startAt = (string) $input['start_at'];
         $warningList = [];
+        $sourceKind = (string) ($input['source_kind'] ?? 'build');
 
         $existing = $sys->table('sys_deploy_master')->where('deploy_key', $deployKey)->where('hash', $hash)->first();
         if ($existing !== null) {
@@ -220,13 +222,13 @@ class MasterDeployService
                 'deploy_date' => $now->format('Y-m-d'),
                 'deploy_count' => $deployCount,
                 'status' => 'completed',
-                'deployed_by' => 'master_build',
+                'deployed_by' => $sourceKind === 'import' ? 'master_import' : 'master_build',
                 'deployed_at' => $nowStr,
-                'description' => "マスター build: {$input['table_count']}テーブル / {$input['file_size']}bytes",
+                'description' => "マスター {$sourceKind}: {$input['table_count']}テーブル / {$input['file_size']}bytes",
                 'mst_database' => $input['mst_database'],
                 'artifact_dir' => $input['artifact_dir'],
                 'schema_fingerprint' => $input['schema_fingerprint'],
-                'source_kind' => 'build',
+                'source_kind' => $sourceKind,
                 'created_at' => $nowStr,
                 'updated_at' => $nowStr,
             ]);
@@ -245,7 +247,7 @@ class MasterDeployService
         // asset（ダミー）は (deploy_key, hash) が UNIQUE。あればその id を使う（R1 でも必要）
         $assetId = $sys->table('sys_deploy_asset')->where('deploy_key', $deployKey)->where('hash', $hash)->value('id');
         if ($assetId === null) {
-            $assetId = $this->insertAsset($hash, $deployKey, $now, $input['mode'] === 'fixed' ? 0 : $deployKey % 100, 'master_build');
+            $assetId = $this->insertAsset($hash, $deployKey, $now, $input['mode'] === 'fixed' ? 0 : $deployKey % 100, $sourceKind === 'import' ? 'master_import' : 'master_build');
         }
 
         if ($input['start_at_explicit']) {

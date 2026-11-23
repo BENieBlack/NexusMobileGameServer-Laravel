@@ -123,7 +123,7 @@ class MasterArtifactBuilder
             'deploy_key' => $deployKey,
             'hash' => $hash,
             'schema_fingerprint' => $fingerprint,
-            'schema_sha256' => hash('sha256', $schemaJson),
+            'schema_sha256' => hash('sha256', $schemaJson."\n"), // write() が末尾に LF を足すので、書いたファイルの SHA-256 にそろえる（I1 が再計算する）
             'tables' => $dataTableList,
             'group_list' => $groupList,
             'built_env' => $origin['built_env'],

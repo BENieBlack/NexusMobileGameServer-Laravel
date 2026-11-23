@@ -79,6 +79,56 @@ class MasterArtifactStore
         $this->putFile($localDir.'/'.self::MANIFEST, $artifactDir.'/'.self::MANIFEST);
     }
 
+    /**
+     * 成果物のディレクトリの中に 1 ファイルを書く（QA 完了の印 final.json。manifest.json の後に別に書く）
+     *
+     * @throws RuntimeException 書き込みに失敗したとき
+     */
+    public function writeFile(string $artifactDir, string $name, string $contents): void
+    {
+        if ($this->disk()->put($artifactDir.'/'.$name, $contents) === false) {
+            throw new RuntimeException("成果物の書き込みに失敗しました: {$artifactDir}/{$name}");
+        }
+    }
+
+    /**
+     * `{artifactDir}/` の中身（`.tmp` を含まない）をローカルの作業ディレクトリへ写す（import の pull・復元の元の取得）。
+     * 完成の印（manifest.json）が無いディレクトリは写さずに false を返す
+     *
+     * @throws RuntimeException 読み取り・書き込みに失敗したとき
+     */
+    public function pull(string $artifactDir, string $localDir): bool
+    {
+        if (! $this->isComplete($artifactDir)) {
+            return false;
+        }
+        $localDir = rtrim($localDir, '/');
+        $prefix = $artifactDir.'/';
+        foreach ($this->disk()->allFiles($artifactDir) as $path) {
+            $relative = substr($path, strlen($prefix));
+            $target = $localDir.'/'.$relative;
+            $parent = dirname($target);
+            if (! is_dir($parent) && ! mkdir($parent, 0755, true) && ! is_dir($parent)) {
+                throw new RuntimeException("作業ディレクトリを作れません: {$parent}");
+            }
+            $in = $this->disk()->readStream($path);
+            $out = fopen($target, 'wb');
+            if (! is_resource($in) || $out === false) {
+                throw new RuntimeException("成果物を読めません: {$path}");
+            }
+            try {
+                if (stream_copy_to_stream($in, $out) === false) {
+                    throw new RuntimeException("成果物のコピーに失敗しました: {$path}");
+                }
+            } finally {
+                fclose($in);
+                fclose($out);
+            }
+        }
+
+        return true;
+    }
+
     private function putFile(string $localPath, string $remotePath): void
     {
         $stream = fopen($localPath, 'rb');
