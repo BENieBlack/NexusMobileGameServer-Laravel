@@ -24,6 +24,8 @@ abstract class _BaseMstRepository extends _BaseRepository implements _BaseMstRep
 {
     /**
      * キャッシュキーのプレフィックス
+     *
+     * キー形式（`mst:{テーブル名}:all`）は運営ツールの MasterCacheInvalidator（tool/app/Services）が同じ文字列で破棄する。変えるときは両方。
      */
     protected string $cachePrefix = 'mst';
 

@@ -24,6 +24,8 @@ abstract class _BaseSysRepository extends _BaseRepository implements _BaseSysRep
 {
     /**
      * キャッシュキーのプレフィックス
+     *
+     * キー形式（`sys:sys_deploy:...`）は運営ツールの MasterCacheInvalidator（tool/app/Services）が同じ文字列で破棄する。変えるときは両方。
      */
     protected string $cachePrefix = 'sys';
 
