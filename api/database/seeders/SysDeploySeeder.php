@@ -23,6 +23,10 @@ class SysDeploySeeder extends Seeder
         DB::connection('sys')->table('sys_sharding')->truncate();
 
         // マスターデータデプロイ履歴を作成
+        // 開発の基底 DB（mst 接続）を 1 つの版として登録する（設計: db.md 3.1）。
+        // 3 つの版が同じ DB を指すと mst_database の UNIQUE に触れるので、最新の版（最後）だけが基底 DB を指し、
+        // 古い 2 つは掃除済み（mst_dropped_at あり）の版として、DB 名だけ別の名前（{基底 DB}-{deploy_key}-{hash 先頭 16 文字}）を持つ。
+        $baseDatabase = (string) config('database.connections.mst.database');
         $masterDeploys = [
             [
                 'deploy_key' => 2026010101,
@@ -35,6 +39,11 @@ class SysDeploySeeder extends Seeder
                 'description' => 'Initial master data deployment',
                 'created_at' => '2026-01-01 00:00:00',
                 'updated_at' => '2026-01-01 00:00:00',
+                'mst_database' => $baseDatabase.'-2026010101-'.substr(hash('sha256', 'master_v1.0.0'), 0, 16),
+                'artifact_dir' => '2026010101_'.substr(hash('sha256', 'master_v1.0.0'), 0, 16),
+                'schema_fingerprint' => hash('sha256', 'schema_v1'),
+                'source_kind' => 'build',
+                'mst_dropped_at' => '2026-01-01 00:00:00',
             ],
             [
                 'deploy_key' => 2026020101,
@@ -47,6 +56,11 @@ class SysDeploySeeder extends Seeder
                 'description' => 'Added new units and equipment',
                 'created_at' => '2026-02-01 12:00:00',
                 'updated_at' => '2026-02-01 12:00:00',
+                'mst_database' => $baseDatabase.'-2026020101-'.substr(hash('sha256', 'master_v1.1.0'), 0, 16),
+                'artifact_dir' => '2026020101_'.substr(hash('sha256', 'master_v1.1.0'), 0, 16),
+                'schema_fingerprint' => hash('sha256', 'schema_v1'),
+                'source_kind' => 'build',
+                'mst_dropped_at' => '2026-02-01 12:00:00',
             ],
             [
                 'deploy_key' => 2026022201,
@@ -59,6 +73,11 @@ class SysDeploySeeder extends Seeder
                 'description' => 'Current master data version',
                 'created_at' => '2026-02-22 00:00:00',
                 'updated_at' => '2026-02-22 00:00:00',
+                'mst_database' => $baseDatabase,
+                'artifact_dir' => '2026022201_'.substr(hash('sha256', 'master_v1.2.0'), 0, 16),
+                'schema_fingerprint' => hash('sha256', 'schema_v1'),
+                'source_kind' => 'build',
+                'mst_dropped_at' => null,
             ],
         ];
 

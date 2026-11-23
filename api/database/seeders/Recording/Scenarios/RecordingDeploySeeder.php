@@ -32,12 +32,18 @@ use NexusVersion\Constants\DeployKeyConst;
  * （行があるときは触らない。これらは truncate するため。mst_player_level は string の id を持ち、
  * MstPlayerLevelSeeder が MstPlayerLevel::makeId で作る）。
  *
- * deploy_key は予約キー（DEPLOY_KEY = 7777777777）。version API は有効なデプロイのうち deploy_key が最大のものを
- * 最新とする。運営ツール経由の本物のデプロイは YYYYMMDD×100+連番（例 2026112201）で DEPLOY_KEY より小さいので、
- * 本物があっても録画用が最新になる。開発用 9999999999・レベルデザイン用 8888888888 の有効なデプロイがある
- * 環境だけ、それらが最新になるので何も追加しない。
+ * deploy_key は予約キー（DEPLOY_KEY = 7777777777）。version API は start_at が現在以前の有効なデプロイのうち
+ * start_at が最も新しいものを最新とする（同値は deploy_key 降順 → id 降順。deploy_key の大小では決まらない。
+ * 設計: db.md 3.3・11.2）。録画用は start_at = 現在で登録するので、本物があっても録画用が最新になる。
+ * start_at が未来の行（予約済みの版）がある環境では、その版が start_at に達すると最新が入れ替わり録画用が
+ * 黙って無効になるので、何も追加しない（理由を表示する）。
  * 追加した場合は、録画用が最新になり、その間は本物のデプロイの配信ファイルが master.tables に出ない
  * （録画用の配信ファイルだけになる）。
+ *
+ * 暫定（db.md 11.2。R19 の細部が決まるまで）: sys_deploy_master の mst_database は版の DB 名の形
+ * （{基底 DB}-7777777777-{hash 先頭 16 文字}）の名前だけで、実体の DB は作らない（基底 DB 名にすると
+ * 基本シードの行と UNIQUE が衝突する）。artifact_dir も名前だけで、配信ファイルの実際のディレクトリは
+ * 従来どおりマニフェストハッシュ（RecordingMasterExporter）。
  * 既存のデプロイの is_active は変えない。元に戻すには RecordingResetSeeder。
  * sys_deploy_master の deploy_date は 1900-01-01 で、運営ツールの連番（今日の deploy_date の件数）を増やさない。
  * シートを使える環境では、このシーダーを流さず運営ツールの経路（MASTER_DEPLOY_FIXED_KEY=7777777777 で
@@ -47,12 +53,12 @@ use NexusVersion\Constants\DeployKeyConst;
  * ケース 14（未取得の版の取得）は、このデプロイが配信ファイルを持つので、クライアントを同梱の版のまま
  * 起動すれば撮れる。
  *
- * 冪等性: 登録は hash で引く。同じ hash の master があれば再利用して sys_deploy を有効に戻し、無ければ新しい行
+ * 冪等性: 登録は (deploy_key, hash) で引く。同じ hash の master があれば再利用して sys_deploy を有効に戻し、無ければ新しい行
  * （新しい sys_deploy.id）。同じキーの古い sys_deploy は is_active=false にし、他のキーの行は触らない。
  * 同じ mst なら何度流しても行は増えない。mst が変われば新しい hash の行が増え、古い行と配信ファイルは
  * 無効なまま残る（RecordingResetSeeder が消す）。
  * 本番: APP_ENV=production なら何もせず例外（予約帯。DeployKeyConst::RESERVED_FLOOR）。
- * 副作用: deploy_key が DEPLOY_KEY より大きい有効なデプロイがあれば何もしない。
+ * 副作用: start_at が未来の sys_deploy があれば何もしない。
  * 追加する行は description が `[REC]` で始まり、RecordingResetSeeder が行とファイルを消す。
  * キャッシュ: 最新デプロイ・deploy_key・sys_deploy.id は Redis に最大 1 時間キャッシュされるため、追加後に消して即時に反映する。
  *
@@ -61,10 +67,9 @@ use NexusVersion\Constants\DeployKeyConst;
 class RecordingDeploySeeder extends RecordingScenarioSeeder
 {
     /**
-     * 予約帯（7000000000 以上。DeployKeyConst::FIXED_KEY_RECORDING）の固定キー。本物の 10 桁（例 2026112201）より
-     * 大きいので、本物が有効でも録画用が最新になる（本番では予約帯が除かれる）。レベルデザイン用（8888888888）・
-     * 開発用（9999999999）より小さい。最新の判定は deploy_key 降順 → id 降順（SysDeployRepository::
-     * selectLatestDownloadable）。列は bigInteger。
+     * 予約帯（7000000000 以上。DeployKeyConst::FIXED_KEY_RECORDING）の固定キー。最新の判定は start_at 降順 →
+     * deploy_key 降順 → id 降順（SysDeployRepository::selectLatestDownloadable）なので、録画用は start_at = 現在で
+     * 最新になる（本番では予約帯が除かれる）。列は bigInteger。
      */
     public const DEPLOY_KEY = DeployKeyConst::FIXED_KEY_RECORDING;
 
@@ -91,7 +96,7 @@ class RecordingDeploySeeder extends RecordingScenarioSeeder
         $now = ClockUtility::nowToString();
 
         if ($this->hasDeployThatShouldNotBeOverridden($now)) {
-            $this->report('deploy_key が録画用より大きい有効なデプロイ（開発用・レベルデザイン用）が既にあるため、デプロイは追加しません。');
+            $this->report('start_at が未来のデプロイ（予約済みの版）があるため、録画用のデプロイは追加しません（予約の版が start_at に達すると録画用が無効になるため）。');
 
             return;
         }
@@ -106,7 +111,9 @@ class RecordingDeploySeeder extends RecordingScenarioSeeder
 
         // 登録は hash で引く（deploy_key では引かない。同じ deploy_key の行が複数ありうる）
         $connection->transaction(function () use ($connection, $exported, $description, $now, &$changedDeployIds): void {
-            $masterId = $connection->table('sys_deploy_master')->where('hash', $exported['hash'])->value('id');
+            $hash16 = substr($exported['hash'], 0, 16);
+            $masterId = $connection->table('sys_deploy_master')
+                ->where('deploy_key', self::DEPLOY_KEY)->where('hash', $exported['hash'])->value('id');
             if ($masterId === null) {
                 $masterId = $connection->table('sys_deploy_master')->insertGetId([
                     'deploy_key' => self::DEPLOY_KEY,
@@ -117,6 +124,10 @@ class RecordingDeploySeeder extends RecordingScenarioSeeder
                     'deployed_by' => 'recording',
                     'deployed_at' => '1900-01-01 00:00:00',
                     'description' => $description,
+                    'mst_database' => config('database.connections.mst.database').'-'.self::DEPLOY_KEY.'-'.$hash16,
+                    'artifact_dir' => self::DEPLOY_KEY.'_'.$hash16,
+                    'schema_fingerprint' => hash('sha256', 'schema_v1'),
+                    'source_kind' => 'build',
                 ]);
             }
 
@@ -134,7 +145,8 @@ class RecordingDeploySeeder extends RecordingScenarioSeeder
             }
 
             $assetHash = hash('sha256', 'recording_asset');
-            $assetId = $connection->table('sys_deploy_asset')->where('hash', $assetHash)->value('id');
+            $assetId = $connection->table('sys_deploy_asset')
+                ->where('deploy_key', self::DEPLOY_KEY)->where('hash', $assetHash)->value('id');
             if ($assetId === null) {
                 $assetId = $connection->table('sys_deploy_asset')->insertGetId([
                     'deploy_key' => self::DEPLOY_KEY,
@@ -156,7 +168,7 @@ class RecordingDeploySeeder extends RecordingScenarioSeeder
             if ($deployId === null) {
                 $deployId = $connection->table('sys_deploy')->insertGetId([
                     'deploy_key' => self::DEPLOY_KEY,
-                    'start_at' => '1900-01-01 00:00:00',
+                    'start_at' => $now,
                     'sys_deploy_master_id' => $masterId,
                     'sys_deploy_asset_id' => $assetId,
                     'is_active' => true,
@@ -164,7 +176,7 @@ class RecordingDeploySeeder extends RecordingScenarioSeeder
                 $changedDeployIds[] = (int) $deployId;
             } else {
                 $connection->table('sys_deploy')->where('id', $deployId)
-                    ->update(['is_active' => true, 'updated_at' => $now]);
+                    ->update(['is_active' => true, 'start_at' => $now, 'updated_at' => $now]);
                 $changedDeployIds[] = (int) $deployId;
             }
 
@@ -230,17 +242,14 @@ class RecordingDeploySeeder extends RecordingScenarioSeeder
     }
 
     /**
-     * 録画用を足さない理由になる、deploy_key が録画用より大きい有効かつ開始済みのデプロイがあるか
-     * （開発用 9999999999・レベルデザイン用 8888888888。最新になれないので足しても無駄）。
-     * 配信ファイルを持つ本物の 10 桁のデプロイや基本シードの sys_deploy は、録画用が上に重なるので数えない。
-     * 設計: Nexus docs/design/master-distribution/db.md 11.2
+     * 録画用を足さない理由になる、start_at が未来の sys_deploy（予約済みの版）があるか。
+     * 予約の版が start_at に達すると最新が入れ替わり、録画用が黙って無効になるため。
+     * 設計: docs/design/master-distribution/db.md 11.2
      */
     private function hasDeployThatShouldNotBeOverridden(string $now): bool
     {
         return DB::connection('sys')->table('sys_deploy')
-            ->where('is_active', true)
-            ->where('start_at', '<=', $now)
-            ->where('deploy_key', '>', self::DEPLOY_KEY)
+            ->where('start_at', '>', $now)
             ->exists();
     }
 }

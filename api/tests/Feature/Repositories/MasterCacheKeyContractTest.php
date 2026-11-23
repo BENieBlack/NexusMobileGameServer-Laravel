@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\Test;
 use Redis;
 use Tests\RefreshMultipleDatabases;
+use Tests\Support\SysDeployMasterColumns;
 use Tests\TestCase;
 
 /**
@@ -88,6 +89,7 @@ class MasterCacheKeyContractTest extends TestCase
         $masterId = DB::connection('sys')->table('sys_deploy_master')->insertGetId([
             'deploy_key' => self::DEPLOY_KEY,
             'hash' => hash('sha256', 'cache-contract-master'),
+            ...SysDeployMasterColumns::for(self::DEPLOY_KEY, 'cache-contract-master'),
             'deploy_date' => '2026-01-01',
             'deploy_count' => 1,
             'status' => 'completed',

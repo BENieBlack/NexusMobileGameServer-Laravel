@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redis;
 use Tests\RefreshMultipleDatabases;
+use Tests\Support\SysDeployMasterColumns;
 use Tests\TestCase;
 
 class VersionServiceTest extends TestCase
@@ -78,6 +79,7 @@ class VersionServiceTest extends TestCase
 
         // Arrange
         $master = SysDeployMaster::create([
+            ...SysDeployMasterColumns::for(2026010101, 'master_hash_001'),
             'deploy_key' => 2026010101,
             'hash' => 'master_hash_001',
             'deploy_date' => now()->subDay()->toDateString(),
@@ -123,6 +125,7 @@ class VersionServiceTest extends TestCase
 
         // Arrange - Create old deploy
         $oldMaster = SysDeployMaster::create([
+            ...SysDeployMasterColumns::for(2026010101, 'master_hash_001'),
             'hash' => 'master_hash_001',
             'deploy_key' => 2026010101,
             'deploy_date' => now()->subDays(2)->toDateString(),
@@ -148,6 +151,7 @@ class VersionServiceTest extends TestCase
 
         // Arrange - Create new deploy
         $newMaster = SysDeployMaster::create([
+            ...SysDeployMasterColumns::for(2026010201, 'master_hash_002'),
             'deploy_key' => 2026010201,
             'hash' => 'master_hash_002',
             'deploy_date' => now()->subDay()->toDateString(),
@@ -208,6 +212,7 @@ class VersionServiceTest extends TestCase
 
         // Arrange - Create deploy
         $master = SysDeployMaster::create([
+            ...SysDeployMasterColumns::for(2026010101, 'master_hash_001'),
             'deploy_key' => 2026010101,
             'hash' => 'master_hash_001',
             'deploy_date' => now()->subDay()->toDateString(),

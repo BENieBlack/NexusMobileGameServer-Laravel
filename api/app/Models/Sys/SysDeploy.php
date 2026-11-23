@@ -213,8 +213,9 @@ class SysDeploy extends _BaseSys
     /**
      * 「最新」の並びと本番ガードを付ける（スコープ）
      *
-     * deploy_key 降順 → id 降順。本番（APP_ENV=production）は予約帯を除く。
-     * SysDeployRepository と同じ定義（設計: Nexus db.md 3.3）
+     * start_at 降順 → deploy_key 降順 → id 降順（deploy_key の大小は同じ start_at のときだけ効く）。
+     * 本番（APP_ENV=production）は予約帯を除く。is_active と start_at <= 現在は呼び出し側で付ける
+     * （downloadable スコープ）。SysDeployRepository と同じ定義（設計: db.md 3.3）
      *
      * @param  Builder<self>  $query
      * @return Builder<self>
@@ -225,7 +226,8 @@ class SysDeploy extends _BaseSys
             $query->where('deploy_key', '<', DeployKeyConst::RESERVED_FLOOR);
         }
 
-        return $query->orderBy('deploy_key', 'desc')
+        return $query->orderBy('start_at', 'desc')
+            ->orderBy('deploy_key', 'desc')
             ->orderBy('id', 'desc');
     }
 

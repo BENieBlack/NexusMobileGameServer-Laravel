@@ -23,8 +23,9 @@ class SysDeployRepository extends _BaseSysRepository
     /**
      * 「最新」を引くクエリを組み立てる
      *
-     * deploy_key 降順 → id 降順。本番（APP_ENV=production）は予約帯を除く。
-     * 設計: Nexus docs/design/master-distribution/db.md 3.3
+     * is_active かつ start_at <= 現在のうち、start_at 降順 → deploy_key 降順 → id 降順の先頭。
+     * 本番（APP_ENV=production）は予約帯を除く。
+     * 設計: docs/design/master-distribution/db.md 3.3
      *
      * @return Builder<SysDeploy>
      */
