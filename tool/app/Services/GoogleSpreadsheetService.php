@@ -112,6 +112,11 @@ class GoogleSpreadsheetService
     private const ACTIVE_VALUES = ['1', 'true', 'TRUE', 'True'];
 
     /**
+     * 読み取りの途中だけで使う内部キー（出力の rows には残さない）。`__deleted` はシートの列なので含めない
+     */
+    private const INTERNAL_KEYS = ['_parent_id', '_row_no', '_parent_deploy_key', '_parent_deleted'];
+
+    /**
      * シートの全データを取得する
      *
      * スプレッドシートのヘッダ形式（2行ヘッダ）:
@@ -147,8 +152,32 @@ class GoogleSpreadsheetService
         // ライブラリの宣言は array だが、空シートでは null が返る
         /** @var array<int, array<int, string>>|null $rawValues */
         $rawValues = $response->getValues();
-        $values = $rawValues ?? [];
 
+        return self::parseSheetValues($rawValues ?? [], $sheetTitle);
+    }
+
+    /**
+     * シートの値（行の配列）をテーブルごとのデータに変換する（Google API を呼ばない純粋関数）
+     *
+     * 戻り値の形は getSheetData と同じ。加えて各テーブルに次を持つ（既存の呼び出し元は読まない）:
+     * - row_nos: rows と同じ順の、シート上の行番号（1 始まり。ヘッダ 2 行を含む。l10n の展開後も元の行番号）
+     * - entries: 行の正規化（db.md 6.2）。{@see self::normalizeEntries()}
+     * - has_deploy_key_column: テーブルの列グループ（l10n は親の列も可）に deploy_key 列があるか
+     *
+     * @param  array<int, array<int, mixed>>  $values
+     * @return array<string, array{
+     *   table: string,
+     *   headers: array<int, string>,
+     *   rows: array<int, array<string, string>>,
+     *   raw_count: int,
+     *   skipped_count: int,
+     *   row_nos: array<int, int>,
+     *   entries: array<int, array<string, mixed>>,
+     *   has_deploy_key_column: bool
+     * }>
+     */
+    public static function parseSheetValues(array $values, string $sheetTitle): array
+    {
         if (count($values) < 2) {
             return [];
         }
@@ -200,6 +229,8 @@ class GoogleSpreadsheetService
         // l10nテーブル行に親IDを自動注入するために使用
         // 例: mst_unit__l10n → mst_unit の id 列インデックス
         $parentIdIndexMap = []; // ['mst_unit__l10n' => 3] のような形
+        // 親テーブルの deploy_key・__deleted の列インデックス（l10n の行へ注入する。db.md 6.2）
+        $parentMetaIndexMap = []; // ['mst_unit__l10n' => ['deploy_key' => 4, '__deleted' => 5]]
         foreach ($tables as $tableName => $columns) {
             if (! str_ends_with($tableName, '__l10n')) {
                 continue;
@@ -209,9 +240,13 @@ class GoogleSpreadsheetService
                 continue;
             }
             foreach ($tables[$parentTableName] as $col) {
-                if ($col['column'] === 'id') {
+                // 同名の列が複数あるときは、id・deploy_key・__deleted のどれも最初の列を採る
+                if ($col['column'] === 'id' && ! isset($parentIdIndexMap[$tableName])) {
                     $parentIdIndexMap[$tableName] = $col['index'];
-                    break;
+                }
+                if (in_array($col['column'], ['deploy_key', '__deleted'], true)
+                    && ! isset($parentMetaIndexMap[$tableName][$col['column']])) {
+                    $parentMetaIndexMap[$tableName][$col['column']] = $col['index'];
                 }
             }
         }
@@ -220,9 +255,10 @@ class GoogleSpreadsheetService
         $result = [];
         foreach ($tables as $tableName => $columns) {
             $rows = [];
+            $rowNos = [];
             $skippedCount = 0;
 
-            foreach ($dataRows as $row) {
+            foreach ($dataRows as $dataIndex => $row) {
                 // is_active チェック（1列目）: 空・0・false は取り込み対象外
                 $isActive = strval($row[self::IS_ACTIVE_COLUMN_INDEX] ?? '');
                 if (! in_array($isActive, self::ACTIVE_VALUES, true)) {
@@ -245,6 +281,16 @@ class GoogleSpreadsheetService
                 if (empty(array_filter($assoc, fn ($v) => $v !== ''))) {
                     continue;
                 }
+
+                // 内部キー: シート上の行番号（ヘッダ 2 行の次が 3 行目）と、l10n 行へ渡す親の値
+                $assoc['_row_no'] = (string) ($dataIndex + 3);
+                if (str_ends_with($tableName, '__l10n')) {
+                    foreach (['deploy_key' => '_parent_deploy_key', '__deleted' => '_parent_deleted'] as $metaColumn => $internalKey) {
+                        if (isset($parentMetaIndexMap[$tableName][$metaColumn])) {
+                            $assoc[$internalKey] = strval($row[$parentMetaIndexMap[$tableName][$metaColumn]] ?? '');
+                        }
+                    }
+                }
                 $rows[] = $assoc;
             }
 
@@ -252,11 +298,23 @@ class GoogleSpreadsheetService
             // 親テーブル名を導出（例: mst_unit__l10n → mst_unit）
             if (str_ends_with($tableName, '__l10n')) {
                 $parentTableName = substr($tableName, 0, -strlen('__l10n'));
-                $rows = $this->expandL10nRows($rows, $parentTableName);
-                $headers = $this->buildL10nHeaders($columns, $parentTableName);
+                $rows = self::expandL10nRows($rows, $parentTableName);
+                $headers = self::buildL10nHeaders($columns, $parentTableName);
             } else {
                 $headers = array_column($columns, 'column');
             }
+
+            // 内部キー（_row_no など）を正規化の entries と行番号へ移し、rows からは外す（既存の形を保つ）
+            $isL10n = str_ends_with($tableName, '__l10n');
+            $entries = self::normalizeEntries($rows, $tableName, $isL10n ? substr($tableName, 0, -strlen('__l10n')) : null);
+            $rowNos = array_column($entries, 'row_no');
+            $rows = array_map(
+                fn (array $r) => array_filter($r, fn ($k) => ! in_array($k, self::INTERNAL_KEYS, true), ARRAY_FILTER_USE_KEY),
+                $rows,
+            );
+
+            $hasDeployKey = in_array('deploy_key', array_column($columns, 'column'), true)
+                || isset($parentMetaIndexMap[$tableName]['deploy_key']);
 
             $result[$tableName] = [
                 'table' => $tableName,
@@ -264,10 +322,185 @@ class GoogleSpreadsheetService
                 'rows' => $rows,
                 'raw_count' => count($dataRows),
                 'skipped_count' => $skippedCount,
+                'row_nos' => $rowNos,
+                'entries' => $entries,
+                'has_deploy_key_column' => $hasDeployKey,
             ];
         }
 
         return $result;
+    }
+
+    /**
+     * 行の正規化（db.md 6.2）。値は検証せず、シートに書かれたままの文字列で持つ（検証は MasterSheetValidator）
+     *
+     * - 親テーブル: id は `id` 列。deploy_key・deleted は自分の列（無ければ null）
+     * - __l10n: id は注入済みの親 id、language は `language`。deploy_key は l10n 自身の列、
+     *   無ければ同じシート行の親テーブルの列（仮置き）。deleted は常に親の `__deleted`
+     * - columns: 上記以外の列（deploy_key・__deleted・id・language・内部キーを除く）
+     *
+     * @param  array<int, array<string, string>>  $rows  内部キー（_row_no 等）付きの行
+     * @return array<int, array{row_no: int, id: string, language: string|null, deploy_key: string|null, deleted: string|null, columns: array<string, string>}>
+     */
+    private static function normalizeEntries(array $rows, string $tableName, ?string $parentTableName): array
+    {
+        $entries = [];
+        foreach ($rows as $row) {
+            if ($parentTableName !== null) {
+                $id = $row[$parentTableName.'_id'] ?? '';
+                $language = $row['language'] ?? '';
+                $deployKey = array_key_exists('deploy_key', $row) ? $row['deploy_key'] : ($row['_parent_deploy_key'] ?? null);
+                $deleted = $row['_parent_deleted'] ?? null;
+                $exclude = [$parentTableName.'_id', 'language'];
+            } else {
+                $id = $row['id'] ?? '';
+                $language = null;
+                $deployKey = $row['deploy_key'] ?? null;
+                $deleted = $row['__deleted'] ?? null;
+                $exclude = ['id'];
+            }
+            $exclude = [...$exclude, 'deploy_key', '__deleted'];
+
+            $columns = [];
+            foreach ($row as $key => $value) {
+                if (in_array($key, self::INTERNAL_KEYS, true) || in_array($key, $exclude, true)) {
+                    continue;
+                }
+                $columns[$key] = $value;
+            }
+
+            $entries[] = [
+                'row_no' => (int) ($row['_row_no'] ?? 0),
+                'id' => $id,
+                'language' => $language,
+                'deploy_key' => $deployKey,
+                'deleted' => $deleted,
+                'columns' => $columns,
+            ];
+        }
+
+        return $entries;
+    }
+
+    /**
+     * ディレクトリ内の全スプレッドシートの、タイトルが `mst_` で始まる全タブを読む（db.md 6.1）
+     *
+     * Google API の部分（一覧・値の取得）だけをここに置き、整形は {@see self::assembleMasterTabs()} に任せる。
+     *
+     * @param  array<string, array<int, string>>|null  $knownColumns  mst DB の表ごとの列名（無ければ列の絞り込みをしない）
+     * @return array<string, mixed> assembleMasterTabs の戻り値
+     */
+    public function readAllMasterTabs(?array $knownColumns = null): array
+    {
+        $tabs = [];
+        $ignored = [];
+        foreach ($this->listSpreadsheets() as $spreadsheet) {
+            foreach ($this->listSheets($spreadsheet['id']) as $sheet) {
+                $label = $spreadsheet['name'].'/'.$sheet['title'];
+                if (! self::isMasterTabTitle($sheet['title'])) {
+                    // 値を取る前に外す（API 呼び出しを省く）。assembleMasterTabs も同じ判定を持つ
+                    $ignored[] = ['sheet' => $label, 'reason' => 'not_mst_tab'];
+
+                    continue;
+                }
+
+                /** @var ValueRange $response */
+                $response = $this->withRetry(fn () => $this->sheetsService->spreadsheets_values->get(
+                    $spreadsheet['id'],
+                    $sheet['title'],
+                ));
+                /** @var array<int, array<int, string>>|null $rawValues */
+                $rawValues = $response->getValues();
+                $tabs[] = ['sheet' => $label, 'title' => $sheet['title'], 'values' => $rawValues ?? []];
+            }
+        }
+
+        $result = self::assembleMasterTabs($tabs, $knownColumns);
+        $result['ignored_tab_list'] = [...$ignored, ...$result['ignored_tab_list']];
+
+        return $result;
+    }
+
+    /**
+     * 読む対象のタブか（タイトルが `mst_` で始まる。db.md 6.1）
+     */
+    public static function isMasterTabTitle(string $title): bool
+    {
+        return str_starts_with($title, 'mst_');
+    }
+
+    /**
+     * 読んだタブの値を、テーブルごとの正規化済みの行にまとめる（Google API を呼ばない純粋関数）
+     *
+     * 同じテーブルの行は全タブを合わせる（順序に意味は無い）。タブの不備は例外にせず error_list に集める
+     * （全体拒否の判断は呼び出し側。db.md 6.3）。
+     *
+     * @param  array<int, array{sheet: string, title?: string, values: array<int, array<int, mixed>>}>  $tabs  sheet は「{スプレッドシート名}/{タブ名}」。title（タブ名）があり `mst_` で始まらなければ not_mst_tab として読み飛ばす
+     * @param  array<string, array<int, string>>|null  $knownColumns
+     * @return array{
+     *   tables: array<string, array{entries: array<int, array<string, mixed>>, has_deploy_key_column: bool, ignored_inactive_rows: int}>,
+     *   ignored_tab_list: array<int, array{sheet: string, reason: string}>,
+     *   ignored_column_list: array<int, array{table: string, column: string}>,
+     *   error_list: array<int, array{code: string, sheet: string, message: string}>
+     * }
+     */
+    public static function assembleMasterTabs(array $tabs, ?array $knownColumns = null): array
+    {
+        $tables = [];
+        $ignoredTabs = [];
+        $ignoredColumns = [];
+        $errors = [];
+
+        foreach ($tabs as $tab) {
+            if (isset($tab['title']) && ! self::isMasterTabTitle($tab['title'])) {
+                $ignoredTabs[] = ['sheet' => $tab['sheet'], 'reason' => 'not_mst_tab'];
+
+                continue;
+            }
+            $values = $tab['values'];
+            if (count($values) < 2) {
+                $ignoredTabs[] = ['sheet' => $tab['sheet'], 'reason' => 'empty_tab'];
+
+                continue;
+            }
+            $isActiveHeader = strval($values[1][self::IS_ACTIVE_COLUMN_INDEX] ?? '');
+            if ($isActiveHeader !== 'is_active') {
+                $errors[] = [
+                    'code' => 'is_active_column_missing',
+                    'sheet' => $tab['sheet'],
+                    'message' => "2 行目の A 列が is_active ではありません（現在の値: \"{$isActiveHeader}\"）",
+                ];
+
+                continue;
+            }
+
+            foreach (self::parseSheetValues($values, $tab['sheet']) as $tableName => $data) {
+                $tables[$tableName] ??= ['entries' => [], 'has_deploy_key_column' => false, 'ignored_inactive_rows' => 0];
+                $tables[$tableName]['has_deploy_key_column'] = $tables[$tableName]['has_deploy_key_column'] || $data['has_deploy_key_column'];
+                $tables[$tableName]['ignored_inactive_rows'] += $data['skipped_count'];
+
+                $known = $knownColumns[$tableName] ?? null;
+                foreach ($data['entries'] as $entry) {
+                    $entry['sheet'] = $tab['sheet'];
+                    if ($known !== null) {
+                        foreach (array_keys($entry['columns']) as $column) {
+                            if (! in_array($column, $known, true)) {
+                                $ignoredColumns[$tableName.'.'.$column] = ['table' => $tableName, 'column' => $column];
+                                unset($entry['columns'][$column]);
+                            }
+                        }
+                    }
+                    $tables[$tableName]['entries'][] = $entry;
+                }
+            }
+        }
+
+        return [
+            'tables' => $tables,
+            'ignored_tab_list' => $ignoredTabs,
+            'ignored_column_list' => array_values($ignoredColumns),
+            'error_list' => $errors,
+        ];
     }
 
     /**
@@ -286,7 +519,7 @@ class GoogleSpreadsheetService
      * @param  string  $parentTableName  親テーブル名（例: mst_unit）
      * @return array<int, array<string, string>>
      */
-    private function expandL10nRows(array $rows, string $parentTableName): array
+    private static function expandL10nRows(array $rows, string $parentTableName): array
     {
         $expanded = [];
         $parentIdKey = $parentTableName.'_id'; // 例: mst_unit_id
@@ -299,10 +532,16 @@ class GoogleSpreadsheetService
             $languages = [];
             $langColumns = []; // ['ja' => ['name' => '炎の剣士', ...], ...]
             $commonFields = []; // 言語に依存しないフィールド（deploy_key 等）
+            $internal = []; // 内部キー（_row_no 等）。共通列には入れず、各言語の行へそのまま渡す
 
             foreach ($row as $key => $value) {
                 if ($key === '_parent_id') {
                     continue; // 内部キーはスキップ
+                }
+                if (in_array($key, self::INTERNAL_KEYS, true)) {
+                    $internal[$key] = $value;
+
+                    continue;
                 }
                 if (str_contains($key, '.')) {
                     [$colName, $lang] = explode('.', $key, 2);
@@ -325,7 +564,7 @@ class GoogleSpreadsheetService
                 if (empty(array_filter($langValues, fn ($v) => $v !== ''))) {
                     continue;
                 }
-                $expanded[] = $langRow;
+                $expanded[] = $langRow + $internal;
             }
         }
 
@@ -342,7 +581,7 @@ class GoogleSpreadsheetService
      * @param  string  $parentTableName
      * @return array<int, string>
      */
-    private function buildL10nHeaders(array $columns, string $parentTableName): array
+    private static function buildL10nHeaders(array $columns, string $parentTableName): array
     {
         $parentIdKey = $parentTableName.'_id'; // 例: mst_unit_id
         $headers = [];
