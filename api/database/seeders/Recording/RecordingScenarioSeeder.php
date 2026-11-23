@@ -84,8 +84,10 @@ abstract class RecordingScenarioSeeder extends Seeder
      * 撮影のタイミングに間に合わない。メンテナンス・デプロイを変えるシナリオが末尾で呼ぶ。
      * version 側のキーは Repository の buildCacheKey（`sys:{テーブル名}:{キー}`）と同じ形で、
      * Repository の clearCache は protected でシーダーから呼べないため、キーを直接消す。
+     *
+     * @param  list<int>  $deployIds  有効・無効が変わった（または消した）sys_deploy.id。`sys:sys_deploy:id:{id}` も消す
      */
-    protected function clearApiCaches(): void
+    protected function clearApiCaches(array $deployIds = []): void
     {
         app(MaintenanceService::class)->clearCache();
 
@@ -93,6 +95,9 @@ abstract class RecordingScenarioSeeder extends Seeder
         $redis->forget('sys:sys_maintenance:current_maintenance');
         $redis->forget('sys:sys_deploy:latest_downloadable');
         $redis->forget('sys:sys_deploy:deploy_key:'.RecordingDeploySeeder::DEPLOY_KEY);
+        foreach ($deployIds as $deployId) {
+            $redis->forget('sys:sys_deploy:id:'.$deployId);
+        }
     }
 
     /**

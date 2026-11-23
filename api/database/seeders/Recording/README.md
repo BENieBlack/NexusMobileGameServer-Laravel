@@ -41,7 +41,7 @@ Docker を使わない直接の形は `php artisan db:seed --class='Database\See
 
 | クラス（`Scenarios/`） | 内容 | 使うケース | 既定に入るか |
 | --- | --- | --- | --- |
-| `RecordingDeploySeeder` | 録画用のデプロイ（master・asset・deploy を各 1 行）と、mst の全テーブルの配信ファイル（`mst_player_level`・`mst_config` を含む。`sys_deploy_master_table` にグループごと 1 行）。`deploy_key` は予約キー `7777777777`（運営ツールの本物の 10 桁〔例 `2026112201`〕より大きく、開発用 `9999999999`・レベルデザイン用 `8888888888` より小さい）で、既存のデプロイの `is_active` は変えない。`deploy_key` が録画用より大きい有効なデプロイが既にあれば何もしない。詳細は下の「配信ファイル」 | 全ケースの前提、14 | 入る |
+| `RecordingDeploySeeder` | 録画用のデプロイ（master・asset・deploy。同じ mst なら各 1 行のまま増えない）と、mst の全テーブルの配信ファイル（`mst_player_level`・`mst_config` を含む。`sys_deploy_master_table` にグループごと 1 行）。`deploy_key` は予約キー `7777777777`（運営ツールの本物の 10 桁〔例 `2026112201`〕より大きく、開発用 `9999999999`・レベルデザイン用 `8888888888` より小さい）で、既存のデプロイの `is_active` は変えない。`deploy_key` が録画用より大きい有効なデプロイが既にあれば何もしない。詳細は下の「配信ファイル」 | 全ケースの前提、14 | 入る |
 | `RecordingAgreementSeeder` | 規約 3 件: 公開済みの必須（`rec-required`）・公開済みの任意（`rec-optional`）・公開日が未来の必須（`rec-future`） | 3, 4, 12, 13, 15 | 入る |
 | `RecordingAgreementMultiSeeder` | 必須規約を 2 件足す（`rec-required-2`・`rec-required-3`。公開済み）。`rec-required` と合わせて必須が 3 件になる。`make seed-recording` の後に流す | 規約が複数件 | 入らない |
 | `RecordingLoginBonusSeeder` | 通常ログインボーナス `daily_login`（7 日サイクル）を、有効・期間なしで保証する。他の行は消さない | 1, 2, 3, 5, 13 | 入る |
@@ -78,14 +78,17 @@ API を止める（メンテナンス）、画面を変える（ログインボ�
 home-player-info の動画（スタミナ最大値と回復間隔のマスター差分）を撮るため、録画用デプロイは `mst_player_level` と `mst_config` を含む配信ファイルを持つ。
 
 - なぜ全テーブルか: クライアントは更新 DB を「配信されたテーブルだけ」で組み、必須テーブル（`mst_gacha`・`mst_unit`・`mst_equipment`）が欠けると切り替えに失敗する。配信されないテーブルは同梱マスターで補われず空になる。そのため 2 テーブルだけの配信にはせず、運営ツールの書き出しと同じく `mst_%` の全親テーブルを配信する。
-- 作り方: `RecordingMasterExporter` が mst DB の**現在の行**を SQLite に書き出し（運営ツールの `MasterDataExporter` と同じ命名・マニフェストハッシュの規則）、`sys_deploy_master_table` にテーブルグループごとに登録する。mst の両テーブルが空のときだけ `MstPlayerLevelSeeder` / `MstConfigSeeder` を呼ぶ（truncate するため、行があれば触らない）。`mst_player_level` は string の `id`（`MstPlayerLevel::makeId`）を主キーに持ち、配信の SQLite にも `id` が入る。
+- 作り方: `RecordingMasterExporter` が mst DB の**現在の行**を SQLite に書き出し（運営ツールの `MasterDataExporter` と同じ規則: 行は主キー昇順〔文字列は BINARY〕、bigint は整数で書く、命名・マニフェストハッシュも同じ。同じ mst なら同じ hash になる）、`sys_deploy_master_table` にテーブルグループごとに登録する。mst の両テーブルが空のときだけ `MstPlayerLevelSeeder` / `MstConfigSeeder` を呼ぶ（truncate するため、行があれば触らない）。`mst_player_level` は string の `id`（`MstPlayerLevel::makeId`）を主キーに持ち、配信の SQLite にも `id` が入る。
 - 置き場: `config('recording.masterdata_dir')`（env `RECORDING_MASTERDATA_DIR`、既定 `/var/www/tool-masterdata`）。`docker-compose.yml` で `./tool/public/masterdata` を api-php にマウントしてあり、クライアントは tool-web（:8091）から取得する。マウントが無い（compose を更新していない）とシーダーは失敗するので、`make up` で api-php を作り直す。
-- 最新になる条件: version API は有効なデプロイのうち `deploy_key` が最大のものを最新にする。運営ツール経由の本物のデプロイは 10 桁（`YYYYMMDD×100+連番`。例 `2026112201`）で、録画用の `7777777777` より小さい。**そのため本物の有効なデプロイがあっても、録画用が最新になる**（本番では予約帯が除かれる）。開発用（`9999999999`）・レベルデザイン用（`8888888888`）の有効なデプロイがある環境では、それらが最新なので `RecordingDeploySeeder` は何も追加しない（`seed-recording-reset` でも触らない）。既存のデプロイの `is_active` は変えない。録画用の `sys_deploy_master` は `deploy_date` が `1900-01-01` なので、運営ツールの連番を増やさない。
+- 最新になる条件: version API は有効なデプロイのうち `deploy_key` が最大のものを最新にする。運営ツール経由の本物のデプロイは 10 桁（`YYYYMMDD×100+連番`。例 `2026112201`）で、録画用の `7777777777` より小さい。**そのため本物の有効なデプロイがあっても、録画用が最新になる**（本番では予約帯が除かれる）。開発用（`9999999999`）・レベルデザイン用（`8888888888`）の有効なデプロイがある環境では、それらが最新なので `RecordingDeploySeeder` は何も追加しない（`seed-recording-reset` でも触らない）。既存の他のキーのデプロイの `is_active` は変えない。録画用の `sys_deploy_master` は `deploy_date` が `1900-01-01` なので、運営ツールの連番を増やさない。
 - **注意**: 録画用が最新の間は、本物のデプロイの配信ファイルは `master.tables` に出ない（録画用の配信ファイルだけになる）。元に戻すには `make seed-recording-reset`（行・一覧・SQLite のディレクトリを消す。本物のデプロイとそのファイルは残る）。
 - 初回の準備: マウント元の `tool/public/masterdata` が無いまま `make up` すると、Docker が root 所有で作ってしまい、運営ツールが書けなくなる。先に `mkdir -p tool/public/masterdata` してから `make up`（api-php の作り直し）をする。
 - 何もしない条件: 有効（`start_at` 到来済み）なデプロイのうち、`deploy_key` が `7777777777` より大きいもの（`8888888888`・`9999999999`）が既にあるときだけ。それ以外（基本シードの `sys_deploy`、配信ファイルを持つ運営ツールの本物の 10 桁など）は無視して追加する。
-- mst の値を変えて撮り直すときは、`mst_player_level` / `mst_config` を書き換えてから `RecordingDeploySeeder` を流し直す（内容が変わればハッシュが変わり、古いディレクトリは消える）。
-- 暫定の方式: 運営ツールと同じ畳み・登録の経路に乗せる作り直しは、master-distribution の S3-4 で行う。この方式（mst の現在の行をそのまま書き出す）は、それまでのつなぎ。
+- 登録のしかた: `hash`（マニフェストハッシュ）で引く。同じ `hash` の `sys_deploy_master` があれば再利用して録画用の `sys_deploy` を有効に戻し、無ければ新しい行（新しい `sys_deploy.id`）として入れる。同じキー（`7777777777`）の古い `sys_deploy` は `is_active = false` にし、他のキーの行は触らない。
+- mst の値を変えて撮り直すときは、`mst_player_level` / `mst_config` を書き換えてから `RecordingDeploySeeder` を流し直す（内容が変わればハッシュが変わり、新しい行で入る。古い行と配信ファイルは無効なまま残り、`seed-recording-reset` が消す。元の内容に戻して流せば古い行が有効に戻る）。
+- 本番ガード: `APP_ENV=production` では何もせず例外で止まる（予約帯。`DeployKeyConst::RESERVED_FLOOR` 以上のキーを使うため）。
+- キャッシュ: 流した後に `sys_deploy` の最新・`deploy_key`・`id`（有効・無効が変わった行）のキャッシュを消す。
+- **シートを使える環境（運営ツールでシートの認証情報がある環境）では、このシーダーを流さない**。運営ツールの経路で行う: `MASTER_DEPLOY_FIXED_KEY=7777777777` を設定し、画面か `php artisan master:deploy` でデプロイする（畳みで開発・LD の行が外れる）。流すと、mst の今の行を別の `hash` で `7777777777` として登録しうる。このシーダーは、シートを使えない環境（認証情報が無いローカル・CI）向け。
 
 ## ログインボーナスのカレンダー（`RecordingLoginBonusProgressSeeder`）
 

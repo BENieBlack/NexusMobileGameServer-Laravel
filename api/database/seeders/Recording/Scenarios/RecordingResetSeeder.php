@@ -42,7 +42,7 @@ class RecordingResetSeeder extends RecordingScenarioSeeder
             ->where('title', 'like', self::MAINTENANCE_TITLE_PREFIX.'%')
             ->delete();
 
-        $this->deleteMarkedDeploys();
+        $deletedDeployIds = $this->deleteMarkedDeploys();
 
         // 無効化していなくても害は無い（有効のままにするだけ）。行が無ければ何も起きない
         _BaseMst::allowWrites(function (): void {
@@ -51,7 +51,7 @@ class RecordingResetSeeder extends RecordingScenarioSeeder
                 ->update(['is_active' => true, 'updated_at' => ClockUtility::nowToString()]);
         });
 
-        $this->clearApiCaches();
+        $this->clearApiCaches($deletedDeployIds);
 
         $this->report('動画用のデータを削除し、daily_login を有効に戻しました。');
     }
@@ -60,8 +60,10 @@ class RecordingResetSeeder extends RecordingScenarioSeeder
      * マーカー付きの master / asset と、それを指す sys_deploy・配信ファイルの一覧・SQLite を削除する。
      * sys_deploy は外部キーが無いので、先に ID を控えてから消す。
      * 旧版の録画用デプロイ（deploy_key が違う）も description のマーカーで拾う。
+     *
+     * @return list<int> 消した sys_deploy.id（キャッシュの破棄用）
      */
-    private function deleteMarkedDeploys(): void
+    private function deleteMarkedDeploys(): array
     {
         $sys = DB::connection('sys');
         $like = self::DEPLOY_DESCRIPTION_PREFIX.'%';
@@ -82,12 +84,15 @@ class RecordingResetSeeder extends RecordingScenarioSeeder
             $exporter->deleteDeployment((string) $hash);
         }
 
-        $sys->table('sys_deploy')
+        $deployQuery = $sys->table('sys_deploy')
             ->whereIn('deploy_key', $recordingKeys)
-            ->where(fn ($q) => $q->whereIn('sys_deploy_master_id', $masterIds)->orWhereIn('sys_deploy_asset_id', $assetIds))
-            ->delete();
+            ->where(fn ($q) => $q->whereIn('sys_deploy_master_id', $masterIds)->orWhereIn('sys_deploy_asset_id', $assetIds));
+        $deletedDeployIds = array_map('intval', (clone $deployQuery)->pluck('id')->all());
+        $deployQuery->delete();
         $sys->table('sys_deploy_master_table')->whereIn('sys_deploy_master_id', $masterIds)->delete();
         $sys->table('sys_deploy_master')->whereIn('id', $masterIds)->delete();
         $sys->table('sys_deploy_asset')->whereIn('id', $assetIds)->delete();
+
+        return $deletedDeployIds;
     }
 }
