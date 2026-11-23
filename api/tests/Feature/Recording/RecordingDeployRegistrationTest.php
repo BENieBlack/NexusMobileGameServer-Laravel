@@ -71,10 +71,12 @@ class RecordingDeployRegistrationTest extends RecordingTestCase
             'sys_deploy_master_id' => 1, 'sys_deploy_asset_id' => 1, 'is_active' => true,
         ]);
 
+        DB::connection('mst')->table('mst_config')->where('id', 'test')->update(['updated_at' => '2026-01-01 00:00:00']);
         $this->runSeeder(RecordingDeploySeeder::class);
         $oldId = (int) $sys->table('sys_deploy')->where('deploy_key', self::KEY)->value('id');
 
-        DB::connection('mst')->table('mst_config')->where('id', 'test')->update(['value' => '2']);
+        // updated_at は ON UPDATE CURRENT_TIMESTAMP なので固定する（秒をまたぐと hash が変わり、元の内容に戻せなくなる）
+        DB::connection('mst')->table('mst_config')->where('id', 'test')->update(['value' => '2', 'updated_at' => '2026-01-01 00:00:00']);
         $this->runSeeder(RecordingDeploySeeder::class);
 
         $rows = $sys->table('sys_deploy')->where('deploy_key', self::KEY)->orderBy('id')->get();
@@ -86,7 +88,7 @@ class RecordingDeployRegistrationTest extends RecordingTestCase
         $this->assertSame(1, (int) $sys->table('sys_deploy')->where('deploy_key', 2026112201)->value('is_active'));
 
         // 元の内容に戻すと、古い行を有効に戻す（新しい行を作らない）
-        DB::connection('mst')->table('mst_config')->where('id', 'test')->update(['value' => '1']);
+        DB::connection('mst')->table('mst_config')->where('id', 'test')->update(['value' => '1', 'updated_at' => '2026-01-01 00:00:00']);
         $this->runSeeder(RecordingDeploySeeder::class);
         $rows = $sys->table('sys_deploy')->where('deploy_key', self::KEY)->orderBy('id')->get();
         $this->assertCount(2, $rows);
