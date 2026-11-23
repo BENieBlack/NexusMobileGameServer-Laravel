@@ -10,7 +10,7 @@ API（api/）の接続は `api/config/database.php`、Tool（tool/）の接続�
 | 接続名 | コンテナ | DB名の末尾 | 置くテーブル | 使う側 |
 |---|---|---|---|---|
 | `sys` | db-system | `-system` | `sys_*`（全プレイヤー共通） | API |
-| `mst` | db-master | `-master` | `mst_*`（マスターデータ、読み取り専用） | API |
+| `mst` | db-master | `-master`（基底 DB）。API は版ごとの DB `-master-{deploy_key}-{HASH16}` へ切り替えて使う（7 節） | `mst_*`（マスターデータ、読み取り専用） | API・Tool |
 | `trx1`..`trxN` | db-shard1..N | `-shard`（全シャード共通） | `trx_*` と `log_*` | API |
 | `trx` | db-shard1 | `-shard` | `trx1` の別名（テスト互換用） | API |
 | `admin` | db-admin | `-admin` | `adm_*`（管理者アカウント・権限） | Tool |
@@ -71,6 +71,7 @@ API（api/）の接続は `api/config/database.php`、Tool（tool/）の接続�
 今は**共有の検証環境を作るまで**の期間で、既存のマイグレーションファイルを直接書き換えてよい（列の追加・型の変更・テーブルの追加も既存の `create_{機能}_tables.php` に書く）。
 
 - 書き換えた変更は通常の `make migrate` では反映されない。手元では `make migrate-fresh` → `make seed` で作り直す。テストDBは指紋の変化で自動的に作り直される
+- 版ごとの mst DB（7 節）は `make migrate-fresh` で作り直されない（基底 DB だけが対象）。mst のマイグレーションを書き換えたら、基底 DB を作り直したうえで、tool の `master:build` などで版の DB を作り直す。凍結後に既存の版の DB へスキーマ変更を流す `mst:migrate-versions` は未実装
 - **共有の検証環境（ステージングなど、作り直せないデータを持つ環境）を作る時点で凍結する**。凍結後は既存のファイルを書き換えず、変更は新しいファイル（`2026_MM_DD_HHMMSS_add_xxx_to_yyy.php` など）で足す。消せないデータがある環境では `migrate-fresh` が使えないため
 - 凍結したら、この節と CLAUDE.md を「既存のマイグレーションは書き換えない」に改め、凍結した日付をここに書く
 
@@ -78,8 +79,8 @@ API（api/）の接続は `api/config/database.php`、Tool（tool/）の接続�
 
 | コマンド | 内容 |
 |---|---|
-| `make migrate` | sys と mst を `--database` 指定で、trx を `php artisan trx:migrate`、log を `php artisan pitr:migrate`（どちらも全シャード） |
-| `make migrate-fresh` | sys/mst を `migrate:fresh`、trx を `trx:migrate --fresh`、log は通常の `pitr:migrate` |
+| `make migrate` | sys と mst（基底 DB だけ。版の DB は対象外）を `--database` 指定で、trx を `php artisan trx:migrate`、log を `php artisan pitr:migrate`（どちらも全シャード） |
+| `make migrate-fresh` | sys/mst（基底 DB だけ）を `migrate:fresh`、trx を `trx:migrate --fresh`、log は通常の `pitr:migrate` |
 | `trx:rollback` / `pitr:rollback` | 全シャードでロールバック（`--step`） |
 
 - **引数なしの `php artisan migrate` は使わない**。既定接続が sqlite なので、意図しないDBに流れる。
@@ -107,7 +108,7 @@ API（api/）の接続は `api/config/database.php`、Tool（tool/）の接続�
 - **mst の `id` に AUTO_INCREMENT は禁止**（`$table->id()` / `increments` / `bigIncrements` / `->autoIncrement()` など）。採番が環境や投入順でズレ、他のマスタの参照カラム（`mst_xxx_id`）との JOIN が効かなくなるため。
   - 検査: `api/tests/Architecture/MstNoAutoIncrementIdTest.php`（`packages/*/database/migrations/mst/` と `api/database/migrations/mst/` を走査。Laravel 標準の cache / jobs 系は対象外）。
 - **string の `id` 必須の検査**: `api/tests/Architecture/MstRequiresStringIdTest.php`（走査の範囲は上と同じ。`__l10n` と Laravel 標準は対象外）。両方の検査とも、違反の一覧 `PENDING_VIOLATIONS` は空で、新しい違反を足してはならない（定数と、一覧に解消済みの表が残っていると失敗する検知のテストは、運用を保つために残してある）。新規の mst テーブルは最初から string の `id` を持たせる。
-  - 主キーに `id` を足すときの影響: Model（`$primaryKey` の配列と `CompositePrimaryKeyTrait` を外す）、Repository（`queryOrMemory` の鍵）、シーダー、運営のシートのインポート（シート名 = テーブル名で truncate + INSERT なので、シートへ `id` 列を足す）、マスター配信の SQLite、クライアントの `master_data`（列が増える）を合わせて直す。
+  - 主キーに `id` を足すときの影響: Model（`$primaryKey` の配列と `CompositePrimaryKeyTrait` を外す）、Repository（`queryOrMemory` の鍵）、シーダー、運営のシートの build（シート名 = テーブル名で、全行を版の DB に入れるので、シートへ `id` 列を足す）、マスター配信の SQLite、クライアントの `master_data`（列が増える）を合わせて直す。
   - `mst_reward_track_content` は Model が無く（`RewardTrackMasterRepositoryAdapter` が `DB::table` で読む）、tool の `MasterImportService::ID_RULES` が id 規則の唯一の定義。Model を作るときは他の `*_content` と同じ `makeId` を足し、ID_RULES と相互参照のコメントを付ける。
   - `mst_login_bonus_content`・`mst_vip_login_bonus_content` は `day` を含む 4 列（`{親ID}:{day}:{content_type}:{content_mst_id}`）、`mst_vip_level_reward` は `{vip_level}:{content_type}:{content_mst_id}`。`makeId` は各 Model に置き、tool の `MasterImportService::ID_RULES` と同じ規則。外部キー（`foreign()`）は外した。`mst_vip_login_bonus_content` は `(mst_vip_login_bonus_id, day, sort_desc)` の同値を取り込みで拒否する（同値の並びがサーバー〔MySQL の文字列順〕とクライアント〔SQLite〕で食い違わないようにするため）。
   - billing 系: `mst_billing_platform_product` は `{billing_platform}:{platform_product_id}`（`billing_platform` が先頭固定なので `platform_product_id` の `:` は許す）、`mst_in_app_purchase_content` は `{mst_in_app_purchase_id}:{content_type}:{content_mst_id}`、`mst_in_app_purchase_effect` は `{mst_in_app_purchase_id}:{effect_type}`。`mst_in_app_purchase` は自然キーが無く、人が決める安定した値（`iap_diamond_100`・`iap_starter_pack`・`iap_monthly_pass` など。`iap_` + 種別 + 内容の snake_case。一度付けたら変えない。trx の購入履歴が指す）。これを指す列（`mst_in_app_purchase_content`・`_effect`・`__l10n`・`mst_reward_track_line` と、trx の `trx_in_app_purchase`・`_effect`・`trx_reward_track_line`、`app_store_product_id`・`google_play_product_id`）はすべて string。
@@ -169,13 +170,15 @@ API（api/）の接続は `api/config/database.php`、Tool（tool/）の接続�
 
 ## 7. deploy_key とマスター
 
-- mst の全テーブル（`__l10n` を含む）に `deploy_key` を持たせる: `$table->integer('deploy_key')->default(202601010)->comment('デプロイキー')` と `$table->index('deploy_key')`。
-- deploy_key の値は `YYYYMMDD * 100 + その日の連番`（10桁、例 `2026090401`）。生成は `tool/app/Services/MasterDeployService.php::generateDeployKey()`。
+- mst の全テーブル（`__l10n` を含む）に `deploy_key` を持たせる: `$table->bigInteger('deploy_key')->default(2026010101)->comment('デプロイキー')` と `$table->index('deploy_key')`。
+- deploy_key の値は `YYYYMMDD * 100 + その日の連番`（10桁、例 `2026090401`）。畳み（行の上書き）の上限 T とラベルで、「最新」の選択には使わない。予約キー（`7777777777` 録画・`8888888888` LD・`9999999999` 開発）は予約帯（7000000000 以上）。採番はしない（T は環境設定で決める。`tool/config/master_deploy.php`）。
 - 配信管理テーブルは sys にある（`packages/nexus-version/database/migrations/sys/2026_01_01_000001_create_version_tables.php`）:
-  - `sys_deploy_master` / `sys_deploy_master_table`: マスターデータのバージョン（ハッシュ）とテーブルごとのファイル
-  - `sys_deploy_asset`: アセットのバージョン
-  - `sys_deploy`: クライアントに配る組み合わせ（`deploy_key`、`start_at`、`is_active`）
-- マスターの投入は Tool（スプレッドシート → `MasterImportService` → mst DB → `MasterDataExporter` で SQLite 出力 → `MasterDeployService` で sys_deploy 登録）。開発環境では `api/database/seeders/Mst*Seeder.php` で投入する。
+  - `sys_deploy_master` / `sys_deploy_master_table`: 成果物（`(deploy_key, hash)` が UNIQUE）、その版の mst DB 名（`mst_database`）、成果物のディレクトリ名（`artifact_dir`）、テーブルごとのファイル
+  - `sys_deploy_asset`: アセットのバージョン（実体の無いダミー）
+  - `sys_deploy`: 切り替えの行（`deploy_key`、`start_at`（UTC。いまの版になる日時）、`is_active`（緊急停止用））。**最新は `start_at` が最も新しい（現在以前の）行**
+- mst DB は 2 種類ある。**基底 DB**（`{APP_NAME}-{APP_ENV}-master`）はスキーマの雛形と開発用シーダーの行き先、**版の DB**（`{APP_NAME}-{APP_ENV}-master-{deploy_key}-{HASH16}`。HASH16 は成果物の hash の先頭 16 文字）はデプロイごとに tool が作る、作成後に書き換えない中身。API はリクエストの頭で「いまの版」を決め、`mst` 接続の database を `mst_database` に切り替える。
+- 版の DB は `make migrate` / `make migrate-fresh` の対象外（基底 DB だけ）。凍結後に版の DB へ流す `mst:migrate-versions` は未実装。
+- マスターの投入は Tool（スプレッドシート → build → 作業用 DB → 成果物と版の DB → sys に登録。上流の成果物を取り込む import もある。`MasterBuildRunner`・`MasterImportRunner`）。開発環境では `api/database/seeders/Mst*Seeder.php` が基底 DB に投入し、`SysDeploySeeder` が基底 DB を 1 つの版として登録する。設計は `docs/design/master-distribution/db.md`、操作は [tool.md](tool.md)。
 - API 側のバージョンチェックとマスター配信の流れは [api.md](api.md)。
 
 ## 8. ログテーブル

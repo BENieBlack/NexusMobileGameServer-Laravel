@@ -106,6 +106,14 @@ docker compose exec -T api-php php artisan test --testsuite=Architecture
 - スキーマはテストが `ensureAltMstMigrated()`（`RefreshMultipleDatabases`）で作る。DB が無いと、作り方を添えてそのテストだけ失敗する（他のテストは巻き込まない）。
 - HTTP を通すテストが sys に版を入れるときは、`mst_database` に実在する DB（基底 DB の名前）を入れる。実体の無い名前だと、ミドルウェアがそこへ切り替えて mst を読めない。時計は基本シードの版の `start_at`（2026-02-22）より後にする。
 
+## 版ごとの mst DB の掃除とマイグレーション
+
+マスターデータは、デプロイのたびに版ごとの mst DB（`{APP_NAME}-{APP_ENV}-master-{deploy_key}-{HASH16}`）が増える。操作の入口は [tool.md](./tool.md) の `master:*`。
+
+- 古い版の DB の掃除は手動で、tool-php で `php artisan master:cleanup`（付けないと対象の一覧だけ。`--execute` で実行）。保持する直近の版の数などは `tool/config/master_deploy.php`
+- `make migrate` / `make migrate-fresh` は基底 DB だけが対象で、版の DB には流れない。`make migrate-fresh` のあとは `make seed` が基底 DB を 1 つの版として sys に登録するので、tool を使わなくても API は動く
+- 凍結後に既存の版の DB へスキーマ変更を流す `mst:migrate-versions`（api 側）は未実装
+
 ## カバレッジ
 
 - ドライバは pcov。`docker/api-php/Dockerfile` で `pcov.directory=/var/www` を設定済みで、オプションは要らない。Xdebug は入れていない

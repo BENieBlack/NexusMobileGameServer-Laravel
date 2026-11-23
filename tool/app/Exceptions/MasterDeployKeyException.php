@@ -5,7 +5,7 @@ namespace App\Exceptions;
 use RuntimeException;
 
 /**
- * deploy_key の固定キー・予約帯の検査、採番、sys への登録に失敗したときの例外
+ * deploy_key の固定キー・予約帯の検査、sys への登録に失敗したときの例外
  *
  * 設計: docs/design/master-distribution/api.md 4 節（エラー）
  */

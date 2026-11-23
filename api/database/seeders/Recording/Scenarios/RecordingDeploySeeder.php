@@ -69,7 +69,7 @@ class RecordingDeploySeeder extends RecordingScenarioSeeder
 {
     /**
      * 予約帯（7000000000 以上。DeployKeyConst::FIXED_KEY_RECORDING）の固定キー。最新の判定は start_at 降順 →
-     * deploy_key 降順 → id 降順（SysDeployRepository::selectLatestDownloadable）なので、録画用は start_at = 現在で
+     * deploy_key 降順 → id 降順（SysDeployRepository::selectLatestDownloadableAt）なので、録画用は start_at = 現在で
      * 最新になる（本番では予約帯が除かれる）。列は bigInteger。
      */
     public const DEPLOY_KEY = DeployKeyConst::FIXED_KEY_RECORDING;

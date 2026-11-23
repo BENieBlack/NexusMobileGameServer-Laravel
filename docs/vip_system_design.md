@@ -78,7 +78,7 @@ VIPレベル定義とレベルアップに必要なポイント。
 
 ```sql
 CREATE TABLE mst_vip_level (
-    deploy_key INT DEFAULT 202601010 COMMENT 'デプロイキー',
+    deploy_key BIGINT DEFAULT 2026010101 COMMENT 'デプロイキー',
     id VARCHAR(50) PRIMARY KEY COMMENT 'VIPレベルID (vip_0, vip_1, ...)',
     level SMALLINT NOT NULL UNIQUE COMMENT 'VIPレベル (0-15)',
     required_point INT UNSIGNED NOT NULL COMMENT 'このレベルに到達するために必要な累積VIPポイント',
@@ -165,7 +165,7 @@ VIPレベルアップ時に付与される報酬を定義。既存のコンテ�
 
 ```sql
 CREATE TABLE mst_vip_level_reward (
-    deploy_key INT DEFAULT 202601010 COMMENT 'デプロイキー',
+    deploy_key BIGINT DEFAULT 2026010101 COMMENT 'デプロイキー',
     vip_level SMALLINT NOT NULL COMMENT 'VIPレベル',
     content_type ENUM('item', 'unit', 'equipment', 'diamond', 'wallet', 'stamina') NOT NULL COMMENT 'コンテンツタイプ',
     content_mst_id VARCHAR(255) NOT NULL COMMENT 'コンテンツID (mst_item_id等、diamond/stamina/walletはダミー値)',
