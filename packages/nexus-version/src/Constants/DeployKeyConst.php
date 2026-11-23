@@ -8,9 +8,9 @@ namespace NexusVersion\Constants;
  * deploy_key（10 桁の YYYYMMDDNN）に関する定数
  * 設計: Nexus docs/design/master-distribution/db.md 3.3
  *
- * 運営ツール側の config/master_deploy.php の reserved_floor と同じ値を置く予定。
- * そのファイルはまだ存在しない（S3-9 で作る）。tool は packages を使わないため 2 か所に持ち、
- * 作るときに互いのコメントで相互参照する。変えるときは両方を直す。
+ * 運営ツール側の tool/config/master_deploy.php の reserved_floor・allowed_fixed_keys と同じ値を置く。
+ * tool は packages を使わないため 2 か所に持ち、互いのコメントで相互参照する。変えるときは両方を直す
+ * （一致は tool/tests/Unit/MasterDeployKeyConstParityTest が確かめる。REAL_KEY_MAX は tool には持たない）。
  */
 final class DeployKeyConst
 {
