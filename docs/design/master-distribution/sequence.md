@@ -219,7 +219,7 @@ sequenceDiagram
     R->>SYS: RELEASE_LOCK
 ```
 
-- **予約済みの未来の行があるときは拒否**する理由: 未来の行の `start_at` に到達すると、その行が最新になって**巻き戻しが黙って無効になる**ため。`is_active` を見るかの決定（未決。R39）には依存しない（db.md 3.6）。
+- **予約済みの未来の行があるときは拒否**する理由: 未来の行の `start_at` に到達すると、その行が最新になって**巻き戻しが黙って無効になる**ため。`is_active` には依存しない（R39 は「見る」で決定。緊急停止専用で、巻き戻し・取り消しは `is_active` を使わない。db.md 3.3・3.6）。
 - **「予約済み」から除く行**（db.md 3.6。**仮置き**）: `start_at <= 現在 + 60 秒` **かつ戻し先と同じ master を指す行**は数えない。巻き戻しの `start_at` は現在より約 1 秒先になりうるので、直後のやり直しが `rollback_blocked_by_scheduled` にならないため。**戻し先と別の版を指す近い予約は除かない**（除くと、その行が到達して巻き戻しが黙って無効になる）。
 - **巻き戻しの二重登録は防がれない**（db.md 3.6。**許容**）: 巻き戻しを 2 回続けると、2 回目の `start_at` は「直前の最新行（1 回目の行を含みうる）+ 1 秒」になり、同じ master・同じ `start_at` ではないので `already_registered`（二重登録の防止）に当たらず、**行が 1 つ増えるだけ**で害は無い（どちらも同じ版を指す。最新は後の行）。`already_registered` が効くのは、`start_at` を明示した build・import の再実行など、同じ `start_at` になる場合（4.4）。
 - **戻し先の DB が使えない**ときの判定は、**戻し先の成果物の `schema_fingerprint` が自環境の基底 DB のスキーマ版と一致するか**（I3 と同じ。db.md 3.6 の R1）。一致すれば復元、一致しなければ `schema_mismatch` で拒否。復元の失敗・登録の失敗では、この run が作った DB だけを `DROP` する（4.4）。
@@ -265,8 +265,55 @@ sequenceDiagram
 - **直前の取り消しを拒否する**（`schedule_cancel_too_soon`。db.md 3.6）: API は切り替え予定の一覧を TTL（60 秒）でキャッシュし、取り消し後の `forget` は失敗しうる（tool と api が同じ Redis かは**未確認**）。**防がれる再現シナリオ**: 登録済みの未来の行を `start_at` の 10 秒前に取り消す → API のキャッシュに取り消した行が残る（`forget` の失敗、または届かない）→ `start_at` に到達して、**取り消した版が最大 60 秒配信される**。保護の範囲（`start_at` が現在 + 120 秒以内）の取り消しは拒否されるので、このシナリオは起きない。保護の範囲の外（十分先）の取り消しなら、キャッシュに取り消した行が残っても、TTL が `start_at` より前に切れる。tool と api の時計のずれで「到達していない」という判定自体が崩れうる点も、保護の範囲が吸収する。
 - **取り消し後の `forget` の失敗は成功扱いにしない**（db.md 3.6）: run は `succeeded` のまま、`summary.cache_invalidated = false` と警告 `schedule_cache_not_invalidated` を実行記録と結果に残し、呼び出し側（画面・CLI）に「再試行する、または `clear-cache` を実行する」案内を出す。登録・巻き戻しの `forget` の失敗も同じ警告を返す（登録自体は成功のまま）。
 - 「まだ一度も配信されていないので履歴の欠落は無い」という理由づけは、時計のずれで崩れうるので、**保護の範囲の内側では使わない**（db.md 3.6）。範囲の外では、取り消した行は配信されていない（`start_at` が十分先）。
-- **取り消しも巻き戻しもできない窓**（db.md 3.6。**許容**）: 予約の `start_at` が現在 + 120 秒以内になると、取り消しは拒否され、巻き戻しも予約済みの行で拒否されるので、最大 120 秒どちらもできない（緊急の手段は `is_active`（R39）の決定待ち）。運用: 予約が現在 + 120 秒より先なら取り消せる（早めに判断する）。窓に入ったら、到達して配信が始まるのを待ってから巻き戻す。
-- `sys_deploy_master`・版の DB・成果物は残す（別の予約や巻き戻しの対象になりうる）。`is_active` を 0 にする方式は採らない（db.md 3.6）。取り消しの後に巻き戻しを行う。取り消した予約を残したいときは、巻き戻しの後に同じ版を改めて予約する（R1）。
+- **取り消しも巻き戻しもできない窓**（db.md 3.6。**許容**）: 予約の `start_at` が現在 + 120 秒以内になると、取り消しは拒否され、巻き戻しも予約済みの行で拒否されるので、最大 120 秒どちらもできない（**緊急の手段は `is_active` を落とす緊急停止（決定した R39）**。下の「緊急停止」）。運用: 予約が現在 + 120 秒より先なら取り消せる（早めに判断する）。窓に入ったら、**悪い版が配信される前に止めたいときは緊急停止**（窓の中でもできる）。緊急でなければ、到達して配信が始まるのを待ってから巻き戻す。
+- `sys_deploy_master`・版の DB・成果物は残す（別の予約や巻き戻しの対象になりうる）。取り消しは `is_active` を変えない（行を削除する。止めるだけの緊急停止は別の操作＝下。db.md 3.6）。取り消しの後に巻き戻しを行う。取り消した予約を残したいときは、巻き戻しの後に同じ版を改めて予約する（R1）。
+
+#### 緊急停止（`master:deactivate {sys_deploy.id}`。R39 の決定。操作の名前・形は**仮置き**。db.md 3.3・3.6）
+**R39 は決定（人。2026-11-23。A）: `is_active` を最新の選択で見る。位置づけは緊急停止専用**。デプロイ・巻き戻し・予約の取り消しは `is_active` を自動では変えず、運営が**明示的に止める**ときだけ落とす。予約の `start_at` の直前（現在 + 120 秒以内。取り消しも巻き戻しもできない窓）で、悪い版が配信される前に止める**唯一の手段**。
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor OP as 運営
+    participant D as 緊急停止の操作
+    participant SYS as sys DB
+    participant TOL as tool DB
+    participant RD as Redis
+
+    OP->>D: この行を止める（sys_deploy.id）
+    D->>SYS: GET_LOCK（待たない）
+    D->>TOL: run を running で作成（kind deactivate。phase lock）
+    D->>SYS: 行を読み、止めた後の最新の選択を計算（phase check）
+    alt 行が無い
+        D->>TOL: failed（deploy_not_found）
+        D-->>OP: 拒否
+    else 止めた後に最新が空、または掃除済みの版になる
+        D->>TOL: failed（deactivate_no_fallback）
+        D-->>OP: 拒否（配信が 299 になる止め方は通さない）
+    else already_in_state（すでにその状態）
+        D->>RD: 更新はせず、schedule キーだけ forget（前回の forget 失敗後の冪等な再試行）
+        D-->>OP: success（code = already_in_state。forget に失敗なら警告 schedule_cache_not_invalidated）
+    else activate で、再開で最新の選択になる行の master が掃除済み
+        D->>SYS: 成果物から復元（phase version_db。db.md 6.6）。復元できなければ failed（activate_target_dropped）で拒否
+        D->>SYS: UPDATE sys_deploy SET is_active = 1（phase register）
+        D->>RD: schedule キーを forget
+    else
+        D->>SYS: UPDATE sys_deploy SET is_active = 0（phase register）
+        D->>RD: schedule キーを forget
+        alt forget に成功
+            D->>TOL: succeeded
+            D-->>OP: success（止めた行は最新の選択から外れ、前の行が最新のまま）
+        else forget に失敗
+            D->>TOL: succeeded。summary に cache_invalidated = false
+            D-->>OP: 警告 schedule_cache_not_invalidated。再試行か clear-cache の案内。最大 60 秒、止めた版が配信されうる
+        end
+    end
+    D->>SYS: RELEASE_LOCK
+```
+
+- 止めた行は消えない（履歴。`sys_deploy_master`・版の DB・成果物も残る）。**再開は `master:activate`**（同じ形で `is_active = 1`。仮置き）。同じ状態への操作は、更新はせず成功（冪等。`already_in_state`）。**ただし `forget` は行う**ので、`forget` に失敗した後の「再試行」（同じ操作をもう一度）で `forget` が効く。**再開は、再開で最新の選択になる行の版の DB が掃除済みなら、成果物から復元してから通し、復元できなければ拒否**（`activate_target_dropped`。仮称）。掃除（db.md 4.6）は止めた行の版を保持し N の枠に数えないので、通常は復元は起きない。
+- 止めたあとも、API の切り替え予定のキャッシュ（TTL 60 秒）に古い判断が残るので、**止める操作は同時に `forget` する**（db.md 8.3）。API は `is_active` を一覧を作るときに適用する（db.md 8.3）ので、`forget` が効けば次のリクエストから止めた行が外れる。
+- 止めた行が `start_at > 現在` の予約なら、巻き戻しの「予約済み」の判定には**数えたまま**（巻き戻しは拒否される。先に取り消す、または再開する）。**窓の中（現在 + 120 秒以内）の未来の行を止めた場合は、取り消しもできず巻き戻しも拒否されるので、`start_at` の到達を待つ**（到達後は予約済みから外れ、巻き戻せる）。
 
 ### 2.5 QA 完了（提案 R28）と追従検出（提案）
 **提案**（人の確認待ち。決定は「QA 完了時の成果物が最終版」「LD の承認は hash と結びつけない」まで。以下は db.md 6.5.1・6.7・7.2 の提案をそのまま書く）。QA の操作は 2 つ（**同じ追従検出の処理**を使う）。
@@ -633,7 +680,8 @@ sequenceDiagram
 | I4 同じ `deploy_key` の master が別の hash で既にある（R3。**全 import 環境**） | `confirmed_key_modified` | `check`（登録の `register` でも再判定） | 何も作っていない |
 | I6 `start_at` が許容幅を超えて過去（production） | `start_at_past` | `check` | 何も作っていない。警告 `start_at_too_soon`・`start_at_shadowed` は止めない |
 | 往復検査が合わない・投入が拒否される | `load_failed` | `version_db` | この run が作った DB を `DROP` |
-| 名前が既にあり完全な hash が別（衝突）で、伸ばしても入らない | `mst_database_collision` | `version_db` | 同上 |
+| 名前が既にあり完全な hash が別（先頭 16 文字だけ同じ。衝突）、または同名の DB が使えない（別名にせず止める。db.md 4.2） | `mst_database_collision` | `version_db` | 同上 |
+| 同じ `{deploy_key}_{hash16}` のディレクトリが既にあり、`manifest.json` の完全な hash が別（衝突。別名にせず止める。db.md 6.5.2） | `artifact_dir_collision`（仮称） | `store` | この run が作った DB を `DROP`。既存のディレクトリは触らない |
 | I5 確定済みキー以下の行が A と違う（表と `id` を返す。production） | `confirmed_key_modified` | `check_rows` | この run が作った DB を `DROP` |
 | I5 で A の DB が使えず、A の成果物も無い・復元できない。または A の復元後の `sys` の更新が失敗した | `reference_unavailable` | `check_rows` | 同上（A の更新の失敗では、復元で作った DB を `DROP`） |
 
@@ -667,7 +715,7 @@ sequenceDiagram
 ### 4.10 schedule キーの破棄の失敗
 登録・巻き戻しの後の `forget` が失敗しても、操作は**成功のまま**。結果の `cache_invalidated = false` と警告 `schedule_cache_not_invalidated`、run の `summary.cache_invalidated` に記す。**最大 `schedule_ttl`（60 秒）で自然に直る**（db.md 8.3）。旧設計と違い、**次の操作が全表を破棄する仕組みは無い**（要らない）。すぐ直したいときは `POST /master-import/clear-cache`（schedule キーだけに縮む。api.md）。`tol_master_deploy_run` は `succeeded`。
 
-**予約の取り消しだけは、失敗を成功扱いにしない**（db.md 3.6）。取り消した行が API のキャッシュに残ると、取り消した版が配信されうるため、結果に `cache_invalidated = false` と警告 `schedule_cache_not_invalidated` を返し、呼び出し側（画面・CLI）に「再試行する、または `clear-cache` を実行する」案内を出す（2.4）。保護の範囲外の取り消しなら、キャッシュに残っても TTL が `start_at` より前に切れる。
+**予約の取り消しと緊急停止（`master:deactivate`・`activate`。db.md 3.6）だけは、失敗を成功扱いにしない**（緊急停止は、止めた版が最大 60 秒配信されうることを案内に含める）。取り消した行が API のキャッシュに残ると、取り消した版が配信されうるため、結果に `cache_invalidated = false` と警告 `schedule_cache_not_invalidated` を返し、呼び出し側（画面・CLI）に「再試行する、または `clear-cache` を実行する」案内を出す（2.4）。保護の範囲外の取り消しなら、キャッシュに残っても TTL が `start_at` より前に切れる。
 
 ## 5. トランザクション境界
 
@@ -794,6 +842,7 @@ sequenceDiagram
 | S1 | 録画の暫定（予約済みの未来の行があれば何もしない・基底 DB を指す版・`RecordingResetSeeder` は `sys_deploy` の行を消す）。R19 が決まるまで | 7 節 |
 | S2 | `master:verify-sheet` と `master:finalize --dry-run` は読み取り専用で、ロックを取らない | 2.5 |
 | S3 | `master:finalize` の実行で、追従検出を先に行い、そのあとに `final.json` の既存を確認する（順序） | 2.5 |
+| S4 | 緊急停止（`master:deactivate`・`activate`）の流れ。名前・形は仮置き（db.md P57。R39 の決定は「`is_active` を見る」まで） | 2.4 |
 
 ### 9.2 db.md に残る不備・足りない点（db.md は直していない。報告用）
 1. `master:finalize` で、追従検出と `final.json` の既存の確認のどちらを先にするかが db.md 6.5.1 に無い（`already_finalized` の冪等のために、既存を先に見てもよい）。
