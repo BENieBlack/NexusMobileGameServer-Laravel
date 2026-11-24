@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Exceptions\MasterDeployKeyException;
 use App\Exceptions\MasterDeployRunException;
-use Carbon\Carbon;
 use Closure;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
@@ -27,36 +26,24 @@ use Throwable;
  * `created_database_list` に入れないので消さない。sys の COMMIT の成否が不明（register の COMMIT 中のエラー）のときは版の DB を `DROP` しない
  * （読み直して登録済みなら成功＝警告 register_confirmed_after_error、行が無ければ register_failed で閉じて孤児掃除に回す、sys を読めなければ register_unknown）。
  *
+ * 基底（MasterDeployOperation）との差異: runLocked は使わず run() で排他・実行記録を直に扱う（dry_run がロックも記録も使わず、work DB の掃除・
+ * 失敗時の DROP の範囲〔COMMIT 不明時も作業用 DB は捨てる＝failBuild〕・作業ディレクトリの置き場が build 固有のため）。ensureVersionDatabase も
+ * 作業用 DB からの INSERT SELECT で版の DB を作るので、基底の createVersionDatabase（NDJSON 投入）とは別に持つ。それ以外は基底を使う。
+ *
  * dry_run はロック・実行記録・DB・ストレージ・sys・キャッシュを一切使わない（読み込み・検証・畳み・棚卸し・start_at の検査まで）。
  */
-class MasterBuildRunner
+class MasterBuildRunner extends MasterDeployOperation
 {
     private readonly MasterDeployKeyPolicy $policy;
-
-    private readonly MasterDeployLock $lock;
 
     private readonly MasterSheetValidator $validator;
 
     private readonly MasterImportService $importService;
 
-    private readonly MasterVersionDatabase $databases;
-
     private readonly MasterArtifactBuilder $builder;
-
-    private readonly MasterArtifactStore $store;
-
-    private readonly MasterDeployService $deployService;
-
-    private readonly MasterCacheInvalidator $invalidator;
 
     /** @var Closure(): GoogleSpreadsheetService */
     private readonly Closure $sheetServiceFactory;
-
-    /** @var list<string> この run が新規に作った DB 名（失敗時の DROP の対象。db.md 4.7） */
-    private array $created = [];
-
-    /** @var array<string, mixed> 実行記録の summary */
-    private array $summary = [];
 
     /**
      * @param  Closure(): GoogleSpreadsheetService|null  $sheetServiceFactory  Google の認証情報が無いとコンストラクタが例外を投げるので、使うときに作る
@@ -74,15 +61,12 @@ class MasterBuildRunner
         ?MasterCacheInvalidator $invalidator = null,
     ) {
         $this->policy = $policy ?? MasterDeployKeyPolicy::fromConfig();
-        $this->lock = $lock ?? new MasterDeployLock;
         $this->sheetServiceFactory = $sheetServiceFactory ?? fn (): GoogleSpreadsheetService => new GoogleSpreadsheetService;
         $this->validator = $validator ?? new MasterSheetValidator($this->policy);
         $this->importService = $importService ?? new MasterImportService;
-        $this->databases = $databases ?? new MasterVersionDatabase($this->importService);
-        $this->builder = $builder ?? new MasterArtifactBuilder($this->databases, new MasterDataExporter);
-        $this->store = $store ?? new MasterArtifactStore;
-        $this->deployService = $deployService ?? new MasterDeployService;
-        $this->invalidator = $invalidator ?? new MasterCacheInvalidator;
+        $databases ??= new MasterVersionDatabase($this->importService);
+        $this->builder = $builder ?? new MasterArtifactBuilder($databases, new MasterDataExporter);
+        parent::__construct($lock, $databases, $invalidator, $store, $deployService);
     }
 
     /**
@@ -179,33 +163,26 @@ class MasterBuildRunner
         }
         if (! $acquired) {
             // 実行記録は作らない（ロックが無く、古い running を判断できないため）
-            throw new MasterDeployRunException(
-                MasterDeployRunException::DEPLOY_LOCKED,
-                '他のデプロイが実行中です。しばらくしてからもう一度実行してください。',
-                409,
-            );
+            throw $this->locked();
         }
 
-        $this->created = [];
-        $this->summary = [];
-        /** @var int|null $runId run の作成に失敗したときは null のまま catch に入る */
-        $runId = null;
+        // run の作成に失敗したときは runId が null のまま catch に入る
+        $this->resetState();
         $localDir = null;
-        $keepVersionDatabase = false;
         $deployKey = $target['deploy_key'];
         try {
-            $runId = $this->createRun($target, $admAccountId);
+            $this->runId = $this->createRun('build', $admAccountId, $deployKey, ['mode' => $target['mode']]);
 
             // I6: start_at の検査（DB を作る前）
             $start = $this->resolveStartAt($startAtInput);
             $warningList = $start['warning_list'];
 
-            $prepared = $this->prepare($deployKey, false, $runId);
+            $prepared = $this->prepare($deployKey, false, $this->runId);
 
             // work_db: 作業用 DB を作って採用行を入れる。この run が作った DB なので、失敗しても DROP してよい
-            $this->updateRun($runId, ['phase' => 'work_db'], true);
+            $this->updateRun(['phase' => 'work_db'], true);
             $work = $this->databases->workName();
-            $this->recordCreated($runId, $work, 'work_database');
+            $this->recordCreated($work, 'work_database');
             $this->databases->createFromBase($work);
             try {
                 $loaded = $this->databases->loadFolded($work, $prepared['folded']);
@@ -215,7 +192,7 @@ class MasterBuildRunner
             $this->summary['loaded'] = $loaded;
 
             // artifact: 作業用 DB から成果物をローカルの作業ディレクトリに作る（hash の確定。まだストレージに置かない）
-            $this->updateRun($runId, ['phase' => 'artifact'], true);
+            $this->updateRun(['phase' => 'artifact'], true);
             $localDir = sys_get_temp_dir().'/nexus-artifact-'.bin2hex(random_bytes(6));
             try {
                 $built = $this->builder->build($work, $deployKey, $localDir, $this->buildDeployKeyLookup($prepared['folded']), [
@@ -235,7 +212,7 @@ class MasterBuildRunner
                 );
             }
             $this->summary['row_digest'] = $built['row_digest_list'];
-            $this->updateRun($runId, [
+            $this->updateRun([
                 'master_hash' => $built['hash'],
                 'artifact_dir' => $built['artifact_dir'],
                 'schema_fingerprint' => $built['schema_fingerprint'],
@@ -243,42 +220,33 @@ class MasterBuildRunner
             ], true);
 
             // version_db: 版の DB を確定する。作業用 DB はここで捨てる（この run が作った）
-            $this->updateRun($runId, ['phase' => 'version_db'], true);
-            $version = $this->ensureVersionDatabase($runId, $deployKey, $built, $work);
+            $this->updateRun(['phase' => 'version_db'], true);
+            $version = $this->ensureVersionDatabase($deployKey, $built, $work);
             $this->dropCreated($work);
-            $this->updateRun($runId, ['mst_database' => $version['name'], 'summary' => $this->encodeSummary()], true);
+            $this->updateRun(['mst_database' => $version['name'], 'summary' => $this->encodeSummary()], true);
 
             // store: 成果物をストレージに置く（manifest.json は最後。同じディレクトリに完成した成果物があれば作り直さず既存を使う）
-            $this->updateRun($runId, ['phase' => 'store'], true);
+            $this->updateRun(['phase' => 'store'], true);
             $artifact = $this->storeArtifact($built, $localDir);
 
             // register: sys に 1 トランザクションで登録する
-            $this->updateRun($runId, ['phase' => 'register'], true);
+            $this->updateRun(['phase' => 'register'], true);
             $startAt = $start['start_at'] ?? now()->utc()->format('Y-m-d H:i:s');
-            try {
-                $registration = $this->deployService->registerBuild([
-                    'deploy_key' => $deployKey,
-                    'hash' => $built['hash'],
-                    'artifact_dir' => $built['artifact_dir'],
-                    'schema_fingerprint' => $built['schema_fingerprint'],
-                    'mst_database' => $version['name'],
-                    'mode' => $target['mode'],
-                    'restored' => $version['restored'],
-                    'start_at' => $startAt,
-                    'start_at_explicit' => $start['start_at'] !== null,
-                    'table_count' => count($built['data_table_list']),
-                    'file_size' => array_sum(array_column($artifact['tables'], 'file_size')),
-                    'tables' => $artifact['tables'],
-                ]);
-            } catch (MasterDeployKeyException $e) {
-                if ($e->errorCode !== MasterDeployKeyException::REGISTER_COMMIT_UNKNOWN) {
-                    throw $this->fromKeyException($e);
-                }
-                // COMMIT の成否が不明。以後、版の DB は DROP しない（登録済みの DB を消すと Unknown database になるため）
-                $keepVersionDatabase = true;
-                $registration = $this->resolveUnknownCommit($runId, $e, $version['name'], $built, $startAt);
-                $warningList[] = ['code' => 'register_confirmed_after_error', 'message' => 'sys の COMMIT 中にエラーがありましたが、読み直したところ登録されていました'];
-            }
+            // COMMIT の成否が不明のときの確認・版の DB を DROP しない扱いは registerSys が行う（警告 register_confirmed_after_error も付く）
+            $registration = $this->registerSys([
+                'deploy_key' => $deployKey,
+                'hash' => $built['hash'],
+                'artifact_dir' => $built['artifact_dir'],
+                'schema_fingerprint' => $built['schema_fingerprint'],
+                'mst_database' => $version['name'],
+                'mode' => $target['mode'],
+                'restored' => $version['restored'],
+                'start_at' => $startAt,
+                'start_at_explicit' => $start['start_at'] !== null,
+                'table_count' => count($built['data_table_list']),
+                'file_size' => array_sum(array_column($artifact['tables'], 'file_size')),
+                'tables' => $artifact['tables'],
+            ]);
             $warningList = [...$warningList, ...$registration['warning_list']];
 
             // ここから先は sys も確定済み。キャッシュの破棄の失敗は成功のまま警告にする
@@ -289,7 +257,7 @@ class MasterBuildRunner
             $this->summary['warning_list'] = $warningList;
             $this->summary['cache_invalidated'] = $cache['invalidated'];
             $this->summary['database_reused'] = $version['reused'];
-            $this->updateRun($runId, [
+            $this->updateRun([
                 'status' => 'succeeded',
                 'phase' => 'done',
                 'deploy_key' => $deployKey,
@@ -308,7 +276,7 @@ class MasterBuildRunner
                     ? "新しい版を登録しました（deploy_key={$deployKey}）。"
                     : "同じ内容の版が既にあるため、既存の版を再利用して新しい切り替え行を足しました（deploy_key={$deployKey}）。",
                 'dry_run' => false,
-                'run_id' => $runId,
+                'run_id' => $this->runId,
                 'deploy' => [
                     'mode' => $target['mode'],
                     'deploy_key' => $deployKey,
@@ -334,18 +302,18 @@ class MasterBuildRunner
                 'cache' => ['invalidated' => $cache['invalidated']],
             ];
         } catch (MasterDeployRunException $e) {
-            $this->failRun($runId, $e, $keepVersionDatabase);
-            throw $e->withRunId($runId);
+            $this->failBuild($e);
+            throw $e->withRunId($this->runId);
         } catch (Throwable $e) {
-            Log::error('マスター build で想定外のエラー', ['exception' => $e, 'run_id' => $runId]);
+            Log::error('マスター build で想定外のエラー', ['exception' => $e, 'run_id' => $this->runId]);
             $error = new MasterDeployRunException(
                 MasterDeployRunException::INTERNAL_ERROR,
                 '想定外のエラーが発生しました。ログの詳細を確認してください。',
                 500,
                 previous: $e,
             );
-            $this->failRun($runId, $error, $keepVersionDatabase);
-            throw $error->withRunId($runId);
+            $this->failBuild($error);
+            throw $error->withRunId($this->runId);
         } finally {
             if ($localDir !== null) {
                 File::deleteDirectory($localDir);
@@ -403,54 +371,6 @@ class MasterBuildRunner
         }
     }
 
-    // ---- start_at（I6。db.md 3.6） ----
-
-    /**
-     * 明示された start_at の検査（DB を作る前）。null は「すぐ」（登録の直前の現在時刻）
-     *
-     * - 許容幅 `start_at_past_grace` 以内の過去は現在に丸めて通す。それを超える過去は `reject_past_start_at`（production だけ true）なら拒否
-     * - 現在 + 2 × `schedule_ttl` より近いときは警告 start_at_too_soon（止めない）
-     *
-     * @return array{start_at: string|null, warning_list: list<array{code: string, message: string}>}
-     *
-     * @throws MasterDeployRunException start_at_past
-     */
-    private function resolveStartAt(?string $input): array
-    {
-        if ($input === null) {
-            return ['start_at' => null, 'warning_list' => []];
-        }
-        try {
-            $startAt = Carbon::createFromFormat('Y-m-d H:i:s', $input, 'UTC');
-        } catch (Throwable) {
-            $startAt = null;
-        }
-        if ($startAt === null) {
-            throw new MasterDeployRunException(MasterDeployRunException::START_AT_PAST, "start_at の形式が不正です（Y-m-d H:i:s の UTC）: {$input}", 422);
-        }
-        $now = now()->utc();
-        $warningList = [];
-        $grace = (int) config('master_deploy.start_at_past_grace');
-        $pastSeconds = $now->getTimestamp() - $startAt->getTimestamp();
-        if ($pastSeconds > 0) {
-            if ($pastSeconds > $grace && (bool) config('master_deploy.reject_past_start_at')) {
-                throw new MasterDeployRunException(
-                    MasterDeployRunException::START_AT_PAST,
-                    "start_at が過去です（許容幅 {$grace} 秒を超えています）: {$input}",
-                    422,
-                );
-            }
-            if ($pastSeconds <= $grace) {
-                $startAt = $now->copy();
-            }
-        }
-        if ($startAt->getTimestamp() < $now->getTimestamp() + 2 * (int) config('master_deploy.schedule_ttl')) {
-            $warningList[] = ['code' => 'start_at_too_soon', 'message' => 'start_at が近いため、他のサーバーへの反映が遅れる可能性があります（API の切り替え予定のキャッシュ TTL）'];
-        }
-
-        return ['start_at' => $startAt->format('Y-m-d H:i:s'), 'warning_list' => $warningList];
-    }
-
     // ---- 読む → 検証 → 畳み（版の DB も sys も変えない） ----
 
     /**
@@ -464,13 +384,13 @@ class MasterBuildRunner
     private function prepare(int $deployKey, bool $dryRun, ?int $runId): array
     {
         if ($runId !== null) {
-            $this->updateRun($runId, ['phase' => 'read'], true);
+            $this->updateRun(['phase' => 'read'], true);
         }
         $schema = $this->loadMstSchema();
         $assembled = $this->readSheets($schema['columns']);
 
         if ($runId !== null) {
-            $this->updateRun($runId, ['phase' => 'validate'], true);
+            $this->updateRun(['phase' => 'validate'], true);
         }
         /** @var array{tables: array<string, array{entries: array<int, array<string, mixed>>, has_deploy_key_column: bool}>, error_list?: array<int, array{code: string, sheet: string, message: string}>} $assembled */
         $validation = $this->validator->validate($assembled, $deployKey, $schema['columns'], $schema['rarity'], $dryRun);
@@ -492,7 +412,7 @@ class MasterBuildRunner
         }
 
         if ($runId !== null) {
-            $this->updateRun($runId, ['phase' => 'fold'], true);
+            $this->updateRun(['phase' => 'fold'], true);
         }
 
         return [
@@ -626,7 +546,7 @@ class MasterBuildRunner
      * @param  array{hash: string, schema_fingerprint: string, data_table_list: list<array{name: string, row_count: int, data_sha256: string}>}  $built
      * @return array{name: string, reused: bool, restored: bool}
      */
-    private function ensureVersionDatabase(int $runId, int $deployKey, array $built, string $work): array
+    private function ensureVersionDatabase(int $deployKey, array $built, string $work): array
     {
         $baseFingerprint = $this->databases->schemaFingerprint($this->databases->baseDatabase());
         $existing = DB::connection('sys')->table('sys_deploy_master')->where('deploy_key', $deployKey)->where('hash', $built['hash'])->first();
@@ -660,8 +580,8 @@ class MasterBuildRunner
         }
 
         // 作る直前に名前を実行記録へ書く（異常終了で残った DB を孤児として追えるように。db.md 4.7）
-        $this->updateRun($runId, ['mst_database' => $name], true);
-        $this->recordCreated($runId, $name, null);
+        $this->updateRun(['mst_database' => $name], true);
+        $this->recordCreated($name);
         try {
             $this->databases->createFromBase($name);
             $this->databases->copyRows($work, $name);
@@ -725,110 +645,32 @@ class MasterBuildRunner
         return ['reused' => true, 'tables' => $tables];
     }
 
-    // ---- 登録の COMMIT が成否不明のとき（db.md 4.7） ----
-
-    /**
-     * sys を読み直して登録されたかを確かめる
-     *
-     * - 登録済み（同じ mst_database の master と、同じ master・start_at の sys_deploy がある）→ 登録結果を返す（呼び出し側が成功にする）
-     * - 行が無い → register_failed で閉じる（版の DB は DROP せず孤児掃除に回す）
-     * - sys を読めない → register_unknown（DROP しない。人が確認する）
-     *
-     * @param  array{hash: string}  $built
-     * @return array{sys_deploy_master_id: int, sys_deploy_id: int, mst_database: string, start_at: string, is_new: bool, warning_list: list<array{code: string, message: string}>}
-     *
-     * @throws MasterDeployRunException
-     */
-    private function resolveUnknownCommit(int $runId, MasterDeployKeyException $cause, string $database, array $built, string $startAt): array
-    {
-        Log::error('sys の COMMIT 中にエラー（登録されたか確認する）', ['exception' => $cause, 'run_id' => $runId]);
-        try {
-            $master = DB::connection('sys')->table('sys_deploy_master')->where('mst_database', $database)->first();
-            $deploy = $master === null ? null : DB::connection('sys')->table('sys_deploy')
-                ->where('sys_deploy_master_id', $master->id)->where('start_at', $startAt)->orderByDesc('id')->first();
-        } catch (Throwable $e) {
-            throw new MasterDeployRunException(
-                MasterDeployRunException::REGISTER_UNKNOWN,
-                'sys の COMMIT 中にエラーが発生し、sys も読めないため、登録されたか分かりません。DB は削除していません。人が確認してください。',
-                500,
-                previous: $e,
-            );
-        }
-        if ($master === null || $deploy === null) {
-            throw new MasterDeployRunException(
-                MasterDeployRunException::REGISTER_FAILED,
-                'sys への登録に失敗しました（COMMIT 中のエラー。登録は確認できませんでした）。版の DB は孤児として残り、掃除の対象になります。',
-                500,
-                previous: $cause,
-            );
-        }
-
-        return [
-            'sys_deploy_master_id' => (int) $master->id,
-            'sys_deploy_id' => (int) $deploy->id,
-            'mst_database' => (string) $master->mst_database,
-            'start_at' => $startAt,
-            'is_new' => false,
-            'warning_list' => [],
-        ];
-    }
-
-    /**
-     * @return array{invalidated: bool}
-     */
-    private function forgetSchedule(): array
-    {
-        try {
-            $result = $this->invalidator->forgetSchedule();
-
-            return ['invalidated' => $result['invalidated']];
-        } catch (Throwable $e) {
-            Log::error('schedule キャッシュの破棄に失敗', ['exception' => $e]);
-
-            return ['invalidated' => false];
-        }
-    }
-
     // ---- この run が作った DB（失敗時の DROP の対象。db.md 4.7） ----
 
     /**
      * 作る直前に名前を記録する（summary.created_database_list。work は summary.work_database にも）
      */
-    private function recordCreated(int $runId, string $name, ?string $summaryKey): void
+    protected function recordCreated(string $name, ?string $summaryKey = null): void
     {
-        $this->created[] = $name;
         if ($summaryKey !== null) {
             $this->summary[$summaryKey] = $name;
         }
-        $this->updateRun($runId, ['summary' => $this->encodeSummary()], true);
-    }
-
-    /**
-     * この run が作った DB を捨てて一覧から外す（失敗しても握る。残った名前は孤児掃除の対象）
-     */
-    private function dropCreated(string $name): void
-    {
-        try {
-            $this->databases->drop($name);
-            $this->created = array_values(array_filter($this->created, static fn (string $n): bool => $n !== $name));
-        } catch (Throwable $e) {
-            Log::warning('この run が作った DB を DROP できませんでした（孤児掃除の対象）', ['exception' => $e, 'database' => $name]);
-        }
+        parent::recordCreated($name);
     }
 
     /**
      * 失敗の後始末: この run が作った DB だけを DROP する（sys の COMMIT の成否が不明のときは版の DB を残す）。失敗を実行記録に残す
      */
-    private function failRun(?int $runId, MasterDeployRunException $e, bool $keepVersionDatabase): void
+    private function failBuild(MasterDeployRunException $e): void
     {
         $work = $this->summary['work_database'] ?? null;
         foreach ($this->created as $name) {
-            if ($keepVersionDatabase && $name !== $work) {
+            if ($this->keepDatabases && $name !== $work) {
                 continue;
             }
             $this->dropCreated($name);
         }
-        if ($runId === null) {
+        if ($this->runId === null) {
             return;
         }
         foreach (['error_total', 'error_count_by_code'] as $key) {
@@ -836,7 +678,7 @@ class MasterBuildRunner
                 $this->summary[$key] = $e->extra[$key];
             }
         }
-        $this->updateRun($runId, [
+        $this->updateRun([
             'status' => 'failed',
             'error_code' => $e->errorCode,
             'error_message' => $e->getMessage(),
@@ -855,73 +697,5 @@ class MasterBuildRunner
             500,
             previous: $e,
         );
-    }
-
-    private function fromKeyException(MasterDeployKeyException $e): MasterDeployRunException
-    {
-        return new MasterDeployRunException($e->errorCode, $e->getMessage(), $e->httpStatus, previous: $e);
-    }
-
-    // ---- 実行記録（tol_master_deploy_run。tool 接続。各更新は autocommit。db.md 5 節） ----
-
-    private function encodeSummary(): ?string
-    {
-        $summary = $this->summary;
-        $summary['created_database_list'] = $this->created;
-        try {
-            return json_encode($summary, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR);
-        } catch (Throwable) {
-            return null;
-        }
-    }
-
-    private function nowString(): string
-    {
-        return now()->utc()->format('Y-m-d H:i:s');
-    }
-
-    /**
-     * kind = build の run を running で作る。ロックを取れているので、残っている古い running はプロセスが落ちた跡として aborted に直す
-     *
-     * @param  array{mode: 'fixed'|'explicit', deploy_key: int}  $target
-     */
-    private function createRun(array $target, ?int $admAccountId): int
-    {
-        $now = $this->nowString();
-        DB::connection('tool')->table('tol_master_deploy_run')->where('status', 'running')
-            ->update(['status' => 'aborted', 'finished_at' => $now, 'updated_at' => $now]);
-
-        return (int) DB::connection('tool')->table('tol_master_deploy_run')->insertGetId([
-            'kind' => 'build',
-            'mode' => $target['mode'],
-            'deploy_key' => $target['deploy_key'],
-            'status' => 'running',
-            'phase' => 'lock',
-            'adm_account_id' => $admAccountId,
-            'app_env' => mb_substr((string) config('app.env'), 0, 32),
-            'started_at' => $now,
-            'created_at' => $now,
-            'updated_at' => $now,
-        ]);
-    }
-
-    /**
-     * 実行記録を更新する。sys の COMMIT の前（$strict = true）は、書けなければ例外で中止する（記録できない build は避ける。db.md 5.2）。
-     * 登録の後（false）は、中止せずログに残して続ける
-     *
-     * @param  array<string, mixed>  $changes
-     */
-    private function updateRun(int $runId, array $changes, bool $strict): void
-    {
-        try {
-            DB::connection('tool')->table('tol_master_deploy_run')
-                ->where('id', $runId)
-                ->update([...$changes, 'updated_at' => $this->nowString()]);
-        } catch (Throwable $e) {
-            if ($strict) {
-                throw $e;
-            }
-            Log::error('マスター build の実行記録の更新に失敗（処理は続ける）', ['exception' => $e, 'run_id' => $runId, 'changes' => array_keys($changes)]);
-        }
     }
 }

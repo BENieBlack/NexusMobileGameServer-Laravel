@@ -163,7 +163,7 @@ return [
             'driver' => 'mysql',
             'host' => env('DB_ADMIN_HOST', 'db-admin'),
             'port' => env('DB_ADMIN_PORT', '3306'),
-            'database' => env('DB_ADMIN_DATABASE') ?: env('APP_NAME', 'laravel').'-'.env('APP_ENV', 'local').'-adm',
+            'database' => env('DB_ADMIN_DATABASE') ?: env('APP_NAME', 'laravel').'-'.env('APP_ENV', 'local').'-admin',
             'username' => env('DB_ADMIN_USERNAME', 'root'),
             'password' => env('DB_ADMIN_PASSWORD', 'root'),
             'charset' => 'utf8mb4',

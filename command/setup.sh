@@ -129,9 +129,10 @@ success_message "Docker containers are up and running."
 # Step 3: 対象データベースの決定
 # ============================================================================
 # "コンテナ名:DB接尾辞" の組。DB名は {APP_NAME}-{APP_ENV}-{接尾辞}
-DB_TARGETS=("db-sys:sys" "db-mst:mst" "db-adm:adm" "db-tol:tol")
+# シャードの DB 名は全シャード共通（trx_* と log_* が同じ DB に入る）
+DB_TARGETS=("db-system:system" "db-master:master" "db-admin:admin" "db-tool:tool")
 for i in $(seq 1 "$SHARD_COUNT"); do
-  DB_TARGETS+=("db-trx${i}:trx${i}" "db-log${i}:log${i}")
+  DB_TARGETS+=("db-shard${i}:shard")
 done
 
 # docker-compose.yml が定義していないシャードを指定していないか確認する
@@ -192,9 +193,9 @@ for target in "${DB_TARGETS[@]}"; do
   assert_database_exists "$container" "${APP_NAME}-${APP_ENV}-${suffix}"
 
   # テスト用データベース。api/phpunit.xml が APP_ENV=testing で参照する。
-  # 管理者DB・運営ツールDBはTool側がsqliteのインメモリを使うため対象外。
+  # 運営ツールDB（tool）にはテスト用がない（tool のテスト用 DB は make tool-test-db が作る）。
   case "$suffix" in
-    adm | tol) ;;
+    tool) ;;
     *) assert_database_exists "$container" "${APP_NAME}-testing-${suffix}" ;;
   esac
 done

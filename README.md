@@ -41,7 +41,7 @@ NexusMobileGameServer-Laravel/
 
 ### 1. 環境構築
 
-`./command/setup.sh`（`make install`）は旧コンテナ名（db-sys など）を前提にしており、現状は使えません。
+`./command/setup.sh`（`make install`）は現行のコンテナ名に合わせてあるが、全ボリュームを消す破壊的なスクリプトのため通しでは未検証です。確実なのは下の手順です。
 次の手順で構築します（詳細は [.claude/development.md](./.claude/development.md)）。
 
 ```bash
