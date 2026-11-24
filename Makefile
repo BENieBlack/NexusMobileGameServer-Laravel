@@ -139,7 +139,7 @@ seed: up ## シーダーを実行
 # 動画撮影用シード（api/database/seeders/Recording/README.md）。
 # 追加専用・冪等で、local / testing 以外では実行を拒否する。前提は make seed（基本のシード）が済んでいること
 
-seed-recording: up ## 動画撮影用の既定シード（規約・ログインボーナス・デプロイ）を追加。前提: make seed 済み
+seed-recording: up ## 動画撮影用の既定シード（規約・ログインボーナス・録画用の版の登録）を追加。前提: make seed 済み。録画用の版は tool の build（MASTER_DEPLOY_FIXED_KEY=7777777777）で先に作る。無ければデプロイだけ中止
 	$(DOCKER_COMPOSE) exec -T api-php php artisan db:seed --class='Database\Seeders\Recording\RecordingSeeder' --force
 
 # SEEDER にはシナリオのクラス名だけを書く（例: make seed-recording-one SEEDER=RecordingMaintenanceOnSeeder）
@@ -148,7 +148,7 @@ seed-recording-one: up ## 動画撮影用のシナリオを1つ流す（SEEDER=�
 	@test -n "$(SEEDER)" || { echo "SEEDER=<クラス名> を指定してください（一覧: api/database/seeders/Recording/README.md）"; exit 1; }
 	$(DOCKER_COMPOSE) exec -T -e RECORDING_PLAYER_MY_ID='$(RECORDING_PLAYER_MY_ID)' -e RECORDING_LOGIN_BONUS_SCENARIO='$(RECORDING_LOGIN_BONUS_SCENARIO)' api-php php artisan db:seed --class='Database\Seeders\Recording\Scenarios\$(SEEDER)' --force
 
-seed-recording-reset: up ## 動画撮影用のデータ（マーカー付きの行）を削除し、メンテナンス解除・daily_login を有効に戻す
+seed-recording-reset: up ## 動画撮影用のデータ（マーカー付きの行・deploy_key=7777777777 の行と成果物）を削除し、メンテナンス解除・daily_login を有効に戻す
 	$(DOCKER_COMPOSE) exec -T api-php php artisan db:seed --class='Database\Seeders\Recording\Scenarios\RecordingResetSeeder' --force
 
 # レート制限のカウンター（sign_up は IP あたり 10 回/時間・device あたり 3 回/時間）も消える。

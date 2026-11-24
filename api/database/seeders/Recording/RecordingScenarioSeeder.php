@@ -2,6 +2,7 @@
 
 namespace Database\Seeders\Recording;
 
+use App\Repositories\Sys\SysDeployRepository;
 use Database\Seeders\Recording\Scenarios\RecordingDeploySeeder;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Cache;
@@ -29,9 +30,6 @@ abstract class RecordingScenarioSeeder extends Seeder
 
     /** 動画用のメンテナンス（sys_maintenance）は title がこの接頭辞で始まる */
     public const MAINTENANCE_TITLE_PREFIX = '[REC]';
-
-    /** 動画用のデプロイ（sys_deploy_master / sys_deploy_asset）は description がこの接頭辞で始まる */
-    public const DEPLOY_DESCRIPTION_PREFIX = '[REC]';
 
     /** 動画用に有効・無効を切り替える通常ログインボーナスの ID（mst_login_bonus.id） */
     public const DAILY_LOGIN_BONUS_ID = 'daily_login';
@@ -93,7 +91,10 @@ abstract class RecordingScenarioSeeder extends Seeder
 
         $redis = Cache::store('redis');
         $redis->forget('sys:sys_maintenance:current_maintenance');
-        $redis->forget('sys:sys_deploy:latest_downloadable');
+        // API が読むのは schedule キー（切り替え予定の一覧）。廃止した旧キーも残っていれば併せて消す
+        $deployRepository = app(SysDeployRepository::class);
+        $redis->forget($deployRepository->scheduleCacheKey());
+        $redis->forget($deployRepository->legacyLatestDownloadableCacheKey());
         $redis->forget('sys:sys_deploy:deploy_key:'.RecordingDeploySeeder::DEPLOY_KEY);
         foreach ($deployIds as $deployId) {
             $redis->forget('sys:sys_deploy:id:'.$deployId);

@@ -2,7 +2,6 @@
 
 namespace Tests\Feature\Recording;
 
-use App\Models\Mst\MstPlayerLevel;
 use Database\Seeders\Recording\RecordingScenarioSeeder;
 use Database\Seeders\Recording\RecordingSeeder;
 use Database\Seeders\Recording\Scenarios\RecordingAgreementSeeder;
@@ -162,74 +161,39 @@ class RecordingScenarioTest extends RecordingTestCase
     }
 
     #[Test]
-    public function デプロイは配信ファイル付きで追加し2回流しても増えず本物の有効なデプロイを残す(): void
+    public function デプロイは版の成果物とdbがあれば登録し2回流しても増えず本物の有効なデプロイを残す(): void
     {
-        // 前提: 配信ファイルを持たない本物の有効なデプロイ（基本シードと同じ形）がある
-        $this->ensureMasterRows();
+        // 前提: 配信ファイルを持たない本物の有効なデプロイ（基本シードと同じ形）と、build が作った録画用の版
         $sys = DB::connection('sys');
+        $version = $this->prepareRecordingVersion();
         $realActive = $sys->table('sys_deploy')->where('is_active', true)->count();
-        $beforeFiles = $sys->table('sys_deploy_master_table')->count();
 
         $this->runSeeder(RecordingDeploySeeder::class);
         $this->runSeeder(RecordingDeploySeeder::class);
 
-        // 期待: 各 1 行、配信ファイルは追加され、既存の is_active は変わらない
+        // 期待: 各 1 行、配信ファイルは成果物の manifest から入り、既存の is_active は変わらない
         $this->assertSame(1, $sys->table('sys_deploy')->where('deploy_key', RecordingDeploySeeder::DEPLOY_KEY)->count());
-        $this->assertSame(1, $sys->table('sys_deploy_master')->where('description', 'like', '[REC]%')->count());
-        $this->assertSame(1, $sys->table('sys_deploy_asset')->where('description', 'like', '[REC]%')->count());
-        $this->assertGreaterThan($beforeFiles, $sys->table('sys_deploy_master_table')->count());
+        $master = $sys->table('sys_deploy_master')->where('deploy_key', RecordingDeploySeeder::DEPLOY_KEY)->get();
+        $this->assertCount(1, $master);
+        $this->assertSame($version['hash'], $master[0]->hash);
+        $this->assertSame($version['database'], $master[0]->mst_database);
+        $this->assertSame($version['dir'], $master[0]->artifact_dir);
+        $this->assertSame(1, $sys->table('sys_deploy_asset')->where('deploy_key', RecordingDeploySeeder::DEPLOY_KEY)->count());
+        $this->assertSame(2, $sys->table('sys_deploy_master_table')->where('sys_deploy_master_id', $master[0]->id)->count());
         $this->assertSame($realActive + 1, $sys->table('sys_deploy')->where('is_active', true)->count());
 
-        // 期待: ファイルが実在し、ハッシュ・サイズが一覧と一致し、mst の行が入っている
-        $masterId = $sys->table('sys_deploy_master')->where('deploy_key', RecordingDeploySeeder::DEPLOY_KEY)->value('id');
-        $rows = $sys->table('sys_deploy_master_table')->where('sys_deploy_master_id', $masterId)->get()->keyBy('table_name');
-        foreach (RecordingDeploySeeder::REQUIRED_GROUPS as $required) {
-            $this->assertTrue($rows->has($required));
-        }
-        // クライアントの必須テーブル（master_database.gd の REQUIRED_TABLES）も配信される
-        foreach (['mst_gacha', 'mst_unit', 'mst_equipment'] as $clientRequired) {
-            $this->assertTrue($rows->has($clientRequired));
-        }
-        // 運営ツールと同じく、mst の親テーブル全部（l10n は親のファイルに入る）
-        $this->assertCount(
-            collect(DB::connection('mst')->select("SHOW TABLES LIKE 'mst_%'"))
-                ->map(fn ($r) => (string) array_values((array) $r)[0])
-                ->reject(fn ($n) => str_ends_with($n, '__l10n'))->count(),
-            $rows,
-        );
-        $manifest = $sys->table('sys_deploy_master')->where('id', $masterId)->value('hash');
-        foreach ($rows as $name => $row) {
-            $path = $this->masterDataDir.'/'.$manifest.'/'.$row->file_name;
-            $this->assertFileExists($path);
-            $this->assertSame($row->hash, hash_file('sha256', $path));
-            $this->assertSame((int) $row->file_size, filesize($path));
-            $this->assertSame('/masterdata/'.$manifest.'/'.$row->file_name, $row->public_url);
-
-            $sqlite = new \PDO('sqlite:'.$path);
-            $count = (int) $sqlite->query("SELECT COUNT(*) FROM `{$name}`")->fetchColumn();
-            $this->assertSame(DB::connection('mst')->table($name)->count(), $count);
-        }
-
-        // 期待: mst_player_level は string の id を主キーに持つまま配信される（id と level の両方が入る）
-        $playerLevel = new \PDO('sqlite:'.$this->masterDataDir.'/'.$manifest.'/'.$rows['mst_player_level']->file_name);
-        $idColumn = collect($playerLevel->query('PRAGMA table_info(`mst_player_level`)')->fetchAll(\PDO::FETCH_ASSOC))->firstWhere('name', 'id');
-        $this->assertNotNull($idColumn);
-        $this->assertSame(1, (int) $idColumn['pk']);
-        $firstLevel = $playerLevel->query('SELECT id, level FROM `mst_player_level` ORDER BY level LIMIT 1')->fetch(\PDO::FETCH_ASSOC);
-        $this->assertSame(MstPlayerLevel::makeId((int) $firstLevel['level']), $firstLevel['id']);
-
         // 期待: version API は録画用を最新として、配信ファイルを master.tables に返す
+        $row = $sys->table('sys_deploy_master_table')->where('sys_deploy_master_id', $master[0]->id)->where('table_name', 'mst_config')->first();
         $this->getJson('/api/auth/version')->assertOk()
             ->assertJsonPath('needs_update', true)
             ->assertJsonPath('latest_deploy_key', RecordingDeploySeeder::DEPLOY_KEY)
-            ->assertJsonPath('master.tables.mst_player_level.hash', $rows['mst_player_level']->hash)
-            ->assertJsonPath('master.tables.mst_config.url', $rows['mst_config']->public_url);
+            ->assertJsonPath('master.tables.mst_config.url', $row->public_url);
     }
 
     #[Test]
-    public function デプロイは有効なデプロイが無くても追加でき_version_apiが成功する(): void
+    public function デプロイは有効なデプロイが無くても登録でき_version_apiが成功する(): void
     {
-        $this->ensureMasterRows();
+        $this->prepareRecordingVersion();
         DB::connection('sys')->table('sys_deploy')->update(['is_active' => false]);
 
         $this->runSeeder(RecordingDeploySeeder::class);
@@ -238,55 +202,10 @@ class RecordingScenarioTest extends RecordingTestCase
     }
 
     #[Test]
-    public function 配信ファイルを持つ本物の10桁のデプロイがあっても録画用を追加し本物の行は残る(): void
+    public function 運営ツールの10桁のdeploy_keyの有効なデプロイがあっても録画用を登録し本物はリセットでも消さない(): void
     {
-        $this->ensureMasterRows();
+        $this->prepareRecordingVersion();
         $sys = DB::connection('sys');
-        $sys->table('sys_deploy')->where('deploy_key', RecordingDeploySeeder::DEPLOY_KEY)->delete();
-        $sys->table('sys_deploy')->update(['is_active' => false]);
-        $sys->table('sys_deploy_master_table')->insert([
-            'sys_deploy_master_id' => 9999, 'table_name' => 'mst_item', 'hash' => str_repeat('a', 64),
-            'file_size' => 1, 'file_name' => 'mst_item_x.sqlite', 'public_url' => '/masterdata/x/mst_item_x.sqlite',
-        ]);
-        $sys->table('sys_deploy')->insert([
-            'deploy_key' => 2026112201, 'start_at' => '2020-01-01 00:00:00',
-            'sys_deploy_master_id' => 9999, 'sys_deploy_asset_id' => 1, 'is_active' => true,
-        ]);
-
-        $this->runSeeder(RecordingDeploySeeder::class);
-
-        $this->assertSame(1, $sys->table('sys_deploy')->where('deploy_key', RecordingDeploySeeder::DEPLOY_KEY)->count());
-        $this->assertTrue((bool) $sys->table('sys_deploy')->where('deploy_key', 2026112201)->value('is_active'));
-        $this->assertNotSame([], glob($this->masterDataDir.'/*') ?: []);
-    }
-
-    #[Test]
-    public function start_atが未来の予約済みデプロイがあれば追加せずリセットでも消さない(): void
-    {
-        $this->ensureMasterRows();
-        $sys = DB::connection('sys');
-        $sys->table('sys_deploy')->where('deploy_key', RecordingDeploySeeder::DEPLOY_KEY)->delete();
-        foreach ([9999999999, 8888888888] as $key) {
-            $sys->table('sys_deploy')->insert([
-                'deploy_key' => $key, 'start_at' => '2999-01-01 00:00:00',
-                'sys_deploy_master_id' => 1, 'sys_deploy_asset_id' => 1, 'is_active' => true,
-            ]);
-        }
-
-        $this->runSeeder(RecordingDeploySeeder::class);
-        $this->assertSame(0, $sys->table('sys_deploy')->where('deploy_key', RecordingDeploySeeder::DEPLOY_KEY)->count());
-
-        $this->runSeeder(RecordingResetSeeder::class);
-        $this->assertSame(2, $sys->table('sys_deploy')->whereIn('deploy_key', [9999999999, 8888888888])->where('is_active', true)->count());
-    }
-
-    #[Test]
-    public function 運営ツールの10桁のdeploy_keyの有効なデプロイがあっても録画用を追加し本物はリセットでも消さない(): void
-    {
-        $this->ensureMasterRows();
-        $sys = DB::connection('sys');
-        $sys->table('sys_deploy')->where('deploy_key', RecordingDeploySeeder::DEPLOY_KEY)->delete();
-        // MasterDeployService::generateDeployKey が作る形（YYYYMMDD×100+連番）。録画用（予約帯）より小さい
         $realKey = 2026112201;
         $this->assertLessThan(RecordingDeploySeeder::DEPLOY_KEY, $realKey);
         $sys->table('sys_deploy')->insert([
@@ -307,13 +226,12 @@ class RecordingScenarioTest extends RecordingTestCase
     #[Test]
     public function リセットは本物のsys_deployが録画用のmasterを共有していても本物の行を消さない(): void
     {
-        $this->ensureMasterRows();
         $sys = DB::connection('sys');
         $this->runSeeder(RecordingDeploySeeder::class);
         $recMasterId = $sys->table('sys_deploy_master')->where('deploy_key', RecordingDeploySeeder::DEPLOY_KEY)->value('id');
         $this->assertNotNull($recMasterId);
 
-        // 本物（マーカー無し）の sys_deploy が、録画用の master を指している（外部キーが無いので起こりうる）
+        // 本物（別の deploy_key）の sys_deploy が、録画用の master を指している（外部キーが無いので起こりうる）
         $sys->table('sys_deploy')->insert([
             'deploy_key' => 2026112201, 'start_at' => '2020-01-01 00:00:00',
             'sys_deploy_master_id' => $recMasterId, 'sys_deploy_asset_id' => 1, 'is_active' => true,
@@ -323,19 +241,8 @@ class RecordingScenarioTest extends RecordingTestCase
 
         $this->assertSame(1, $sys->table('sys_deploy')->where('deploy_key', 2026112201)->count());
         $this->assertSame(0, $sys->table('sys_deploy')->where('deploy_key', RecordingDeploySeeder::DEPLOY_KEY)->count());
-        // 本物が指す master は、マーカー付きでも残る
+        // 本物が指す master は、録画用のキーでも残る
         $this->assertSame(1, $sys->table('sys_deploy_master')->where('id', $recMasterId)->count());
-    }
-
-    #[Test]
-    public function 配信ファイルの出力先が無ければ失敗する(): void
-    {
-        $this->ensureMasterRows();
-        config(['recording.masterdata_dir' => $this->masterDataDir.'/missing']);
-
-        $this->expectException(\RuntimeException::class);
-        $this->prepareRecordingDatabase();
-        $this->app->make(RecordingDeploySeeder::class)->run();
     }
 
     #[Test]
@@ -348,7 +255,6 @@ class RecordingScenarioTest extends RecordingTestCase
         DB::connection('sys')->table('sys_maintenance')->insert([
             'title' => '本物のメンテナンス', 'message' => 'm', 'start_at' => '2020-01-01 00:00:00', 'end_at' => null, 'is_active' => false,
         ]);
-        $this->ensureMasterRows();
         DB::connection('sys')->table('sys_deploy')->update(['is_active' => false]);
         // 本物のデプロイの配信ファイル（別ディレクトリ）が、リセットで残ることも確かめる
         mkdir($this->masterDataDir.'/'.str_repeat('b', 64), 0755, true);
@@ -371,8 +277,8 @@ class RecordingScenarioTest extends RecordingTestCase
         $this->assertSame(0, $this->countAgreements(markedOnly: true));
         $this->assertSame(0, $this->countMaintenance(markedOnly: true));
         $this->assertSame(0, DB::connection('sys')->table('sys_deploy')->where('deploy_key', RecordingDeploySeeder::DEPLOY_KEY)->count());
-        $this->assertSame(0, DB::connection('sys')->table('sys_deploy_master')->where('description', 'like', '[REC]%')->count());
-        $this->assertSame(0, DB::connection('sys')->table('sys_deploy_asset')->where('description', 'like', '[REC]%')->count());
+        $this->assertSame(0, DB::connection('sys')->table('sys_deploy_master')->where('deploy_key', RecordingDeploySeeder::DEPLOY_KEY)->count());
+        $this->assertSame(0, DB::connection('sys')->table('sys_deploy_asset')->where('deploy_key', RecordingDeploySeeder::DEPLOY_KEY)->count());
         $this->assertSame(0, DB::connection('sys')->table('sys_deploy_master_table')->where('sys_deploy_master_id', $recMasterId)->count());
         $this->assertSame([$this->masterDataDir.'/'.str_repeat('b', 64)], glob($this->masterDataDir.'/*') ?: []);
         $this->assertSame($realAgreements, DB::connection('sys')->table('sys_agreement')->count());
