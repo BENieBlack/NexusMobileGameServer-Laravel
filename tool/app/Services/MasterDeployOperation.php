@@ -22,7 +22,8 @@ use Throwable;
  * - 版の DB の確定（`version_db`）: 既存の使える DB の再利用・孤児の採用・成果物の行データからの新規作成（6.6）
  * - schedule キーの破棄の失敗は成功のまま警告にする（3.6）
  *
- * MasterBuildRunner は別のクラスで、この基底クラスと同じ規則を自分で持つ（統合は未実施。実装の重複は残っている）。
+ * MasterBuildRunner もこの基底を継承する（start_at の検査・実行記録の更新・COMMIT 不明の確認・schedule キーの破棄などを共有）。
+ * build は排他・実行記録の流れ（run() 内）と失敗時の DROP の範囲が違うため、runLocked・failRun は使わず自前で持つ。
  */
 abstract class MasterDeployOperation
 {
@@ -199,7 +200,10 @@ abstract class MasterDeployOperation
         }
     }
 
-    private function createRun(string $kind, ?int $admAccountId, ?int $deployKey): int
+    /**
+     * @param  array<string, mixed>  $extra  kind ごとの追加列（build の mode など）
+     */
+    protected function createRun(string $kind, ?int $admAccountId, ?int $deployKey, array $extra = []): int
     {
         $now = $this->nowString();
         // ロックを取れているので、残っている古い running はプロセスが落ちた跡として aborted に直す
@@ -216,6 +220,7 @@ abstract class MasterDeployOperation
             'started_at' => $now,
             'created_at' => $now,
             'updated_at' => $now,
+            ...$extra,
         ]);
     }
 

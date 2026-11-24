@@ -42,7 +42,7 @@ DB 接続・マイグレーションの置き場所は [database.md](./database.
 
 ## 初回セットアップ
 
-`./command/setup.sh`（`make install`）は現状使えない（「よくある詰まりどころ」参照）。手で次を実行する。
+`./command/setup.sh`（`make install`）は未検証（「よくある詰まりどころ」参照）。確実なのは次の手順。
 
 ```bash
 cp .env.example .env          # APP_KEY を設定する（例: base64:$(openssl rand -base64 32)）
@@ -158,4 +158,4 @@ docker compose exec -T api-php grep 'App.Adapters' /tmp/cov.txt
 - **通知が届かない**: `api-queue` が動いているか（`docker compose ps`）、`.env` が `QUEUE_CONNECTION=redis` / `REVERB_HOST=api-reverb` になっているかを見る（`.env.example` 参照）。ジョブの処理状況は `docker compose logs api-queue`
 - **`.env` を書き換えたのに反映されない**: `.env` は単一ファイルの bind マウントで、起動時のファイル実体に固定される。ファイルを置き換える保存方法だとコンテナは古い内容を読み続けるので、`make down` → `make up`。`config:cache` 済みなら `config:clear` も要る
 - **ローカルの管理者アカウントが無い**: 以前の `tool/phpunit.xml` は開発用の `nexus-local-admin` に `migrate:fresh` を流していた。今は tool のテストは専用の `nexus-testing-*` を使うので消えないが、それ以前に消えた環境では `AdminAccountSeeder` を流し直す（初回セットアップの最後の行）
-- **`./command/setup.sh` が途中で止まる**: 旧コンテナ名（db-sys, db-trx1 など）を前提にしており、コンテナを `down --volumes` で消した後の存在確認で失敗する。使わずに「初回セットアップ」の手順で進める。`api/tests/setup-test-db.sh` も同じく旧構成のままで使えない
+- **`./command/setup.sh` は未検証**: コンテナ名・DB 名は現行構成（db-system・db-master・db-admin・db-tool・db-shard*）に合わせたが、全ボリュームを消す破壊的なスクリプトのため通しでは確かめていない。確実なのは「初回セットアップ」の手順。旧 `api/tests/setup-test-db.sh` は参照元が無く旧構成のままだったので削除した
