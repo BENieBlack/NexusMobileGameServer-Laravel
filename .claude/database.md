@@ -30,7 +30,8 @@ API（api/）の接続は `api/config/database.php`、Tool（tool/）の接続�
 
 ### 書き込みとモデル基底クラス
 
-- 基底モデルは `packages/nexus-core/src/Models/{Sys,Mst,Trx,Log}/_Base*.php`、API側の拡張は `api/app/Models/{Sys,Mst,Trx,Log}/_Base*.php`。
+- Shard の中は、Trx 系（更新する状態。接頭辞 `Trx`、基底 `_BaseTrx`）と Log 系（追記のみの記録。接頭辞 `Log`、基底 `_BaseLog`）を、クラス名の接頭辞と基底で区別する。ディレクトリは DB 単位（Sys / Mst / Shard）で分け、trx と log は同じシャード DB なので同居させる。
+- 基底モデルは `packages/nexus-core/src/Models/{Sys,Mst,Shard}/_Base*.php`、API側の拡張は `api/app/Models/{Sys,Mst,Shard}/_Base*.php`。
 - `_BaseSys` は `sys`、`_BaseMst` は `mst` に固定。`_BaseTrx` / `_BaseLog` は `$connection = null` で、ログイン中プレイヤーのシャードを自動で解決する（未ログイン時は `trx1`）。
 - 書き込みは Repository 経由で `executeWithTransaction()` の中で行う（Model の直接 save は例外。詳細は architecture.md）。`mst` は読み取り専用で、シーダーだけ `_BaseMst::allowWrites()` で書く。
 

@@ -6,7 +6,7 @@ use App\Domain\_BaseUseCase;
 use App\Domain\Mailbox\Responses\OpenResponse;
 use App\Exceptions\GameErrorCode;
 use App\Exceptions\GameException;
-use App\Repositories\Trx\TrxMailboxRepository;
+use App\Repositories\Shard\TrxMailboxRepository;
 
 /**
  * OpenUseCase

@@ -36,7 +36,7 @@
 
 | 場所 | 直し方 |
 | --- | --- |
-| `App\Models\Trx\TrxDiamond` | `$fillable`・`$casts` の `free_amount`、`getFreeAmount()`・`setFreeAmount()`、クラスコメントの `free_amount` を削除。`ReturnedAsUpdatedResource` を `ReturnedAsSingleUpdatedResource` に替える（api.md 3 節。`UpdatedResourceModelsTest` の EXPECTED の集合は変わらない。同じ 7 モデル） |
+| `App\Models\Shard\TrxDiamond` | `$fillable`・`$casts` の `free_amount`、`getFreeAmount()`・`setFreeAmount()`、クラスコメントの `free_amount` を削除。`ReturnedAsUpdatedResource` を `ReturnedAsSingleUpdatedResource` に替える（api.md 3 節。`UpdatedResourceModelsTest` の EXPECTED の集合は変わらない。同じ 7 モデル） |
 | `Nexus\Core\Resource\DataTransferObjects\DiamondBalance` | `freeAmount`・`getFreeAmount()`・`setFreeAmount()`・`getTotalAmount()`、`fromArray` / `toArray` の `free_amount`・`total_amount` を削除 |
 | `DiamondBalanceAdapter`・`DiamondRepositoryAdapter` | `free_amount` の変換・保存の行を削除 |
 | `Nexus\Core\Resource\Services\DiamondService` | 有償だけの形にする（sequence.md 2 節）。`addDiamond` の `isPaid`、`findBalance` の `free_amount`・`total_amount`、`consumeFreeThenPaidDiamond`・`validateTotalBalance` を無くす |

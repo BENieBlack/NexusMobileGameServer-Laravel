@@ -2,8 +2,8 @@
 
 namespace App\Console\Commands\Billing;
 
-use App\Models\Log\LogInAppPurchase;
-use App\Repositories\Log\LogInAppPurchaseRepository;
+use App\Models\Shard\LogInAppPurchase;
+use App\Repositories\Shard\LogInAppPurchaseRepository;
 use Illuminate\Console\Command;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;

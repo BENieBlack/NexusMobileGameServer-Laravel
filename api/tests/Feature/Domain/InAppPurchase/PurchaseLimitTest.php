@@ -6,7 +6,7 @@ use App\Domain\InAppPurchase\Services\InAppPurchaseValidationService;
 use App\Exceptions\GameErrorCode;
 use App\Exceptions\GameException;
 use App\Models\Mst\MstInAppPurchase;
-use App\Models\Trx\TrxInAppPurchase;
+use App\Models\Shard\TrxInAppPurchase;
 use App\Persistence\ApiSession;
 use Illuminate\Support\Facades\DB;
 use Nexus\Core\Utilities\ClockUtility;

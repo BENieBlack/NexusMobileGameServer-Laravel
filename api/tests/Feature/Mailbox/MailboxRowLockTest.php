@@ -5,7 +5,7 @@ namespace Tests\Feature\Mailbox;
 use App\Console\Commands\Mailbox\DeleteExpiredCommand;
 use App\Domain\Mailbox\UseCases\LockUseCase;
 use App\Exceptions\GameException;
-use App\Models\Trx\TrxMailbox;
+use App\Models\Shard\TrxMailbox;
 use App\Persistence\ApiSession;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\DB;

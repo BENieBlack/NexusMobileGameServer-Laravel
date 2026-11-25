@@ -3,7 +3,7 @@
 namespace App\Domain\InAppPurchase\Services;
 
 use App\Models\Mst\MstInAppPurchase;
-use App\Repositories\Trx\TrxInAppPurchaseRepository;
+use App\Repositories\Shard\TrxInAppPurchaseRepository;
 
 /**
  * InAppPurchaseDiamondService

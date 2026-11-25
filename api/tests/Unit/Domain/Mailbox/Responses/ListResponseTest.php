@@ -5,7 +5,7 @@ namespace Tests\Unit\Domain\Mailbox\Responses;
 use App\Domain\Mailbox\Responses\ListResponse;
 use App\Models\Mst\MstMailbox;
 use App\Models\Mst\MstMailboxContent;
-use App\Models\Trx\TrxMailbox;
+use App\Models\Shard\TrxMailbox;
 use Nexus\Core\Support\CustomCollection;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;

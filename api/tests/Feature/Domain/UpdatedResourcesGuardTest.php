@@ -3,8 +3,8 @@
 namespace Tests\Feature\Domain;
 
 use App\Domain\DoesNotReturnUpdatedResources;
-use App\Models\Trx\TrxItem;
-use App\Repositories\Trx\TrxItemRepository;
+use App\Models\Shard\TrxItem;
+use App\Repositories\Shard\TrxItemRepository;
 use App\Traits\UseCaseTrait;
 use Illuminate\Support\Facades\DB;
 use LogicException;

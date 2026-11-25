@@ -3,7 +3,7 @@
 namespace Nexus\Core\UnitOfWork\Persistence\QueryManager;
 
 use Illuminate\Support\Facades\DB;
-use Nexus\Core\Models\Trx\_BaseTrx;
+use Nexus\Core\Models\Shard\_BaseTrx;
 
 /**
  * BatchExecutor

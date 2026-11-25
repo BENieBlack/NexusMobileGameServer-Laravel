@@ -4,7 +4,7 @@ namespace App\Repositories\Mst;
 
 use App\Models\Mst\MstLoginBonus;
 use App\Models\Mst\MstLoginBonusContent;
-use App\Repositories\Trx\TrxLoginBonusRepository;
+use App\Repositories\Shard\TrxLoginBonusRepository;
 use Nexus\Core\Utilities\ClockUtility;
 use NexusEvent\Constants\EventContentType;
 use NexusEvent\Services\EventPeriodResolver;

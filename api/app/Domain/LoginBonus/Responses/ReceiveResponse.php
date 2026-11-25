@@ -5,7 +5,7 @@ namespace App\Domain\LoginBonus\Responses;
 use App\Domain\_BaseResponse;
 use App\Domain\LoginBonus\Support\BuildsCalendarStage;
 use App\Domain\ReturnsUpdatedResources;
-use App\Models\Trx\TrxVipLoginBonus;
+use App\Models\Shard\TrxVipLoginBonus;
 use App\Traits\HasUpdatedResources;
 use Nexus\Core\Resource\DataTransferObjects\Resource;
 

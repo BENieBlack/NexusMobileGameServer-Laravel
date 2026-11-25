@@ -2,11 +2,11 @@
 
 namespace Nexus\Core\UnitOfWork\Persistence;
 
-use Nexus\Core\Models\Log\_BaseLog;
+use Nexus\Core\Models\Shard\_BaseLog;
 use Nexus\Core\Pitr\Logger\TrxChangeLogger;
 use Nexus\Core\Repositories\_BaseRepositoryInterface;
-use Nexus\Core\Repositories\Log\_BaseLogRepository;
-use Nexus\Core\Repositories\Trx\_BaseTrxRepository;
+use Nexus\Core\Repositories\Shard\_BaseLogRepository;
+use Nexus\Core\Repositories\Shard\_BaseTrxRepository;
 use Nexus\Core\UnitOfWork\Contracts\QueryManagerInterface;
 use Nexus\Core\UnitOfWork\Persistence\QueryManager\BatchExecutor;
 use Nexus\Core\UnitOfWork\Persistence\QueryManager\OperationCollector;

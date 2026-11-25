@@ -196,7 +196,7 @@ interface VipLoginBonusRepositoryInterface
 #### TrxVipLoginBonusHistoryRepository
 
 ```php
-namespace App\Repositories\Trx;
+namespace App\Repositories\Shard;
 
 interface VipLoginBonusHistoryRepositoryInterface
 {

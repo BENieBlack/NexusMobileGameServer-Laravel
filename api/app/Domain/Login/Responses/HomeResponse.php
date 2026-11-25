@@ -3,13 +3,13 @@
 namespace App\Domain\Login\Responses;
 
 use App\Domain\_BaseResponse;
+use App\Models\Shard\TrxDiamond;
+use App\Models\Shard\TrxEquipment;
+use App\Models\Shard\TrxItem;
+use App\Models\Shard\TrxStamina;
+use App\Models\Shard\TrxUnit;
+use App\Models\Shard\TrxWallet;
 use App\Models\Sys\SysPlayer;
-use App\Models\Trx\TrxDiamond;
-use App\Models\Trx\TrxEquipment;
-use App\Models\Trx\TrxItem;
-use App\Models\Trx\TrxStamina;
-use App\Models\Trx\TrxUnit;
-use App\Models\Trx\TrxWallet;
 use Nexus\Core\Resource\DataTransferObjects\Resource;
 
 /**

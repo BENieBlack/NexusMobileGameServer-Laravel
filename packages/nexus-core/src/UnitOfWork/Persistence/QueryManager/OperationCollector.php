@@ -3,13 +3,13 @@
 namespace Nexus\Core\UnitOfWork\Persistence\QueryManager;
 
 use Illuminate\Database\Eloquent\Model;
-use Nexus\Core\Models\Log\_BaseLog;
+use Nexus\Core\Models\Shard\_BaseLog;
+use Nexus\Core\Models\Shard\_BaseTrx;
 use Nexus\Core\Models\Sys\_BaseSys;
-use Nexus\Core\Models\Trx\_BaseTrx;
 use Nexus\Core\Repositories\_BaseRepositoryInterface;
-use Nexus\Core\Repositories\Log\_BaseLogRepository;
+use Nexus\Core\Repositories\Shard\_BaseLogRepository;
+use Nexus\Core\Repositories\Shard\_BaseTrxRepository;
 use Nexus\Core\Repositories\Sys\_BaseSysRepository;
-use Nexus\Core\Repositories\Trx\_BaseTrxRepository;
 
 /**
  * OperationCollector

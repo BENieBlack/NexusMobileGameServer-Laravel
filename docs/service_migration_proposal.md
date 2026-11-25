@@ -154,7 +154,7 @@ api/app/Domain/Item/Services/
 **移行後の構造:**
 - パッケージ層: `nexus-resource/src/Services/DiamondService.php` - DTOベースのビジネスロジック
 - Domain層: `api/app/Domain/InAppPurchase/Services/InAppPurchaseDiamondBalanceService.php` - Wrapperパターン + FIFO管理追加機能
-- Repository実装: `api/app/Repositories/Trx/DiamondRepositoryAdapter.php`
+- Repository実装: `api/app/Repositories/Shard/DiamondRepositoryAdapter.php`
 
 ##### ダイヤの残高ロジックはnexus-resourceへ移した（2026-08-20）
 

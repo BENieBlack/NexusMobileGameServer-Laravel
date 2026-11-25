@@ -17,13 +17,13 @@ class UpdatedResourceModelsTest extends TestCase
 {
     /** @var list<string> */
     private const EXPECTED = [
+        'App\Models\Shard\TrxDiamond',
+        'App\Models\Shard\TrxEquipment',
+        'App\Models\Shard\TrxItem',
+        'App\Models\Shard\TrxStamina',
+        'App\Models\Shard\TrxUnit',
+        'App\Models\Shard\TrxWallet',
         'App\Models\Sys\SysPlayer',
-        'App\Models\Trx\TrxDiamond',
-        'App\Models\Trx\TrxEquipment',
-        'App\Models\Trx\TrxItem',
-        'App\Models\Trx\TrxStamina',
-        'App\Models\Trx\TrxUnit',
-        'App\Models\Trx\TrxWallet',
     ];
 
     #[Test]
@@ -31,7 +31,7 @@ class UpdatedResourceModelsTest extends TestCase
     {
         $actual = [];
 
-        foreach (['Sys', 'Mst', 'Trx', 'Log'] as $group) {
+        foreach (['Sys', 'Mst', 'Shard'] as $group) {
             foreach (glob(dirname(__DIR__, 2)."/app/Models/{$group}/*.php") ?: [] as $file) {
                 $class = "App\\Models\\{$group}\\".basename($file, '.php');
 

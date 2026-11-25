@@ -3,8 +3,8 @@
 namespace App\Domain\LoginBonus\Services;
 
 use App\Domain\LoginBonus\Contracts\VipLoginBonusReceiveRecorderInterface;
-use App\Repositories\Log\LogVipLoginBonusReceiveRepository;
-use App\Repositories\Trx\TrxVipLoginBonusRepository;
+use App\Repositories\Shard\LogVipLoginBonusReceiveRepository;
+use App\Repositories\Shard\TrxVipLoginBonusRepository;
 use Nexus\Core\Support\CustomCollection;
 
 /**

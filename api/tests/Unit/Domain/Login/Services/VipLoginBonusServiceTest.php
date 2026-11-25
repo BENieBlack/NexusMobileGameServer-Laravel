@@ -6,7 +6,7 @@ use App\Domain\Login\Services\VipLoginBonusService;
 use App\Models\Mst\MstVipLoginBonus;
 use App\Models\Mst\MstVipLoginBonusContent;
 use App\Persistence\ApiSession;
-use App\Repositories\Trx\TrxVipLoginBonusRepository;
+use App\Repositories\Shard\TrxVipLoginBonusRepository;
 use Illuminate\Support\Facades\DB;
 use Nexus\Core\UnitOfWork\Contracts\QueryManagerInterface;
 use Nexus\Core\Utilities\ClockUtility;

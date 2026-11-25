@@ -16,7 +16,7 @@ use PHPUnit\Framework\TestCase;
  * 定義し、api/app 側でAdapterを実装してコンテナでバインドする。
  *
  * 例: Nexus\Core\ResourceDelivery\Contracts\UnitRepositoryInterface
- *     ← App\Repositories\Trx\UnitRepositoryAdapter
+ *     ← App\Repositories\Shard\UnitRepositoryAdapter
  */
 class PackageIndependenceTest extends TestCase
 {

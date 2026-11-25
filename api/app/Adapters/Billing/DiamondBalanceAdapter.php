@@ -2,7 +2,7 @@
 
 namespace App\Adapters\Billing;
 
-use App\Models\Trx\TrxDiamond;
+use App\Models\Shard\TrxDiamond;
 use Nexus\Core\Resource\DataTransferObjects\DiamondBalance;
 
 /**

@@ -3,7 +3,7 @@
 namespace Tests\Unit\Adapters\Item;
 
 use App\Adapters\Item\ItemAdapter;
-use App\Models\Trx\TrxItem;
+use App\Models\Shard\TrxItem;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 

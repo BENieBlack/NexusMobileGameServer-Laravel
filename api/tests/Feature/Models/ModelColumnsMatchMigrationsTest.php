@@ -28,12 +28,11 @@ class ModelColumnsMatchMigrationsTest extends TestCase
 {
     use RefreshMultipleDatabases;
 
-    /** 名前空間 → テーブルを引く接続（trx / log は、どのシャードも同じ定義なので trx1 で見る） */
+    /** 名前空間 → テーブルを引く接続（Shard（Trx 系・Log 系）は、どのシャードも同じ定義なので trx1 で見る） */
     private const CONNECTIONS = [
         'Mst' => 'mst',
         'Sys' => 'sys',
-        'Trx' => 'trx1',
-        'Log' => 'trx1',
+        'Shard' => 'trx1',
     ];
 
     /**

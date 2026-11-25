@@ -2,8 +2,8 @@
 
 namespace App\Console\Commands\Mailbox;
 
-use App\Models\Trx\TrxMailbox;
-use App\Repositories\Trx\TrxMailboxRepository;
+use App\Models\Shard\TrxMailbox;
+use App\Repositories\Shard\TrxMailboxRepository;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;

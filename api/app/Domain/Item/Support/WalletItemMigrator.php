@@ -2,9 +2,9 @@
 
 namespace App\Domain\Item\Support;
 
-use App\Repositories\Trx\TrxItemRepository;
-use App\Repositories\Trx\TrxWalletBalanceRepository;
-use App\Repositories\Trx\TrxWalletRepository;
+use App\Repositories\Shard\TrxItemRepository;
+use App\Repositories\Shard\TrxWalletBalanceRepository;
+use App\Repositories\Shard\TrxWalletRepository;
 use Illuminate\Support\Facades\DB;
 use Nexus\Core\Utilities\ClockUtility;
 

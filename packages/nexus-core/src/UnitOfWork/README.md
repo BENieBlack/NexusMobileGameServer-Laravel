@@ -37,7 +37,7 @@ Edit `config/unit-of-work.php` to customize:
 
 ```php
 use LaravelUnitOfWork\Contracts\QueryManagerInterface;
-use LaravelPersistence\Repositories\Trx\TrxPlayerRepository;
+use LaravelPersistence\Repositories\Shard\TrxPlayerRepository;
 
 // Get the QueryManager instance
 $queryManager = app(QueryManagerInterface::class);
@@ -57,7 +57,7 @@ $queryManager->flush();
 Your repository classes (extending from `laravel-persistence-core`) will automatically integrate with the QueryManager when you use the Unit of Work trait:
 
 ```php
-use LaravelPersistence\Repositories\Trx\_BaseTrxRepository;
+use LaravelPersistence\Repositories\Shard\_BaseTrxRepository;
 use LaravelUnitOfWork\Traits\UsesUnitOfWork;
 
 class TrxPlayerRepository extends _BaseTrxRepository

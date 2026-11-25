@@ -3,7 +3,7 @@
 namespace Tests\Unit\Adapters\Gacha;
 
 use App\Adapters\Gacha\GachaProgressAdapter;
-use App\Models\Trx\TrxGacha;
+use App\Models\Shard\TrxGacha;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 

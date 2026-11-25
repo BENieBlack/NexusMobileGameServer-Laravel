@@ -70,7 +70,7 @@ public function handle(int $sysPlayerId, int $trxUnitId, string $mstItemId, int 
 
 - リレーション（`$trxMailbox->mstMailbox` など）を使うときは、Repository で `with()` して先にまとめて読む。複数件の一覧でリレーションを遅延読み込みすると1件ごとに SELECT が走る（N+1）ので、本番以外では `Model::preventLazyLoading()`（`AppServiceProvider`）が例外にする。リレーション経由の `->where()->first()` を、ループの中で呼ばない。
 
-- `api/app/Repositories/{Sys,Mst,Trx,Log}/`、基底は同じディレクトリの `_BaseXxxRepository`（中身は `packages/nexus-core/src/Repositories/`）。`$modelClass` を指定する。
+- `api/app/Repositories/{Sys,Mst,Shard}/`、基底は同じディレクトリの `_BaseXxxRepository`（中身は `packages/nexus-core/src/Repositories/`）。`$modelClass` を指定する。
 - Repository はテーブル（Model）と 1 対 1（`{Model}Repository`）。複数のテーブルを組で読み書きするために Repository を作らない（変更理由と責務の単位をテーブルに揃えるため。組で書く業務は Service が複数 Repository を呼ぶ）。複数 Repository の組み合わせは Service（`Domain/{Context}/Services/`）で行う（RepositoryOneToOneModelTest）。
   - OK: `TrxVipLoginBonusRepository` と `LogVipLoginBonusReceiveRepository` を Service が呼び、trx と log を組で書く。
   - NG: trx と log を組で書くための `VipLoginBonusReceiveRecordRepository` を作る。
@@ -82,18 +82,19 @@ public function handle(int $sysPlayerId, int $trxUnitId, string $mstItemId, int 
 - 基底に `cacheRemember()` / `newQuery()` / `insert()` / `update()` / `delete()` は無い。
 - パッケージの Repository interface を実装するクラスは `*RepositoryAdapter`（契約単位なので、Model と 1 対 1 の規則の対象外）。Model→DTO 変換は自分で書かず `App\Adapters\{Context}\*Adapter` に任せる（ConverterLocationTest）。例: `api/app/Repositories/Sys/GuildRepositoryAdapter.php` → `api/app/Adapters/Guild/GuildAdapter.php`。
 
-例: `api/app/Repositories/Trx/TrxUnitRepository.php`
+例: `api/app/Repositories/Shard/TrxUnitRepository.php`
 
 ## Model
 
 - 列の読み書きは、モデルの型付き getter / setter を使う。`getAttribute('x')` / `setAttribute('x', ...)` を呼んでよいのは、モデル自身（getter / setter の実装）と、列名が動的になる基盤（`packages/nexus-core` の Repository / UnitOfWork / Pitr）だけ。`$model->free_amount` のようなプロパティでの読み書きも同じ。それ以外は PHPStan の `NoGetAttributeOutsideModelsRule` / `NoModelColumnPropertyAccessRule`（`api/phpstan/Rules/`）が落とす。リレーション（`$sysFriendApply->sendPlayer`）は対象外。足りない getter はモデルに追加する。
 
-- `api/app/Models/{Sys,Mst,Trx,Log}/`、`_BaseSys` / `_BaseMst` / `_BaseTrx` / `_BaseLog` を継承する（App側の基底は nexus-core の基底にシャード解決を足したもの。共通処理は `packages/nexus-core/src/Models/_BaseModel.php`）。
-- `$table` を書く。`$connection` は書かない（基底が持つ。Trx / Log は null にしてシャードを自動解決する）。
+- Shard の中は、Trx 系（更新する状態。接頭辞 `Trx`、基底 `_BaseTrx`）と Log 系（追記のみの記録。接頭辞 `Log`、基底 `_BaseLog`）を、クラス名の接頭辞と基底で区別する。ディレクトリは DB 単位（Sys / Mst / Shard）で分け、trx と log は同じシャード DB なので同居させる。
+- `api/app/Models/{Sys,Mst,Shard}/`、`_BaseSys` / `_BaseMst` / `_BaseTrx` / `_BaseLog` を継承する（App側の基底は nexus-core の基底にシャード解決を足したもの。共通処理は `packages/nexus-core/src/Models/_BaseModel.php`）。
+- `$table` を書く。`$connection` は書かない（基底が持つ。Shard の Trx 系・Log 系は null にしてシャードを自動解決する）。
 - テーブルに実在するカラムだけを持つ。`$fillable` / `$casts` / `@property` に存在しない列を書かない。リレーションは定義（`trxPlayer(): BelongsTo`）までにして、それを返す getter（`getPlayer()` など）を作らない。
 - カラムごとに `getXxx()` / `setXxx()` を書き、中身は `getAttribute()` / `setAttribute()`。
 - 日時は `'Y-m-d H:i:s'` の文字列のまま持つ。`$casts` に datetime / date を書かない。`_BaseModel::getDates()` は `[]` を返す。Carbon が要るときは `getDateAttribute()`、文字列は `getDateAttributeString()`。
-- 複合主キーは `$primaryKey` を配列にし、`CompositePrimaryKeyTrait` と `$incrementing = false`（`api/app/Models/Trx/TrxItem.php`）。
+- 複合主キーは `$primaryKey` を配列にし、`CompositePrimaryKeyTrait` と `$incrementing = false`（`api/app/Models/Shard/TrxItem.php`）。
 - Mst の `$fillable` は `deploy_key` から始める。
 - `save()` / `update()` / `delete()` / `forceDelete()`（`create()` も `save()` を通る）は `DirectWriteNotAllowedException`、Mst は `MasterDataReadOnlyException`。NoDirectEloquentWriteTest が静的にも検出する。書き込みは Repository 経由。
 - `toArray()` と `toResponseArray()` の使い分け: Model の `toArray()` は DB の列をそのまま出す内部用（ログ・デバッグなど）で、API のレスポンスには使わない。API に出す配列は必ず `toResponseArray()`（日付の ISO8601 化と内部列の除外をする）。Response / DTO の `toArray()` は Laravel の `Arrayable` の契約で、API の形そのものを返す。Response の中で Model を配列にするときは `toResponseArray()` を呼ぶ。
@@ -101,7 +102,7 @@ public function handle(int $sysPlayerId, int $trxUnitId, string $mstItemId, int 
 - 定数は Model に置かず `Domain/{Context}/Constants/` かパッケージの `Constants/` に置く。
 - 多言語は l10n。`<親>__l10n` テーブルにもモデルを作り、親から `l10n(): HasMany` で引く（`api/app/Models/Mst/MstMessageL10n.php`）。i18n は使わない。
 
-例: `api/app/Models/Trx/TrxUnit.php`
+例: `api/app/Models/Shard/TrxUnit.php`
 
 ## Response
 

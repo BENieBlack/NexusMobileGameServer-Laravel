@@ -2,7 +2,7 @@
 
 namespace App\Domain\Item\Contracts;
 
-use App\Models\Trx\TrxItem;
+use App\Models\Shard\TrxItem;
 
 /**
  * ItemInventoryInterface

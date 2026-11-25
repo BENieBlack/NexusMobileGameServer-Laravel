@@ -5,7 +5,7 @@ namespace Tests\Feature\Mailbox;
 use App\Domain\Mailbox\UseCases\ReceiveAllUseCase;
 use App\Domain\Mailbox\UseCases\ReceiveUseCase;
 use App\Models\Mst\MstMailboxContent;
-use App\Models\Trx\TrxMailbox;
+use App\Models\Shard\TrxMailbox;
 use App\Persistence\ApiSession;
 use Illuminate\Support\Facades\DB;
 use Nexus\Core\Models\_BaseModel;

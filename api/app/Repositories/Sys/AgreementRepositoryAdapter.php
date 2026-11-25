@@ -3,8 +3,8 @@
 namespace App\Repositories\Sys;
 
 use App\Adapters\Agreement\AgreementAdapter;
-use App\Models\Trx\TrxAgreement;
-use App\Repositories\Trx\TrxAgreementRepository;
+use App\Models\Shard\TrxAgreement;
+use App\Repositories\Shard\TrxAgreementRepository;
 use NexusAgreement\Repositories\AgreementRepositoryInterface;
 
 /**

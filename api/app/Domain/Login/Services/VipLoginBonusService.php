@@ -4,8 +4,8 @@ namespace App\Domain\Login\Services;
 
 use App\Domain\LoginBonus\Contracts\VipLoginBonusReceiveRecorderInterface;
 use App\Repositories\Mst\VipLoginBonusRepositoryInterface;
+use App\Repositories\Shard\VipLoginBonusHistoryRepositoryInterface;
 use App\Repositories\Sys\SysPlayerRepository;
-use App\Repositories\Trx\VipLoginBonusHistoryRepositoryInterface;
 use Nexus\Core\ResourceDelivery\Services\ResourceDeliveryService;
 use Nexus\Core\Support\CustomCollection;
 use Nexus\Core\Utilities\ClockUtility;

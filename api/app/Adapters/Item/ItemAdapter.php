@@ -2,7 +2,7 @@
 
 namespace App\Adapters\Item;
 
-use App\Models\Trx\TrxItem;
+use App\Models\Shard\TrxItem;
 use Nexus\Core\Resource\DataTransferObjects\Item;
 
 /**

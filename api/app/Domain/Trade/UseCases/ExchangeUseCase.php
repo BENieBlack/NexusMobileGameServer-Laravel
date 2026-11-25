@@ -6,7 +6,7 @@ use App\Domain\_BaseUseCase;
 use App\Domain\Trade\Responses\ExchangeResponse;
 use App\Domain\Trade\Support\TradeExceptionTranslator;
 use App\Exceptions\GameException;
-use App\Repositories\Log\LogTradeRepository;
+use App\Repositories\Shard\LogTradeRepository;
 use NexusTrade\Services\TradeService;
 
 /**

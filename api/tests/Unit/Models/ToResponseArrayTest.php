@@ -4,12 +4,12 @@ namespace Tests\Unit\Models;
 
 use App\Domain\Stamina\Constants\StaminaConst;
 use App\Models\Mst\MstInAppPurchase;
+use App\Models\Shard\TrxDiamondBalance;
+use App\Models\Shard\TrxEquipment;
+use App\Models\Shard\TrxStamina;
+use App\Models\Shard\TrxUnit;
 use App\Models\Sys\SysFriendApply;
 use App\Models\Sys\SysPlayer;
-use App\Models\Trx\TrxDiamondBalance;
-use App\Models\Trx\TrxEquipment;
-use App\Models\Trx\TrxStamina;
-use App\Models\Trx\TrxUnit;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 

@@ -3,8 +3,8 @@
 namespace App\Domain\InAppPurchase\Services;
 
 use App\Models\Mst\MstInAppPurchase;
-use App\Models\Trx\TrxInAppPurchase;
-use App\Repositories\Trx\TrxInAppPurchaseRepository;
+use App\Models\Shard\TrxInAppPurchase;
+use App\Repositories\Shard\TrxInAppPurchaseRepository;
 use Nexus\Core\Utilities\ClockUtility;
 use NexusBilling\Constants\PurchaseLimitResetType;
 

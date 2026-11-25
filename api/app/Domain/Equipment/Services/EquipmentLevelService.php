@@ -7,10 +7,10 @@ use App\Exceptions\GameErrorCode;
 use App\Exceptions\GameException;
 use App\Exceptions\MasterDataException;
 use App\Exceptions\TransactionDataException;
-use App\Models\Trx\TrxEquipment;
+use App\Models\Shard\TrxEquipment;
 use App\Repositories\Mst\MstEquipmentLevelRepository;
 use App\Repositories\Mst\MstEquipmentRepository;
-use App\Repositories\Trx\TrxEquipmentRepository;
+use App\Repositories\Shard\TrxEquipmentRepository;
 use NexusLevel\Services\_BaseLevelService;
 
 /**

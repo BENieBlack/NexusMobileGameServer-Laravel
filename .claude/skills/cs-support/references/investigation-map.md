@@ -49,7 +49,7 @@ DB名は `nexus-{APP_ENV}-{接尾辞}`（ローカルは sys が `nexus-local-sy
 
 1. **レシート検証で落ちていないか** — `nexus-core-billing/src/ApiClients/GooglePlayApiClient.php` / `AppStoreApiClient.php`。ストアAPIの呼び出しに失敗すると `PlatformApiException` になる
 2. **購入と付与が分離している** — `trx_in_app_purchase`（購入記録）と `trx_in_app_purchase_effect`（付与結果）の両方を見る。片方だけあるなら付与処理の途中で失敗している
-3. **ステータス** — `log_action_in_app_purchase.status` は `purchased` / `failed` / `refunded` / `check_availability` を持つ（`api/app/Models/Log/LogInAppPurchase.php`）。申告の購入が `refunded` になっていないか先に確認する
+3. **ステータス** — `log_action_in_app_purchase.status` は `purchased` / `failed` / `refunded` / `check_availability` を持つ（`api/app/Models/Shard/LogInAppPurchase.php`）。申告の購入が `refunded` になっていないか先に確認する
 4. **通貨の内訳** — `trx_wallet` / `trx_wallet_balance`、有償/無償の区別は `trx_diamond` / `trx_diamond_balance`。「石が減っている」は有償・無償どちらが減ったかで扱いが変わる
 
 ---

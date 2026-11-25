@@ -4,8 +4,8 @@ namespace App\Domain\LoginBonus\Services;
 
 use App\Domain\LoginBonus\Contracts\LoginBonusCalendarInterface;
 use App\Domain\LoginBonus\Support\VipLoginBonusReReceiveResult;
-use App\Models\Trx\TrxVipLoginBonus;
-use App\Repositories\Trx\VipLoginBonusHistoryRepositoryInterface;
+use App\Models\Shard\TrxVipLoginBonus;
+use App\Repositories\Shard\VipLoginBonusHistoryRepositoryInterface;
 use Nexus\Core\Utilities\ClockUtility;
 use NexusLogin\DataTransferObjects\LoginBonusHistory;
 use NexusLogin\Repositories\LoginBonusHistoryRepositoryInterface;

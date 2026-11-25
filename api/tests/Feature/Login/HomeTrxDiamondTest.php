@@ -6,7 +6,7 @@ use App\Domain\Diamond\Services\ApiSessionPlatformProvider;
 use App\Models\Mst\MstLoginBonus;
 use App\Models\Mst\MstLoginBonusContent;
 use App\Persistence\ApiSession;
-use App\Repositories\Trx\TrxDiamondRepository;
+use App\Repositories\Shard\TrxDiamondRepository;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\TestResponse;
 use Nexus\Core\Resource\DataTransferObjects\Resource;

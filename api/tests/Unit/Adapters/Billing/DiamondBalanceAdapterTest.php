@@ -3,7 +3,7 @@
 namespace Tests\Unit\Adapters\Billing;
 
 use App\Adapters\Billing\DiamondBalanceAdapter;
-use App\Models\Trx\TrxDiamond;
+use App\Models\Shard\TrxDiamond;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 

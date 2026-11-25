@@ -36,7 +36,7 @@
 | `admin` / `tool` | 運営ツール用（tool/ から使う）。`adm_*` / `tol_*` |
 
 - ログ専用のDB・接続は無い。`log_*` はプレイヤーと同じシャードに書く。
-- trx / log のモデルに `$connection` を書かない。`ApiSession` が解決したシャードに自動で振り分けられる。
+- Shard のモデル（Trx 系・Log 系）に `$connection` を書かない。`ApiSession` が解決したシャードに自動で振り分けられる。
 - マイグレーションは主に `packages/*/database/migrations/{sys,mst,shard}/` に置き、`Schema::create`（接続名なし）で書く。共有の検証環境を作るまでは既存ファイルを書き換えてよい（作る時点で凍結する）。詳細は `.claude/database.md`。
 
 ## 毎回守る規約

@@ -7,7 +7,7 @@ use App\Domain\Mailbox\Constants\Category;
 use App\Domain\Mailbox\Constants\Priority;
 use App\Domain\Mailbox\Responses\ListResponse;
 use App\Domain\Mailbox\Services\MailboxMessageService;
-use App\Repositories\Trx\TrxMailboxRepository;
+use App\Repositories\Shard\TrxMailboxRepository;
 
 /**
  * ListUseCase

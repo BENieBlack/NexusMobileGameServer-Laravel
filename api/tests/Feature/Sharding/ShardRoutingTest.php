@@ -2,10 +2,10 @@
 
 namespace Tests\Feature\Sharding;
 
-use App\Models\Trx\TrxUnit;
+use App\Models\Shard\TrxUnit;
 use App\Persistence\ApiSession;
-use App\Repositories\Log\LogVipPointRepository;
-use App\Repositories\Trx\TrxUnitRepository;
+use App\Repositories\Shard\LogVipPointRepository;
+use App\Repositories\Shard\TrxUnitRepository;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\RefreshMultipleDatabases;
