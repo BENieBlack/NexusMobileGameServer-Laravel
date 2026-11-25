@@ -7,12 +7,16 @@ namespace Nexus\Core\Pitr\Support;
  *
  * シャードへ流すマイグレーションのパスを集める
  *
- * trx / log のマイグレーションは各パッケージが持っている。
+ * trx と log は同じシャードDB（trx1..N）に同居しているので、
+ * マイグレーションは各パッケージの database/migrations/shard/ にまとめて置く。
  * 一覧を手で持つとパッケージを増やすたびに更新が要るため、
  * packages/ を走査して見つける。
  */
 final class ShardMigrationPaths
 {
+    /** シャード用マイグレーションのディレクトリ（base_path() からの相対） */
+    private const DIRECTORY = 'database/migrations/shard';
+
     /**
      * 最後に流すパッケージ
      *
@@ -22,20 +26,19 @@ final class ShardMigrationPaths
     private const LAST_PACKAGES = ['nexus-tidb'];
 
     /**
-     * 指定した種別（trx / log）のマイグレーションパスを返す
+     * シャード用（trx / log）のマイグレーションパスを返す
      *
      * artisan migrate の --path は base_path() からの相対パスで解釈される。
      *
-     * @param  string  $type  'trx' または 'log'
      * @return list<string>
      */
-    public static function find(string $type): array
+    public static function find(): array
     {
         $paths = [];
 
         // アプリ自身が持つマイグレーション
-        if (is_dir(base_path("database/migrations/{$type}"))) {
-            $paths[] = "database/migrations/{$type}";
+        if (is_dir(base_path(self::DIRECTORY))) {
+            $paths[] = self::DIRECTORY;
         }
 
         $packagesDir = base_path('../packages');
@@ -47,7 +50,7 @@ final class ShardMigrationPaths
         $lastPaths = [];
 
         foreach (self::findPackageNames($packagesDir) as $packageName) {
-            $relativePath = "../packages/{$packageName}/database/migrations/{$type}";
+            $relativePath = "../packages/{$packageName}/".self::DIRECTORY;
 
             if (! is_dir(base_path($relativePath))) {
                 continue;

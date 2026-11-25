@@ -275,7 +275,7 @@ Target shards: trx1, trx2, trx3
 新しいシャードにLogDBテーブルを作成します：
 
 ```bash
-docker exec api-php php artisan pitr:migrate --force
+docker exec api-php php artisan trx:migrate --force   # trx と log のテーブルは同じコマンドで作られる
 ```
 
 期待される出力：
@@ -462,7 +462,6 @@ docker exec db-log2 mysqldump -uroot -proot nexus-local-log2 > backup_log2_$(dat
 
 - **ShardMapper**: `packages/nexus-pitr/src/Logger/ShardMapper.php`
 - **TrxMigrateCommand**: `packages/nexus-pitr/src/Commands/TrxMigrateCommand.php`
-- **PitrMigrateCommand**: `packages/nexus-pitr/src/Commands/PitrMigrateCommand.php`
 - **Config**: `api/config/database.php`
 
 ### 動的シャーディングの仕組み
@@ -483,7 +482,7 @@ docker exec db-log2 mysqldump -uroot -proot nexus-local-log2 > backup_log2_$(dat
 3. ✅ **データベース作成** (CREATE DATABASE)
 4. ✅ **テスト用データベース作成** (CREATE DATABASE for testing)
 5. ✅ **phpunit.xml更新** (新しいシャードのテスト環境変数を追加)
-6. ✅ **マイグレーション実行** (trx:migrate, pitr:migrate)
+6. ✅ **マイグレーション実行** (trx:migrate)
 
 **注意事項:**
 - テストを実行する場合は、必ず`api/phpunit.xml`に新しいシャードの設定を追加してください

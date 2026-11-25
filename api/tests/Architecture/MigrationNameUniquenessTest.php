@@ -14,8 +14,8 @@ use PHPUnit\Framework\TestCase;
  * migrationsテーブルに記録する。同じDBへ流すマイグレーションに同名のファイルがあると、
  * 後から流した方は「実行済み」とみなされて黙って飛ばされる。
  *
- * trx と log は同じシャードDBに同居しているため、この2グループはまとめて一意でなければならない。
- * 以前は trx/log に同名の create_*_tables.php があり、log のテーブルが作られていなかった。
+ * trx と log は同じシャードDBに同居しているため、shard ディレクトリの中で一意でなければならない。
+ * 以前は trx/log が別ディレクトリで、同名の create_*_tables.php があり、log のテーブルが作られていなかった。
  */
 class MigrationNameUniquenessTest extends TestCase
 {
@@ -27,7 +27,7 @@ class MigrationNameUniquenessTest extends TestCase
     private const DATABASE_GROUPS = [
         'sys' => ['sys'],
         'mst' => ['mst'],
-        'shard' => ['trx', 'log'],
+        'shard' => ['shard'],
     ];
 
     #[Test]
@@ -57,7 +57,7 @@ class MigrationNameUniquenessTest extends TestCase
             $violations,
             "同じDBへ流すマイグレーションに同名のファイルがあります。後から流した方が飛ばされます:\n"
             .implode("\n", $violations)."\n"
-            .'log 側は *_log_tables.php のように名前を分けてください。'
+            .'log のテーブルを作るファイルは *_log_tables.php のように名前を分けてください。'
         );
     }
 

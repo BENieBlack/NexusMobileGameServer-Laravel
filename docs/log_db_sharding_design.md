@@ -633,16 +633,18 @@ volumes:
 ### 1. 動的マイグレーションコマンド
 
 ```bash
-# すべてのLogDBシャードに対してマイグレーションを実行（DB_SHARD_COUNTに応じて自動）
-php artisan pitr:migrate
+# すべてのシャードに対してマイグレーションを実行（DB_SHARD_COUNTに応じて自動）。
+# trx と log は同じシャードDBなので、log のテーブルも trx:migrate で作る（旧 pitr:migrate は廃止）
+php artisan trx:migrate
 
 # ロールバック
-php artisan pitr:rollback --step=1
+php artisan trx:rollback --step=1
 ```
 
 ### 2. カスタムArtisanコマンド
 
 ```php
+// （設計当時の案。現在は TrxMigrateCommand に統合済み）
 // packages/nexus-pitr/src/Commands/PitrMigrateCommand.php
 
 namespace NexusPitr\Commands;
@@ -678,7 +680,7 @@ class PitrMigrateCommand extends Command
             
             $options = [
                 '--database' => $logConnection,
-                '--path' => 'database/migrations/log',
+                '--path' => 'database/migrations/shard',
             ];
             
             if ($this->option('force')) {
@@ -785,7 +787,7 @@ ALTER TABLE log_trx_change PARTITION BY RANGE (YEAR(created_at) * 100 + MONTH(cr
 
 - Docker Compose: コンテナ数は環境変数で制御
 - コード変更: ShardMapper（動的生成対応）、PitrMigrateCommand（自動マイグレーション）
-- マイグレーション: `php artisan pitr:migrate`で全シャード自動適用
+- マイグレーション: `php artisan trx:migrate`で全シャード自動適用（旧 `pitr:migrate` は廃止）
 
 #### ROI
 
@@ -795,5 +797,5 @@ ALTER TABLE log_trx_change PARTITION BY RANGE (YEAR(created_at) * 100 + MONTH(cr
 
 - ✅ config/database.php: 動的シャーディング対応（DB_SHARD_COUNT環境変数）
 - ✅ ShardMapper: 動的マッピング対応
-- ✅ PitrMigrateCommand: 動的マイグレーション対応
+- ✅ 動的マイグレーション対応（当時の PitrMigrateCommand。現在は TrxMigrateCommand に統合）
 - ✅ ユニットテスト: 動的シャーディングテスト完備

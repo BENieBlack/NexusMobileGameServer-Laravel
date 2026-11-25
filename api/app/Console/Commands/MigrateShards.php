@@ -21,7 +21,7 @@ class MigrateShards extends Command
     protected $signature = 'migrate:shards
                             {--database= : The database connection to use}
                             {--force : Force the operation to run when in production}
-                            {--path=* : The path(s) to the migrations files to be executed (default: 全パッケージのtrxマイグレーション)}
+                            {--path=* : The path(s) to the migrations files to be executed (default: 全パッケージのshardマイグレーション（trx・logのテーブル）)}
                             {--realpath : Indicate any provided migration file paths are pre-resolved absolute paths}
                             {--pretend : Dump the SQL queries that would be run}
                             {--seed : Indicates if the seed task should be re-run}
@@ -34,7 +34,7 @@ class MigrateShards extends Command
      *
      * @var string
      */
-    protected $description = 'Run migrations on all transaction database shards';
+    protected $description = 'Run migrations on all shard databases (trx and log tables)';
 
     /**
      * Execute the console command.
@@ -116,12 +116,12 @@ class MigrateShards extends Command
             '--database' => $connection,
         ];
 
-        // pathが指定されていない場合、デフォルトでtrxディレクトリを使用
+        // pathが指定されていない場合、デフォルトでshardディレクトリ（trx・logのテーブル）を使用
         if ($this->option('path')) {
             $options['--path'] = $this->option('path');
         } else {
-            // パスはpackages/を走査して集める（パッケージのtrxマイグレーションも流す）
-            $options['--path'] = ShardMigrationPaths::find('trx');
+            // パスはpackages/を走査して集める（パッケージのshardマイグレーションも流す）
+            $options['--path'] = ShardMigrationPaths::find();
         }
 
         // オプションを転送

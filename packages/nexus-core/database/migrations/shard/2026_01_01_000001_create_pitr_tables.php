@@ -8,12 +8,12 @@ use Illuminate\Support\Facades\Schema;
 /**
  * PITR用テーブル作成マイグレーション
  *
- * 注意: このマイグレーションは`php artisan pitr:migrate`で実行してください。
- * PitrMigrateCommandが全LogDBシャード（trx1, trx2, ...）に対して自動的に実行します。
+ * 注意: このマイグレーションは`php artisan trx:migrate`で実行してください。
+ * TrxMigrateCommandが全シャード（trx1, trx2, ...）に対して自動的に実行します。
  *
  * 直接実行する場合（非推奨）:
- *   php artisan migrate --database=trx1 --path=database/migrations/log
- *   php artisan migrate --database=trx2 --path=database/migrations/log
+ *   php artisan migrate --database=trx1 --path=database/migrations/shard
+ *   php artisan migrate --database=trx2 --path=database/migrations/shard
  */
 return new class extends Migration
 {
@@ -23,7 +23,7 @@ return new class extends Migration
     public function up(): void
     {
         // 注意: Schema::connection()は使用しない
-        // PitrMigrateCommandが--databaseオプションで接続を指定するため
+        // TrxMigrateCommandが--databaseオプションで接続を指定するため
 
         // ========================================
         // log_change: TrxDB統合変更ログ (PITR用)

@@ -6,32 +6,34 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * LogDB用スタミナログテーブル作成マイグレーション
+ * LogDB用ガチャログテーブル作成マイグレーション
  *
- * 注意: このマイグレーションは`php artisan pitr:migrate`で実行してください。
+ * 注意: このマイグレーションは`php artisan trx:migrate`で実行してください。
  */
 return new class extends Migration
 {
     public function up(): void
     {
         // ========================================
-        // log_change_trx_stamina: スタミナ変更ログ
+        // log_change_trx_gacha: ガチャ進行状況変更ログ
         // ========================================
-        Schema::create('log_change_trx_stamina', function (Blueprint $table) {
+        Schema::create('log_change_trx_gacha', function (Blueprint $table) {
             $table->id()->comment('ログID');
             $table->unsignedBigInteger('sys_player_id')->comment('プレイヤーID');
-            $table->string('stamina_type', 50)->comment('スタミナタイプ (normal, raid, pvp, event)');
+            // trx_gacha は採番idを持たず (sys_player_id, mst_gacha_id) で一意。
+            // 対象行はこの2つで特定する（log_change_trx_wallet と同じ形）
+            $table->string('mst_gacha_id')->nullable()->comment('マスターガチャID');
             $table->enum('operation_type', ['insert', 'update', 'delete'])->comment('操作タイプ');
 
             $table->json('before_data')->nullable()->comment('変更前データ');
             $table->json('after_data')->nullable()->comment('変更後データ');
             $table->json('changed_columns')->nullable()->comment('変更カラムリスト');
 
-            $table->integer('stamina_diff')->nullable()->comment('スタミナ増減量');
-            $table->unsignedInteger('before_stamina')->nullable()->comment('変更前スタミナ');
-            $table->unsignedInteger('after_stamina')->nullable()->comment('変更後スタミナ');
+            $table->unsignedInteger('current_step')->nullable()->comment('現在のステップ');
+            $table->unsignedInteger('daily_draw_count')->nullable()->comment('本日の実行回数');
+            $table->unsignedInteger('total_draw_count')->nullable()->comment('累計実行回数');
 
-            $table->string('reason', 100)->nullable()->comment('変更理由 (consume_quest, natural_recovery, item_recovery, vip_bonus, level_up_recovery, admin_grant)');
+            $table->string('reason', 100)->nullable()->comment('変更理由 (draw, step_advance, daily_reset, period_reset, admin_reset)');
             $table->json('metadata')->nullable()->comment('メタデータ');
 
             $table->string('unique_request_id', 100)->nullable()->comment('リクエストID');
@@ -40,16 +42,15 @@ return new class extends Migration
             $table->dateTime('created_at')->default(DB::raw('CURRENT_TIMESTAMP'))->comment('作成日時');
 
             $table->index('sys_player_id');
-            $table->index('stamina_type');
+            $table->index('mst_gacha_id');
             $table->index('operation_type');
             $table->index('reason');
             $table->index('created_at');
-            $table->index(['sys_player_id', 'stamina_type', 'created_at'], 'idx_player_type_created');
         });
     }
 
     public function down(): void
     {
-        Schema::dropIfExists('log_change_trx_stamina');
+        Schema::dropIfExists('log_change_trx_gacha');
     }
 };

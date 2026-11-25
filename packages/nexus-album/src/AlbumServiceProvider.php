@@ -22,8 +22,8 @@ class AlbumServiceProvider extends ServiceProvider
 {
     public function boot(): void
     {
-        // trx はシャードごとに流す（php artisan trx:migrate）、mst は通常のmigrate
-        foreach (['trx', 'mst'] as $type) {
+        // shard（trx と log のテーブル）はシャードごとに流す（php artisan trx:migrate）、mst は通常のmigrate
+        foreach (['shard', 'mst'] as $type) {
             $path = __DIR__."/../database/migrations/{$type}";
 
             if (is_dir($path)) {

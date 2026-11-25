@@ -199,11 +199,8 @@ make seed
 分かれて置かれているため、両方を渡す必要があります（`make migrate` が自動で行います）。
 
 ```bash
-# APIプロジェクト - トランザクションDB（すべてのシャード: trx1, trx2, ...）
+# APIプロジェクト - シャードDB（すべてのシャード: trx1, trx2, ...。trx と log のテーブルを両方作る）
 docker exec api-php php artisan trx:migrate
-
-# APIプロジェクト - ログDB（すべてのシャード: log1, log2, ...）
-docker exec api-php php artisan pitr:migrate
 
 # Toolプロジェクト - 管理者DB（接続名は admin、マイグレーションのパスは adm）
 docker exec tool-php php artisan migrate --database=admin --path=database/migrations/adm
@@ -213,8 +210,8 @@ docker exec tool-php php artisan migrate --database=tool --path=database/migrati
 ```
 
 **シャーディング対応マイグレーション:**
-- `trx:migrate` / `pitr:migrate` - trx / log の全シャードにマイグレーション（trx と log は同じDBなので、`pitr:migrate --fresh` は使わない。作り直しは `make migrate-fresh`）
-- `trx:rollback` / `pitr:rollback` - 全シャードでロールバック
+- `trx:migrate` - 全シャードにマイグレーション（trx と log は同じシャードDBで、`database/migrations/shard/` に一緒に置く。`--fresh` で両方のテーブルを作り直す）
+- `trx:rollback` - 全シャードでロールバック
 - `migrate:shards` - すべてのトランザクションシャード（trx1, trx2, ...）に一括マイグレーション
 - `migrate:shards-status` - すべてのシャードのマイグレーション状態を確認
 - `migrate:shards-rollback` - すべてのシャードでロールバック

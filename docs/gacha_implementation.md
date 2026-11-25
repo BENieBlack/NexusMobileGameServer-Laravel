@@ -190,7 +190,7 @@ Orchestrates the complete draw flow:
 ```bash
 cd api
 php artisan migrate --path=database/migrations/mst/2026_04_02_000001_create_gacha_tables.php
-php artisan migrate --path=database/migrations/trx/2026_04_02_000001_create_gacha_tables.php
+php artisan migrate --path=database/migrations/shard/2026_04_02_000001_create_gacha_tables.php
 ```
 
 ### 2. Seed Master Data
@@ -266,7 +266,7 @@ curl -X POST http://localhost/api/gacha/draw \
 
 ### Migrations (2 files)
 - `api/database/migrations/mst/2026_04_02_000001_create_gacha_tables.php`
-- `api/database/migrations/trx/2026_04_02_000001_create_gacha_tables.php`
+- `api/database/migrations/shard/2026_04_02_000001_create_gacha_tables.php`
 
 ### Seeders (1 file)
 - `api/database/seeders/MstGachaSeeder.php`

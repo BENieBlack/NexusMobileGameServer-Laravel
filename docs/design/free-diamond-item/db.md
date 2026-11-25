@@ -22,7 +22,7 @@
 
 ## 2. `trx_diamond` から `free_amount` を取り除く（F6）
 
-ファイル: `packages/nexus-core-billing/database/migrations/trx/2026_01_01_000001_create_billing_tables.php`（読んだ）。
+ファイル: `packages/nexus-core-billing/database/migrations/shard/2026_01_01_000001_create_billing_tables.php`（読んだ）。
 
 | 変更前 | 変更後 |
 | --- | --- |
@@ -46,7 +46,7 @@
 
 ## 3. ダイヤ専用ログ表の `free_amount` 系の列を取り除く（F6・Q12）
 
-ファイル: `packages/nexus-core-billing/database/migrations/log/2026_01_01_000001_create_billing_log_tables.php`（読んだ）。
+ファイル: `packages/nexus-core-billing/database/migrations/shard/2026_01_01_000001_create_billing_log_tables.php`（読んだ）。
 
 | テーブル | 取り除く列 | 備考 |
 | --- | --- | --- |
@@ -62,7 +62,7 @@
 
 ### 4.1 テーブル（変更なし）
 
-`trx_item`（`packages/nexus-core/database/migrations/trx/2026_01_01_000001_create_resource_tables.php:58`。読んだ）。
+`trx_item`（`packages/nexus-core/database/migrations/shard/2026_01_01_000001_create_resource_tables.php:58`。読んだ）。
 
 | カラム | 型 | 説明 |
 | --- | --- | --- |
@@ -85,7 +85,7 @@
 
 ## 5. `trx_diamond_balance`（有償のみ・current_amount 連動。F14・Q4・Q21〜Q23）
 
-ファイル: `packages/nexus-core-billing/database/migrations/trx/2026_01_01_000001_create_billing_tables.php`（読んだ）。**列・主キー・索引は変えない**。
+ファイル: `packages/nexus-core-billing/database/migrations/shard/2026_01_01_000001_create_billing_tables.php`（読んだ）。**列・主キー・索引は変えない**。
 
 | カラム | 型 | 意味（この機能での使い方） |
 | --- | --- | --- |

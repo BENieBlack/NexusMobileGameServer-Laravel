@@ -19,7 +19,7 @@ class MigrateShardsRollback extends Command
     protected $signature = 'migrate:shards-rollback
                             {--database= : The database connection to use}
                             {--force : Force the operation to run when in production}
-                            {--path=* : The path(s) to the migrations files to be executed (default: 全パッケージのtrxマイグレーション)}
+                            {--path=* : The path(s) to the migrations files to be executed (default: 全パッケージのshardマイグレーション（trx・logのテーブル）)}
                             {--realpath : Indicate any provided migration file paths are pre-resolved absolute paths}
                             {--pretend : Dump the SQL queries that would be run}
                             {--step=1 : The number of migrations to be reverted}';
@@ -29,7 +29,7 @@ class MigrateShardsRollback extends Command
      *
      * @var string
      */
-    protected $description = 'Rollback the last database migration on all transaction database shards';
+    protected $description = 'Rollback the last database migration on all shard databases (trx and log tables)';
 
     /**
      * Execute the console command.
@@ -99,12 +99,12 @@ class MigrateShardsRollback extends Command
             '--database' => $connection,
         ];
 
-        // pathが指定されていない場合、デフォルトでtrxディレクトリを使用
+        // pathが指定されていない場合、デフォルトでshardディレクトリ（trx・logのテーブル）を使用
         if ($this->option('path')) {
             $options['--path'] = $this->option('path');
         } else {
-            // パスはpackages/を走査して集める（パッケージのtrxマイグレーションも流す）
-            $options['--path'] = ShardMigrationPaths::find('trx');
+            // パスはpackages/を走査して集める（パッケージのshardマイグレーションも流す）
+            $options['--path'] = ShardMigrationPaths::find();
         }
 
         if ($this->option('force')) {

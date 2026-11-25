@@ -3,8 +3,6 @@
 namespace Nexus\Core;
 
 use Illuminate\Support\ServiceProvider;
-use Nexus\Core\Pitr\Commands\PitrMigrateCommand;
-use Nexus\Core\Pitr\Commands\PitrRollbackCommand;
 use Nexus\Core\Pitr\Commands\TrxMigrateCommand;
 use Nexus\Core\Pitr\Commands\TrxRollbackCommand;
 use Nexus\Core\Pitr\Logger\TrxChangeLogger;
@@ -65,7 +63,7 @@ class CoreServiceProvider extends ServiceProvider
     public function boot(): void
     {
         // マイグレーションをロード（動的シャーディング対応）
-        // 注意: php artisan trx:migrate で全TrxDBシャード（trx1, trx2, ...）に実行
+        // 注意: php artisan trx:migrate で全シャード（trx1, trx2, ...）に実行（trx と log のテーブルを含む）
         $this->publishes([
             __DIR__.'/../config/nexus-core.php' => config_path('nexus-core.php'),
         ], 'nexus-core-config');
@@ -81,8 +79,6 @@ class CoreServiceProvider extends ServiceProvider
         // Artisanコマンドを登録（シャードごとのマイグレーション・ロールバック）
         if ($this->app->runningInConsole()) {
             $this->commands([
-                PitrMigrateCommand::class,
-                PitrRollbackCommand::class,
                 TrxMigrateCommand::class,
                 TrxRollbackCommand::class,
             ]);
@@ -91,7 +87,7 @@ class CoreServiceProvider extends ServiceProvider
         $baseDir = __DIR__.'/../database/migrations';
 
         // 各サブディレクトリを個別に読み込む
-        foreach (['mst', 'trx', 'log', 'sys'] as $type) {
+        foreach (['mst', 'shard', 'sys'] as $type) {
             $path = "{$baseDir}/{$type}";
             if (is_dir($path)) {
                 $this->loadMigrationsFrom($path);

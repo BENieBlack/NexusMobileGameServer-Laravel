@@ -84,12 +84,12 @@ description: trx（トランザクション）系のマイグレーションを�
 
 ## 使う場面
 
-`packages/*/database/migrations/trx/` 配下のマイグレーションを触るとき。
+`packages/*/database/migrations/shard/` 配下のマイグレーションを触るとき。
 mst/sys は単一DBなのでこのスキルは不要。
 
 ## 手順
 
-1. 機能を持つパッケージの `packages/<パッケージ>/database/migrations/trx/` に `YYYY_MM_DD_NNNNNN_<説明>.php` を作る
+1. 機能を持つパッケージの `packages/<パッケージ>/database/migrations/shard/` に `YYYY_MM_DD_NNNNNN_<説明>.php` を作る
 2. `Schema::create('テーブル名', ...)` と書き、接続名は書かない（同じファイルを全シャードに流すため）
 3. `make migrate`（中で `php artisan trx:migrate`）で `DB_SHARD_COUNT` 分の全シャードに流す
 4. 全シャードに反映されたか確認する

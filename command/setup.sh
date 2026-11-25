@@ -253,11 +253,8 @@ migrate_group sys sys
 echo "Running API migrations (mst)..."
 migrate_group mst mst
 
-echo "Running TrxDB migrations for all shards..."
+echo "Running shard (trx and log tables) migrations for all shards..."
 "${COMPOSE[@]}" exec -T api-php php artisan trx:migrate --force
-
-echo "Running LogDB migrations for all shards..."
-"${COMPOSE[@]}" exec -T api-php php artisan pitr:migrate --force
 
 echo "Running Tool migrations..."
 "${COMPOSE[@]}" exec -T tool-php php artisan migrate --path=database/migrations/adm --database=admin --force

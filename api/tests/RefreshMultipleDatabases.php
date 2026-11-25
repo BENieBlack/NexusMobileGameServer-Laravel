@@ -196,10 +196,10 @@ trait RefreshMultipleDatabases
     /**
      * Run every migration group against the connections it belongs to.
      *
-     * sys/mst migrations pin their target with Schema::connection(), but trx/log
+     * sys/mst migrations pin their target with Schema::connection(), but shard (trx/log)
      * migrations use the default connection. They must therefore be run once per
      * shard with --database, and with --path limited to their own directory —
-     * otherwise every trx/log table lands in whichever database happens to be
+     * otherwise every shard table lands in whichever database happens to be
      * the default for the run.
      *
      * Uses migrate:fresh, not migrate. This project edits existing migration
@@ -237,14 +237,13 @@ trait RefreshMultipleDatabases
             ['mst', $this->migrationPaths('mst')],
         ];
 
-        $trxPaths = $this->migrationPaths('trx');
-        $logPaths = $this->migrationPaths('log');
+        $shardPaths = $this->migrationPaths('shard');
         $shardCount = (int) env('DB_SHARD_COUNT', 2);
 
-        // trx と log は同じシャードDBに同居している。migrate:fresh はDB内の全テーブルを
-        // 落とすため、別々に流すと後の方が先に作ったテーブルを消す。1回にまとめて流す
+        // trx と log は同じシャードDBに同居している（migrate:fresh は DB 内の全テーブルを落とすため、
+        // 分けて流せない）。マイグレーションも shard ディレクトリ 1 つにまとめてある
         for ($i = 1; $i <= $shardCount; $i++) {
-            $targets[] = ["trx{$i}", array_merge($trxPaths, $logPaths)];
+            $targets[] = ["trx{$i}", $shardPaths];
         }
 
         return $targets;
@@ -345,7 +344,7 @@ trait RefreshMultipleDatabases
     {
         $entries = [];
 
-        foreach (['sys', 'mst', 'trx', 'log'] as $group) {
+        foreach (['sys', 'mst', 'shard'] as $group) {
             foreach ($this->migrationPaths($group) as $path) {
                 foreach (glob(base_path($path).'/*.php') ?: [] as $file) {
                     $entries[] = $file.':'.filemtime($file).':'.filesize($file);

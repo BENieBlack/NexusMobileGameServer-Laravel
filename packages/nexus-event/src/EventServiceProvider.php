@@ -22,8 +22,8 @@ class EventServiceProvider extends ServiceProvider
 {
     public function boot(): void
     {
-        // trx / log はシャードごとに流す（trx:migrate / pitr:migrate）、mst は通常のmigrate
-        foreach (['mst', 'trx', 'log'] as $type) {
+        // shard（trx と log のテーブル）はシャードごとに流す（trx:migrate）、mst は通常のmigrate
+        foreach (['mst', 'shard'] as $type) {
             $path = __DIR__."/../database/migrations/{$type}";
 
             if (is_dir($path)) {

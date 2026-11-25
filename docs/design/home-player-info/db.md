@@ -292,7 +292,7 @@ erDiagram
 
 | 対象 | 現行（読んだ） | 影響 |
 | --- | --- | --- |
-| `trx_diamond` の列 | `free_amount unsignedInteger default 0`（`packages/nexus-core-billing/database/migrations/trx/2026_01_01_000001_create_billing_tables.php`）。主キー `(sys_player_id, platform)` | 既存データの移行（platform 別の無償分を合算して `trx_item` の `free_diamond` へ）の後、列を削除。共有の検証環境を作った後なら新しいマイグレーションで行う（`.claude/database.md` 3 節） |
+| `trx_diamond` の列 | `free_amount unsignedInteger default 0`（`packages/nexus-core-billing/database/migrations/shard/2026_01_01_000001_create_billing_tables.php`）。主キー `(sys_player_id, platform)` | 既存データの移行（platform 別の無償分を合算して `trx_item` の `free_diamond` へ）の後、列を削除。共有の検証環境を作った後なら新しいマイグレーションで行う（`.claude/database.md` 3 節） |
 | `DiamondService`（`packages/nexus-core/src/Resource/Services/DiamondService.php`） | 付与 `addDiamond`（`isPaid` で有償・無償を分ける）、合算 `findTotalAmount`、消費 `consumeDiamond`（無償 → 有償の順 `consumeFreeThenPaidDiamond`）、`findDiamond`（応答に `free_amount`） | 無償の付与・消費・合算を `trx_item` の `free_diamond` に向ける。消費の順序（無償優先）の維持 |
 | `DiamondBalance`（DTO）・`DiamondRepositoryAdapter`・`TrxDiamond` モデル | `freeAmount` / `free_amount` を持つ | プロパティ・fillable・cast・getter の削除 |
 | `DiamondDeliveryHandler` | `isPaid` でない付与を `free_amount` に加算（`platform` は metadata、無指定は **D5 で `ApiSession` の platform に変更**。本機能の S3。api.md 11.3 節） | 無償ダイヤの付与先を `trx_item` に変える（報酬配送・ログインボーナス・メール添付など全付与経路に効く）。**D5 で足した既定 platform の分岐（`DefaultPlatformProviderInterface`）は、無償側では不要になる**（有償は metadata の platform のまま） |

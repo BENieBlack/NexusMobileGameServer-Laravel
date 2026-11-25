@@ -3,8 +3,6 @@
 namespace Nexus\Core\Tests\Feature\Pitr\Commands;
 
 use Illuminate\Support\Facades\Artisan;
-use Nexus\Core\Pitr\Commands\PitrMigrateCommand;
-use Nexus\Core\Pitr\Commands\PitrRollbackCommand;
 use Nexus\Core\Pitr\Commands\TrxMigrateCommand;
 use Nexus\Core\Pitr\Commands\TrxRollbackCommand;
 use PHPUnit\Framework\Attributes\Test;
@@ -13,7 +11,7 @@ use Symfony\Component\Console\Output\BufferedOutput;
 use Tests\TestCase;
 
 /**
- * trx:migrate / trx:rollback / pitr:migrate / pitr:rollback のテスト
+ * trx:migrate / trx:rollback のテスト（trx と log は同じシャードDBなので、どちらもこの2つで流す）
  *
  * 実際にマイグレーションを流すとテスト用DBを壊すため、
  * 内部で呼ぶ Artisan::call を差し替えて、どのシャードへ
@@ -53,9 +51,9 @@ class ShardMigrationCommandTest extends TestCase
         $this->assertSame(['trx1', 'trx2'], array_column(array_column($this->calls, 1), '--database'));
         $this->assertSame(['migrate', 'migrate'], array_column($this->calls, 0));
 
-        // trxサブディレクトリだけを対象にする
+        // shardサブディレクトリだけを対象にする（trx と log のテーブルを両方作る）
         foreach ($this->calls[0][1]['--path'] as $path) {
-            $this->assertStringEndsWith('/database/migrations/trx', $path);
+            $this->assertStringEndsWith('database/migrations/shard', $path);
         }
 
         $this->assertStringContainsString('Target shards: trx1, trx2', $output->fetch());
@@ -96,52 +94,27 @@ class ShardMigrationCommandTest extends TestCase
         $this->assertSame(['migrate:rollback', 'migrate:rollback'], array_column($this->calls, 0));
         $this->assertSame(['trx1', 'trx2'], array_column(array_column($this->calls, 1), '--database'));
         $this->assertSame(2, $this->calls[0][1]['--step']);
+
+        // shard の全パスを渡す（渡さないと ServiceProvider の読むパス次第で何も戻らない）
+        $this->assertNotEmpty($this->calls[0][1]['--path']);
+
+        foreach ($this->calls[0][1]['--path'] as $path) {
+            $this->assertStringEndsWith('database/migrations/shard', $path);
+        }
         $this->assertTrue($this->calls[0][1]['--force']);
     }
 
     #[Test]
-    public function pitr_migrateは全logシャードにマイグレーションを流す(): void
+    public function trx_migrateのfreshはmigrate_freshで全テーブルを作り直す(): void
     {
-        $output = new BufferedOutput;
+        $this->assertSame(TrxMigrateCommand::SUCCESS, $this->runCommand(TrxMigrateCommand::class, ['--fresh' => true]));
 
-        $this->assertSame(PitrMigrateCommand::SUCCESS, $this->runCommand(PitrMigrateCommand::class, [], $output));
+        // 1回の migrate:fresh に shard の全パス（log のテーブルを含む）を渡す。後から log を足す必要はない
+        $this->assertSame(['migrate:fresh', 'migrate:fresh'], array_column($this->calls, 0));
 
-        $this->assertSame(['trx1', 'trx2'], array_column(array_column($this->calls, 1), '--database'));
-
-        // logサブディレクトリだけを対象にする
-        foreach ($this->calls[0][1]['--path'] as $path) {
-            $this->assertStringEndsWith('database/migrations/log', $path);
+        foreach ($this->calls as [, $options]) {
+            $this->assertContains('database/migrations/shard', $options['--path']);
         }
-
-        $this->assertStringContainsString('Target shards: trx1, trx2', $output->fetch());
-    }
-
-    #[Test]
-    public function pitr_rollbackはlogのパスを指定して全シャードを戻す(): void
-    {
-        $this->assertSame(
-            PitrRollbackCommand::SUCCESS,
-            $this->runCommand(PitrRollbackCommand::class, ['--force' => true])
-        );
-
-        $this->assertSame(['trx1', 'trx2'], array_column(array_column($this->calls, 1), '--database'));
-
-        // パスはpackages/を走査して集めるので、logサブディレクトリだけが並ぶ
-        foreach ($this->calls[0][1]['--path'] as $path) {
-            $this->assertStringEndsWith('database/migrations/log', $path);
-        }
-    }
-
-    #[Test]
-    public function pitr_rollbackも失敗したシャードで打ち切る(): void
-    {
-        $this->exitCodeToReturn = 1;
-        $output = new BufferedOutput;
-
-        $this->assertSame(PitrRollbackCommand::FAILURE, $this->runCommand(PitrRollbackCommand::class, [], $output));
-
-        $this->assertCount(1, $this->calls);
-        $this->assertStringContainsString('Rollback failed for trx1', $output->fetch());
     }
 
     /**

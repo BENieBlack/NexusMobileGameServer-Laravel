@@ -188,10 +188,8 @@ else
   migrate_group sys sys
   echo "API (mst)..."
   migrate_group mst mst
-  echo "API (trx: 全シャード)..."
+  echo "API (shard: trx と log のテーブル、全シャード)..."
   "${COMPOSE[@]}" exec -T api-php php artisan trx:migrate --force
-  echo "API (log: 全シャード)..."
-  "${COMPOSE[@]}" exec -T api-php php artisan pitr:migrate --force
   echo "TOOL (adm / tol)..."
   "${COMPOSE[@]}" exec -T tool-php php artisan migrate --path=database/migrations/adm --database=admin --force
   "${COMPOSE[@]}" exec -T tool-php php artisan migrate --path=database/migrations/tol --database=tool --force

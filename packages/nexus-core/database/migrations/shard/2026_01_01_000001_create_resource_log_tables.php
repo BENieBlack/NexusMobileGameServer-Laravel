@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Schema;
 /**
  * LogDB用リソースログテーブル作成マイグレーション
  *
- * 注意: このマイグレーションは`php artisan pitr:migrate`で実行してください。
+ * 注意: このマイグレーションは`php artisan trx:migrate`で実行してください。
  */
 return new class extends Migration
 {

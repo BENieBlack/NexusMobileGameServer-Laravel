@@ -20,7 +20,7 @@ class NotificationServiceProvider extends ServiceProvider
     {
         $baseDir = __DIR__.'/../database/migrations';
 
-        foreach (['sys', 'trx'] as $type) {
+        foreach (['sys', 'shard'] as $type) {
             $path = "{$baseDir}/{$type}";
             if (is_dir($path)) {
                 $this->loadMigrationsFrom($path);

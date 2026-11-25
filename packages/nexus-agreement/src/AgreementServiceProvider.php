@@ -21,8 +21,8 @@ class AgreementServiceProvider extends ServiceProvider
 {
     public function boot(): void
     {
-        // sys は通常の migrate、trx はシャードごとに流す
-        foreach (['sys', 'trx'] as $type) {
+        // sys は通常の migrate、shard（trx と log のテーブル）はシャードごとに流す
+        foreach (['sys', 'shard'] as $type) {
             $path = __DIR__.'/../database/migrations/'.$type;
 
             if (is_dir($path)) {
