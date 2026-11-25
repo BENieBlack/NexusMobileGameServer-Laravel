@@ -4,7 +4,7 @@ namespace App\Domain\Mailbox\Services;
 
 use App\Models\Mst\MstMessage;
 use App\Models\Mst\MstMessageL10n;
-use App\Models\Trx\TrxMailbox;
+use App\Models\Shard\TrxMailbox;
 use App\Persistence\ApiSession;
 use Nexus\Core\Support\CustomCollection;
 

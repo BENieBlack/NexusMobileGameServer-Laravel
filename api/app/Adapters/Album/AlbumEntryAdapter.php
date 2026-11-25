@@ -2,7 +2,7 @@
 
 namespace App\Adapters\Album;
 
-use App\Models\Trx\TrxAlbum;
+use App\Models\Shard\TrxAlbum;
 use NexusAlbum\DataTransferObjects\AlbumEntry;
 use NexusAlbum\Enums\AlbumContentType;
 

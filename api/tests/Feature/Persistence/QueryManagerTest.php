@@ -2,10 +2,10 @@
 
 namespace Tests\Feature\Persistence;
 
-use App\Models\Trx\TrxMailbox;
+use App\Models\Shard\TrxMailbox;
 use App\Persistence\ApiSession;
-use App\Repositories\Log\LogInAppPurchaseRepository;
-use App\Repositories\Trx\TrxMailboxRepository;
+use App\Repositories\Shard\LogInAppPurchaseRepository;
+use App\Repositories\Shard\TrxMailboxRepository;
 use Illuminate\Support\Facades\DB;
 use Nexus\Core\UnitOfWork\Persistence\QueryManager;
 use Nexus\Core\Utilities\ClockUtility;

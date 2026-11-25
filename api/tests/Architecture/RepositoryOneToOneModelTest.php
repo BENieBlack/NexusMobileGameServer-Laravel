@@ -10,7 +10,7 @@ use Tests\TestCase;
 /**
  * アーキテクチャテスト: Repository はテーブル（Model）と 1 対 1
  *
- * `api/app/Repositories/{Sys,Mst,Trx,Log}/{Model}Repository` は、同名の Model を持つ。
+ * `api/app/Repositories/{Sys,Mst,Shard}/{Model}Repository` は、同名の Model を持つ。
  * 複数のテーブルを組で読み書きするためだけに Repository を作らない（例: trx と log を組で書く Repository）。
  * 組み合わせは Service（Domain/{Context}/Services/）で行う（.claude/coding-standards.md「Repository」）。
  *
@@ -61,7 +61,7 @@ class RepositoryOneToOneModelTest extends TestCase
     {
         $violations = [];
 
-        foreach (['Sys', 'Mst', 'Trx', 'Log'] as $layer) {
+        foreach (['Sys', 'Mst', 'Shard'] as $layer) {
             foreach (glob(__DIR__.'/../../app/Repositories/'.$layer.'/*Repository.php') ?: [] as $file) {
                 $class = basename($file, '.php');
 

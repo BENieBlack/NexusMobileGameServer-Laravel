@@ -2,7 +2,7 @@
 
 namespace App\Domain\Equipment\Contracts;
 
-use App\Models\Trx\TrxEquipment;
+use App\Models\Shard\TrxEquipment;
 
 /**
  * EquipmentExperienceInterface

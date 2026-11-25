@@ -28,7 +28,7 @@ Middleware        ResolveLanguage, CheckMasterHash（api グループ全体）
 Controller        App\Http\Controllers\UnitController::levelUp
 UseCase           App\Domain\Unit\UseCases\LevelUpUseCase::exec
 Service           App\Domain\Unit\Services\UnitLevelService / Item\Contracts\ItemInventoryInterface
-Repository        App\Repositories\Trx\TrxUnitRepository::setModel
+Repository        App\Repositories\Shard\TrxUnitRepository::setModel
 QueryManager      Nexus\Core\UnitOfWork\Persistence\QueryManager（コミット直前に一括実行）
 ```
 
@@ -75,10 +75,10 @@ Http/
   Controllers/            _BaseController を継承
   Middleware/             CheckMaintenance, CheckMasterHash, ResolveLanguage, VerifyAdminToken
   Requests/{Context}/     _BaseRequest を継承
-Models/{Mst,Sys,Trx,Log}/ Eloquent モデル（基底は nexus-core の _BaseMst 等）
+Models/{Mst,Sys,Shard}/ Eloquent モデル（基底は nexus-core の _BaseMst 等）
 Persistence/ApiSession.php
 Providers/AppServiceProvider.php   パッケージ契約・公開APIのバインド、イベント登録
-Repositories/{Mst,Sys,Trx,Log}/    *Repository と、パッケージ契約を実装する *RepositoryAdapter
+Repositories/{Mst,Sys,Shard}/    *Repository と、パッケージ契約を実装する *RepositoryAdapter
 Traits/                   UseCaseTrait, CompositePrimaryKeyTrait, RequiresAuthenticationTrait
 ```
 
@@ -149,7 +149,7 @@ packages から `App\` を参照しない（`PackageIndependenceTest`）。永�
 
 ```
 packages/nexus-guild/src/Repositories/GuildRepositoryInterface      ← 契約（パッケージ）
-api/app/Repositories/Sys/GuildRepositoryAdapter                      ← 実装（Sys/Trx/Mst の該当ディレクトリ）
+api/app/Repositories/Sys/GuildRepositoryAdapter                      ← 実装（Sys/Mst/Shard の該当ディレクトリ）
 api/app/Adapters/Guild/GuildAdapter::toDto()                         ← Model → パッケージDTO の変換
 api/app/Providers/AppServiceProvider                                 ← bind(契約, 実装)
 ```
@@ -191,9 +191,10 @@ api/app/Providers/AppServiceProvider                                 ← bind(�
 
 書き込みは即時に実行せず、Repository がキューに積み、UseCase のトランザクション終盤で一括実行する。
 
-- 書き込みは Repository の `setModel()` / `softDeleteModel()` / `hardDeleteModel()` だけ。`app/Repositories/{Trx,Sys,Log}/_Base*Repository` は `Nexus\Core\UnitOfWork\Traits\UsesUnitOfWork` を使い、初回の書き込みで自身を QueryManager に登録する
+- 書き込みは Repository の `setModel()` / `softDeleteModel()` / `hardDeleteModel()` だけ。`app/Repositories/{Shard,Sys}/_Base*Repository` は `Nexus\Core\UnitOfWork\Traits\UsesUnitOfWork` を使い、初回の書き込みで自身を QueryManager に登録する
 - Model の `save()` / `update()` / `delete()` / `forceDelete()` は `_BaseModel` が `DirectWriteNotAllowedException` で拒否する（テスト中は許可）。Mst は読み取り専用で `MasterDataReadOnlyException`
-- QueryManager、ApiSession、Trx/Sys/Log の Repository は `scoped` バインドで、リクエスト内では同じキュー・キャッシュを共有する
+- Shard の中は、Trx 系（更新する状態。接頭辞 `Trx`、基底 `_BaseTrx`）と Log 系（追記のみの記録。接頭辞 `Log`、基底 `_BaseLog`）を、クラス名の接頭辞と基底で区別する。ディレクトリは DB 単位（Sys / Mst / Shard）で分け、trx と log は同じシャード DB なので同居させる。
+- QueryManager、ApiSession、Shard（Trx 系・Log 系）と Sys の Repository は `scoped` バインドで、リクエスト内では同じキュー・キャッシュを共有する
 
 `App\Traits\UseCaseTrait::executeWithTransaction()`（`_BaseUseCase` が use）の流れ:
 
@@ -259,7 +260,7 @@ api/app/Providers/AppServiceProvider                                 ← bind(�
 - static メソッド: `getSysPlayerId()` / `hasSysPlayerId()`（未設定で get すると `RuntimeException`）、`getNow()`（プレイヤーID設定時に `ClockUtility::now()` で固定した `CarbonImmutable`）、`getLanguage()`、`resolveConnectionName()`（`trx{node_no}`）、`clearForTest()`
 - 値を入れるのは Middleware（`VerifyAccessToken` がプレイヤーIDと時刻、`ResolveLanguage` が Accept-Language から言語）
 - Controller は `ApiSession` をコンストラクタで受け取り、`execute()` のコールバック内で `getSysPlayerId()` を読んで UseCase に渡す
-- Trx Repository はプレイヤーIDと接続先を ApiSession から自分で解決する（`App\Repositories\Trx\_BaseTrxRepository::resolveShardConnection()`）。Service のメソッドにプレイヤーIDを持ち回らなくても Repository は動く
+- Trx Repository はプレイヤーIDと接続先を ApiSession から自分で解決する（`App\Repositories\Shard\_BaseTrxRepository::resolveShardConnection()`）。Service のメソッドにプレイヤーIDを持ち回らなくても Repository は動く
 - `resolveConnectionName()` は sys_sharding_node_player → sys_sharding_node を引き、Redis `shard:player:{id}` に1時間キャッシュする。TiDBモードでは常に `trx1`。プレイヤーが居ない文脈（コンソール等）では Trx Repository は既定接続を使う。シャーディングの詳細は [database.md](./database.md)
 
 ## 9. 例外とエラーコード
@@ -315,7 +316,7 @@ return GuildExceptionTranslator::forApplySend(function () use ($sysPlayerId, $gu
 | `NoDirectEloquentWriteTest` | `app/` と `packages/` の本番コードで `$model->save()` / `delete()` / `forceDelete()` を呼ばない |
 | `NoFullTableSelectOnSysTest` | Sys Repository で全件取得しない。`_BaseSysRepository::selectAll()` は実行時に例外 |
 | `RepositoryKeyDeclarationTest` | キーは Model の `$primaryKey` / `$selectKeys` に一本化し、Repository で再宣言しない |
-| `RepositoryOneToOneModelTest` | `Repositories/{Sys,Mst,Trx,Log}/` の `*Repository` は同名の Model を持つ（テーブルと 1 対 1）。解消待ちの一覧に無い違反は落とす |
+| `RepositoryOneToOneModelTest` | `Repositories/{Sys,Mst,Shard}/` の `*Repository` は同名の Model を持つ（テーブルと 1 対 1）。解消待ちの一覧に無い違反は落とす |
 | `DataTransferObjectNamingTest` | パッケージの DTO にサフィックス（`Dto`/`DTO`）を付けない。ディレクトリ名は `DataTransferObjects` |
 | `ResponseKeyNamingTest` | Request/Response の `*_id` キーはテーブル接頭辞付き（`apply_id` は不可）。例外は許可リスト |
 | `MigrationNameUniquenessTest` | 同じDB（sys / mst / trx+log）のマイグレーション名が重複しない |

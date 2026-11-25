@@ -8,7 +8,7 @@ use App\Domain\Mailbox\Responses\ReceiveResponse;
 use App\Exceptions\GameErrorCode;
 use App\Exceptions\GameException;
 use App\Models\Mst\MstMailboxContent;
-use App\Repositories\Trx\TrxMailboxRepository;
+use App\Repositories\Shard\TrxMailboxRepository;
 use Nexus\Core\Resource\DataTransferObjects\Resource;
 use Nexus\Core\ResourceDelivery\Services\ResourceDeliveryService;
 use Nexus\Core\Support\CustomCollection;

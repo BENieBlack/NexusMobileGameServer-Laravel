@@ -2,7 +2,7 @@
 
 namespace App\Adapters\Mailbox;
 
-use App\Models\Trx\TrxMailbox;
+use App\Models\Shard\TrxMailbox;
 use NexusMailbox\DataTransferObjects\Mailbox;
 
 /**

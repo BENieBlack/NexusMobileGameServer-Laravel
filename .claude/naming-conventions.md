@@ -22,7 +22,7 @@
 
 ## bool と変更前後
 
-- bool のカラム・キー・変数は `is_` / `has_` / `needs_` で始める: `is_leveled_up`, `is_delete`, `has_step_up`, `needs_update` / `$isLeveledUp`。Model の getter は `getIsDelete()`（`api/app/Models/Trx/TrxUnit.php`）。
+- bool のカラム・キー・変数は `is_` / `has_` / `needs_` で始める: `is_leveled_up`, `is_delete`, `has_step_up`, `needs_update` / `$isLeveledUp`。Model の getter は `getIsDelete()`（`api/app/Models/Shard/TrxUnit.php`）。
 - 変更前後の値は `before_*` / `after_*` の対にする。`old_` / `new_` / `previous_` は使わない。例: `before_level` / `after_level`（`api/app/Domain/Unit/Responses/LevelUpResponse.php`、log テーブルの列も同じ）。
 
 ## クラス名と置き場所
@@ -43,14 +43,16 @@
 | リスナー | `Domain/{Context}/Listeners/` | `{動作}On{Event}` | `RecoverStaminaOnPlayerLevelUp` |
 | 配布ハンドラ | `Domain/{Context}/Handlers/` | `{Name}DeliveryHandler` | `AlbumRecordingDeliveryHandler` |
 | 例外の変換 | `Domain/{Context}/Support/` | `{Context}ExceptionTranslator` | `FriendExceptionTranslator` |
-| Model | `api/app/Models/{Sys,Mst,Trx,Log}/` | テーブル名の PascalCase | `TrxUnit`, `SysFriendApply`, `MstMessageL10n` |
-| Repository | `api/app/Repositories/{Sys,Mst,Trx,Log}/` | `{Model}Repository`（Model と 1 対 1。組で書く Repository は作らない） | `TrxUnitRepository` |
+| Model | `api/app/Models/{Sys,Mst,Shard}/` | テーブル名の PascalCase | `TrxUnit`, `SysFriendApply`, `MstMessageL10n` |
+| Repository | `api/app/Repositories/{Sys,Mst,Shard}/` | `{Model}Repository`（Model と 1 対 1。組で書く Repository は作らない） | `TrxUnitRepository` |
 | Repository（パッケージ契約の実装） | 同上 | `{Name}RepositoryAdapter` | `GuildRepositoryAdapter` |
 | Repository の契約 | `packages/*/src/Repositories/` | `{Name}RepositoryInterface` | `FriendApplyRepositoryInterface` |
 | 例外 | `api/app/Exceptions/`, `packages/*/src/Exceptions/` | `{種類}Exception` | `MasterDataException`, `FriendException` |
 | Utility | `packages/nexus-core/src/Utilities/` | `{Name}Utility` | `ClockUtility` |
 | 基底クラス | 各ディレクトリ | `_Base` で始める | `_BaseController`, `_BaseUseCase`, `_BaseTrx` |
 
+
+- Shard の中は、Trx 系（更新する状態。接頭辞 `Trx`、基底 `_BaseTrx`）と Log 系（追記のみの記録。接頭辞 `Log`、基底 `_BaseLog`）を、クラス名の接頭辞と基底で区別する。ディレクトリは DB 単位（Sys / Mst / Shard）で分け、trx と log は同じシャード DB なので同居させる。
 - UseCase にはドメイン名を付けない（名前空間で分かり、Controller からしか呼ばれない）。Service には付ける（他コンテキストから注入され、呼び出し側で出どころが分かる必要がある）。ドメイン名だけで役割が明らかなら役割語を省く（`ItemService`, `StaminaService`）。
 - ServiceLayerTest がクラス名の末尾を検査する: `Domain/*/Services/` は `Service`（パッケージ契約の実装は除く）、`Domain/*/UseCases/` は `UseCase`、`Repositories/` は `Repository` / `RepositoryInterface` / `RepositoryAdapter`。
 - DTO にサフィックス（`Dto` / `DTO`）を付けず、ディレクトリは `DataTransferObjects` にする（DataTransferObjectNamingTest）。

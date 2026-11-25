@@ -2,7 +2,7 @@
 
 namespace App\Adapters\Login;
 
-use App\Models\Trx\TrxLoginBonus;
+use App\Models\Shard\TrxLoginBonus;
 use NexusLogin\DataTransferObjects\LoginBonusHistory;
 
 /**

@@ -2,7 +2,7 @@
 
 namespace App\Adapters\Mission;
 
-use App\Models\Trx\TrxProgress;
+use App\Models\Shard\TrxProgress;
 use NexusMission\DataTransferObjects\Progress;
 
 /**

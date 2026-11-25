@@ -2,7 +2,7 @@
 
 namespace App\Adapters\Gacha;
 
-use App\Models\Trx\TrxGacha;
+use App\Models\Shard\TrxGacha;
 use NexusGacha\DataTransferObjects\GachaProgress;
 
 /**

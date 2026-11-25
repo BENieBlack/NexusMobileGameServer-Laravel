@@ -3,8 +3,8 @@
 namespace App\Domain\InAppPurchase\Services;
 
 use App\Models\Mst\MstInAppPurchase;
-use App\Models\Trx\TrxInAppPurchaseEffect;
-use App\Repositories\Trx\TrxInAppPurchaseEffectRepository;
+use App\Models\Shard\TrxInAppPurchaseEffect;
+use App\Repositories\Shard\TrxInAppPurchaseEffectRepository;
 use Nexus\Core\Support\CustomCollection;
 use Nexus\Core\Utilities\ClockUtility;
 

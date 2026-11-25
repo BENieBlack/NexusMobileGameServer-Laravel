@@ -2,7 +2,7 @@
 
 namespace Tests\Feature\Login;
 
-use App\Models\Trx\TrxDiamond;
+use App\Models\Shard\TrxDiamond;
 use Illuminate\Support\Facades\DB;
 use Nexus\Core\UnitOfWork\Contracts\ReturnedAsSingleUpdatedResource;
 use Nexus\Core\UnitOfWork\Contracts\ReturnedAsUpdatedResource;
@@ -87,7 +87,7 @@ class HomeSnapshotTest extends TestCase
     {
         $classes = [];
 
-        foreach (['Sys', 'Trx'] as $group) {
+        foreach (['Sys', 'Shard'] as $group) {
             foreach (glob(dirname(__DIR__, 3)."/app/Models/{$group}/*.php") ?: [] as $file) {
                 $class = "App\\Models\\{$group}\\".basename($file, '.php');
 

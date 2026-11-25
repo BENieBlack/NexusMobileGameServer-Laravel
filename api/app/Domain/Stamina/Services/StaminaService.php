@@ -3,8 +3,8 @@
 namespace App\Domain\Stamina\Services;
 
 use App\Domain\Stamina\Constants\StaminaConst;
-use App\Models\Trx\TrxStamina;
-use App\Repositories\Trx\TrxStaminaRepository;
+use App\Models\Shard\TrxStamina;
+use App\Repositories\Shard\TrxStaminaRepository;
 use Nexus\Core\Utilities\ClockUtility;
 use NexusLevel\Services\PlayerLevelService;
 use NexusStamina\Services\StaminaRecoveryIntervalProviderInterface;

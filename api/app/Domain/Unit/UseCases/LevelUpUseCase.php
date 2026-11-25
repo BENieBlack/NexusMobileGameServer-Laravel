@@ -13,7 +13,7 @@ use App\Exceptions\MasterDataException;
 use App\Exceptions\TransactionDataException;
 use App\Models\Mst\MstItem;
 use App\Repositories\Mst\MstItemRepository;
-use App\Repositories\Trx\TrxUnitRepository;
+use App\Repositories\Shard\TrxUnitRepository;
 use App\Traits\RequiresAuthenticationTrait;
 use Nexus\Core\Resource\Enums\ItemEffectType;
 

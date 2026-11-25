@@ -4,8 +4,8 @@ namespace App\Domain\Player\Services;
 
 use App\Domain\Equipment\Contracts\EquipmentExperienceInterface;
 use App\Domain\Unit\Contracts\UnitExperienceInterface;
-use App\Repositories\Trx\TrxEquipmentRepository;
-use App\Repositories\Trx\TrxUnitRepository;
+use App\Repositories\Shard\TrxEquipmentRepository;
+use App\Repositories\Shard\TrxUnitRepository;
 use Nexus\Core\ResourceDelivery\Contracts\ExperienceGranterInterface;
 use NexusLevel\Services\PlayerLevelService;
 

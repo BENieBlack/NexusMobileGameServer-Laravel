@@ -3,9 +3,9 @@
 namespace Tests\Unit\Repositories;
 
 use App\Models\Sys\SysGuildApply;
+use App\Repositories\Shard\TrxMailboxRepository;
 use App\Repositories\Sys\SysGuildApplyRepository;
 use App\Repositories\Sys\SysPlayerRepository;
-use App\Repositories\Trx\TrxMailboxRepository;
 use Illuminate\Support\Facades\DB;
 use NexusGuild\Constants\GuildApplyStatus;
 use Tests\RefreshMultipleDatabases;

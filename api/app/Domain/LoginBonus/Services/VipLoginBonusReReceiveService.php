@@ -5,10 +5,10 @@ namespace App\Domain\LoginBonus\Services;
 use App\Domain\LoginBonus\Constants\LoginBonusConst;
 use App\Domain\LoginBonus\Support\VipLoginBonusReReceiveResult;
 use App\Exceptions\SystemDataException;
-use App\Models\Trx\TrxVipLoginBonus;
+use App\Models\Shard\TrxVipLoginBonus;
 use App\Repositories\Mst\VipLoginBonusRepositoryInterface;
+use App\Repositories\Shard\VipLoginBonusHistoryRepositoryInterface;
 use App\Repositories\Sys\SysPlayerRepository;
-use App\Repositories\Trx\VipLoginBonusHistoryRepositoryInterface;
 use Nexus\Core\Utilities\ClockUtility;
 use NexusVip\Services\VipLevelService;
 

@@ -25,9 +25,8 @@ class CastsMatchSchemaTest extends TestCase
      */
     private const MODEL_DIRECTORIES = [
         'Mst' => 'mst',
-        'Trx' => 'trx1',
+        'Shard' => 'trx1',
         'Sys' => 'sys',
-        'Log' => 'trx1',
     ];
 
     /**

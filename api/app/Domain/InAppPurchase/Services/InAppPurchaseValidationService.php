@@ -6,7 +6,7 @@ use App\Exceptions\GameErrorCode;
 use App\Exceptions\GameException;
 use App\Models\Mst\MstBillingPlatformProduct;
 use App\Models\Mst\MstInAppPurchase;
-use App\Models\Trx\TrxInAppPurchase;
+use App\Models\Shard\TrxInAppPurchase;
 use Illuminate\Support\Facades\Log;
 use NexusBilling\Constants\PurchaseLimitResetType;
 use NexusBilling\DataTransferObjects\Verification;

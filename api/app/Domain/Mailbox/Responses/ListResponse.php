@@ -5,7 +5,7 @@ namespace App\Domain\Mailbox\Responses;
 use App\Domain\_BaseResponse;
 use App\Domain\Mailbox\Constants\ContentType;
 use App\Models\Mst\MstMailboxContent;
-use App\Models\Trx\TrxMailbox;
+use App\Models\Shard\TrxMailbox;
 use Nexus\Core\Support\CustomCollection;
 
 /**

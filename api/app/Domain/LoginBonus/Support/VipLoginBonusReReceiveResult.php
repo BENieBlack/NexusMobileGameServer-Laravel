@@ -2,7 +2,7 @@
 
 namespace App\Domain\LoginBonus\Support;
 
-use App\Models\Trx\TrxVipLoginBonus;
+use App\Models\Shard\TrxVipLoginBonus;
 
 /**
  * VipLoginBonusReReceiveResult

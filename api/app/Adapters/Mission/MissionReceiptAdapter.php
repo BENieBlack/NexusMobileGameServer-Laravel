@@ -2,7 +2,7 @@
 
 namespace App\Adapters\Mission;
 
-use App\Models\Trx\TrxMission;
+use App\Models\Shard\TrxMission;
 use NexusMission\DataTransferObjects\MissionReceipt;
 
 /**

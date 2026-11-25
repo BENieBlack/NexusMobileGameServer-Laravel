@@ -2,8 +2,8 @@
 
 namespace Tests\Feature\Providers;
 
+use App\Repositories\Shard\TrxWalletRepository;
 use App\Repositories\Sys\SysPlayerTokenRepository;
-use App\Repositories\Trx\TrxWalletRepository;
 use NexusAuth\Services\TokenService;
 use NexusVip\Services\VipLevelService;
 use NexusVip\Services\VipPointService;

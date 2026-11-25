@@ -2,7 +2,7 @@
 
 namespace App\Adapters\Stamina;
 
-use App\Models\Trx\TrxStamina;
+use App\Models\Shard\TrxStamina;
 use NexusStamina\DataTransferObjects\Stamina;
 
 /**

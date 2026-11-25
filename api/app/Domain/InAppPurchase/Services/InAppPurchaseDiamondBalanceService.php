@@ -4,9 +4,9 @@ namespace App\Domain\InAppPurchase\Services;
 
 use App\Domain\InAppPurchase\Contracts\DiamondBalanceInterface;
 use App\Exceptions\TransactionDataException;
-use App\Models\Trx\TrxDiamondBalance;
+use App\Models\Shard\TrxDiamondBalance;
 use App\Persistence\ApiSession;
-use App\Repositories\Trx\TrxDiamondBalanceRepository;
+use App\Repositories\Shard\TrxDiamondBalanceRepository;
 use Nexus\Core\Resource\Constants\FreeDiamondConst;
 use Nexus\Core\Resource\Services\DiamondService as PackageDiamondService;
 use Nexus\Core\Resource\Services\ItemService as PackageItemService;

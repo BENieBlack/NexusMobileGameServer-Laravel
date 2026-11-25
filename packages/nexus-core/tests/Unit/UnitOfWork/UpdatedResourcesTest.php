@@ -2,7 +2,7 @@
 
 namespace Nexus\Core\Tests\Unit\UnitOfWork;
 
-use Nexus\Core\Models\Trx\_BaseTrx;
+use Nexus\Core\Models\Shard\_BaseTrx;
 use Nexus\Core\UnitOfWork\Contracts\ReturnedAsSingleUpdatedResource;
 use Nexus\Core\UnitOfWork\Contracts\ReturnedAsUpdatedResource;
 use Nexus\Core\UnitOfWork\UpdatedResources;

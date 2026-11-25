@@ -285,7 +285,7 @@ login の応答を作る `HomeUseCase` → `StaminaService::findAllStaminas`（`
 | ヘッダー名 | **`X-Platform`** | 既存は `X-Unique-Request-Identifier`（冪等）、`X-Master-Hash`（マスター）、`X-Client-Timestamp` / `X-Client-Nonce` / `X-Client-Signature`（sign_up の署名）。`X-Client-*` は署名の組なので、署名と無関係な platform は `X-Platform` にして混ぜない |
 | 許可値 | **`Apple` または `Google`**（完全一致・大文字小文字を区別・前後の空白なし） | `trx_diamond.platform` の値（`Apple` / `Google`）と、課金の `BuyRequest` の `platform`（`in:Apple,Google`）に揃える。小文字（`apple`）や `iOS` / `Android` は不正。大小を許すと、DB に入る値が `Apple` と `apple` に割れる |
 | 他の OS・環境（Windows、エディタ、ブラウザなど） | 許可しない（不正値） | 開発のエディタ・デスクトップは、クライアントの設定で `Apple` か `Google` のどちらかを送る（クライアント側の判断。S4） |
-| 既存の大文字小文字の割れ | `api/app/Models/Log/LogInAppPurchase.php`（60〜62 行）に小文字の `'apple'` / `'google'` の定数がある（ログ側。`trx_diamond.platform` と課金の `BuyRequest` は `Apple` / `Google`） | **本機能では変えない**。ヘッダーの許可値は `Apple` / `Google` のまま。大小の割れが既にログ側にあることを、別機能（課金・free-diamond-item）の論点として残す |
+| 既存の大文字小文字の割れ | `api/app/Models/Shard/LogInAppPurchase.php`（60〜62 行）に小文字の `'apple'` / `'google'` の定数がある（ログ側。`trx_diamond.platform` と課金の `BuyRequest` は `Apple` / `Google`） | **本機能では変えない**。ヘッダーの許可値は `Apple` / `Google` のまま。大小の割れが既にログ側にあることを、別機能（課金・free-diamond-item）の論点として残す |
 | 値の定義 | 1 か所の定数（`Apple`・`Google`。`App\Constants\Platform` など。名前は仮置き） | 既存は課金側の `BuyRequest` の `in:` と `DiamondDeliveryHandler` の `'Apple'` に分散している。定義の統一（既存コードの置き換え）は本機能では**しない**（影響は 10.7 節） |
 
 ### 10.2 必須にする範囲と、検証するミドルウェア

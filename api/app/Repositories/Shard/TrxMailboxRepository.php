@@ -1,0 +1,241 @@
+<?php
+
+namespace App\Repositories\Shard;
+
+use App\Domain\Mailbox\Constants\Category;
+use App\Domain\Mailbox\Constants\Priority;
+use App\Models\Mst\MstMailbox;
+use App\Models\Shard\TrxMailbox;
+use Nexus\Core\Support\CustomCollection;
+use Nexus\Core\Utilities\ClockUtility;
+
+/**
+ * TrxMailboxRepository
+ *
+ * プレイヤーのメールボックスデータを管理するRepository
+ *
+ * @extends _BaseTrxRepository<TrxMailbox>
+ */
+class TrxMailboxRepository extends _BaseTrxRepository
+{
+    protected string $modelClass = TrxMailbox::class;
+
+    /**
+     * プレイヤーIDでメールボックス一覧を取得
+     *
+     * @param  Category|null  $category  カテゴリフィルタ
+     * @param  Priority|null  $priority  優先度フィルタ
+     * @param  bool  $onlyUnread  未読のみ
+     * @param  bool  $onlyProtected  保護のみ
+     * @return CustomCollection<int, TrxMailbox>
+     */
+    public function selectByPlayerId(
+        int $sysPlayerId,
+        ?Category $category = null,
+        ?Priority $priority = null,
+        bool $onlyUnread = false,
+        bool $onlyProtected = false
+    ): CustomCollection {
+        $query = $this->modelClass::query()
+            ->with(['mstMailbox.message.l10n', 'mstMailbox.contentCollection', 'trxPlayer'])
+            ->where('sys_player_id', $sysPlayerId)
+            ->where('is_delete', false);
+
+        // 有効期限切れを除外
+        $query->where(function ($q) {
+            $q->whereNull('expires_at')
+                ->orWhere('expires_at', '>', ClockUtility::now());
+        });
+
+        // カテゴリ・優先度はマスター側の値。
+        // mst_mailbox は別のDB接続にあるため、whereHas ではJOINできない。
+        // 先にマスターから該当するIDを引いて whereIn で絞る。
+        if ($category !== null || $priority !== null) {
+            $query->whereIn('mst_mailbox_id', $this->findMstMailboxIds($category, $priority));
+        }
+
+        // 未読フィルタ
+        if ($onlyUnread) {
+            $query->whereNull('read_at');
+        }
+
+        // 保護フィルタ
+        if ($onlyProtected) {
+            $query->where('is_protected', true);
+        }
+
+        // 作成日時の順でソート（優先度ソートはPHP側で実施）
+        $query->orderBy('created_at', 'desc');
+
+        $results = $query->get();
+
+        // 優先度順にソート（PHP側で実施）
+        // priorityはMstMailbox側でPriorityにキャスト済みなので、Enumのまま扱う
+        $priorityOrder = [
+            Priority::URGENT->value => 1,
+            Priority::IMPORTANT->value => 2,
+            Priority::NORMAL->value => 3,
+        ];
+
+        $sorted = $results->sort(function ($a, $b) use ($priorityOrder) {
+            // マスターが引けないメールは通常扱いにする
+            $priorityAValue = ($a->mstMailbox?->getPriority() ?? Priority::NORMAL)->value;
+            $priorityBValue = ($b->mstMailbox?->getPriority() ?? Priority::NORMAL)->value;
+
+            $orderA = $priorityOrder[$priorityAValue];
+            $orderB = $priorityOrder[$priorityBValue];
+
+            if ($orderA !== $orderB) {
+                return $orderA <=> $orderB;
+            }
+
+            // 優先度が同じ場合は作成日時の降順
+            return $b->getCreatedAt() <=> $a->getCreatedAt();
+        })->values();
+
+        return new CustomCollection($sorted->all());
+    }
+
+    /**
+     * カテゴリごとの未読数を取得
+     *
+     * @return array<string, int>
+     */
+    public function countUnreadByCategory(int $sysPlayerId): array
+    {
+        $mailboxes = $this->modelClass::query()
+            ->with('mstMailbox')
+            ->where('sys_player_id', $sysPlayerId)
+            ->where('is_delete', false)
+            ->whereNull('read_at')
+            ->where(function ($q) {
+                $q->whereNull('expires_at')
+                    ->orWhere('expires_at', '>', ClockUtility::now());
+            })
+            ->get();
+
+        $counts = [];
+        foreach ($mailboxes as $mailbox) {
+            // categoryはMstMailbox側でCategoryにキャスト済み
+            $category = $mailbox->mstMailbox?->getCategory();
+            if ($category !== null) {
+                $counts[$category->value] = ($counts[$category->value] ?? 0) + 1;
+            }
+        }
+
+        return $counts;
+    }
+
+    /**
+     * IDでメールボックスを取得
+     */
+    public function selectById(int $trxMailboxId): ?TrxMailbox
+    {
+        $trxMailbox = $this->findCachedModel($trxMailboxId);
+
+        if ($trxMailbox !== null) {
+            /** @var TrxMailbox */
+            return $trxMailbox;
+        }
+
+        $trxMailbox = $this->modelClass::find($trxMailboxId);
+
+        if ($trxMailbox !== null) {
+            $this->setModel($trxMailbox);
+        }
+
+        return $trxMailbox;
+    }
+
+    /**
+     * IDでメールボックスを FOR UPDATE で読み直す（行ロック）
+     *
+     * trx_mailbox の is_protected / is_delete は、本人の API（保護の切り替え）と
+     * バッチ mailbox:delete-expired（player.lock の外）の両方が書く。
+     * 書く側が全員この行を押さえてから読み直し、ロック読みの値で判定して更新する。
+     * トランザクション内で呼ぶこと（外なら LogicException）。
+     *
+     * 既にキャッシュにある同じ行は最新の値で差し替える
+     * （古い値のまま setModel() して他方の更新を巻き戻さないため）。
+     */
+    public function selectByIdForUpdate(int $trxMailboxId): ?TrxMailbox
+    {
+        /** @var TrxMailbox|null $trxMailbox */
+        $trxMailbox = $this->selectForUpdate()->find($trxMailboxId);
+
+        $this->replaceCachedModelIfPresent($trxMailboxId, $trxMailbox);
+
+        return $trxMailbox;
+    }
+
+    /**
+     * 既読にする
+     */
+    public function markAsOpened(TrxMailbox $trxMailbox): void
+    {
+        $trxMailbox->setIsOpened(true);
+        if ($trxMailbox->getReadAt() === null) {
+            $trxMailbox->setReadAt(ClockUtility::nowToString());
+        }
+        $this->setModel($trxMailbox);
+    }
+
+    /**
+     * 受取済みにする（Eloquent Model用）
+     */
+    public function markAsReceived(TrxMailbox $trxMailbox): void
+    {
+        $trxMailbox->setIsReceived(true);
+        $trxMailbox->setReceivedAt(ClockUtility::nowToString());
+        $this->setModel($trxMailbox);
+    }
+
+    /**
+     * 保護状態を切り替える
+     */
+    public function toggleProtection(TrxMailbox $trxMailbox, bool $isProtected): void
+    {
+        $trxMailbox->setIsProtected($isProtected);
+        $this->setModel($trxMailbox);
+    }
+
+    /**
+     * 期限切れメールを取得
+     *
+     * @return CustomCollection<int, TrxMailbox>
+     */
+    public function selectExpired(int $sysPlayerId): CustomCollection
+    {
+        $records = $this->modelClass::query()
+            ->where('sys_player_id', $sysPlayerId)
+            ->where('is_delete', false)
+            ->where('is_protected', false)
+            ->whereNotNull('expires_at')
+            ->where('expires_at', '<=', ClockUtility::now())
+            ->get();
+
+        return new CustomCollection($records->all());
+    }
+
+    /**
+     * カテゴリ・優先度に一致するメールボックスマスターのIDを返す
+     *
+     * mst_mailbox は mst 接続にあり、trx 側のクエリから直接JOINできない。
+     *
+     * @return list<string>
+     */
+    private function findMstMailboxIds(?Category $category, ?Priority $priority): array
+    {
+        $query = MstMailbox::query();
+
+        if ($category !== null) {
+            $query->where('category', $category->value);
+        }
+
+        if ($priority !== null) {
+            $query->where('priority', $priority->value);
+        }
+
+        return array_values($query->pluck('id')->map(fn ($id) => (string) $id)->all());
+    }
+}

@@ -10,7 +10,7 @@ use App\Domain\LoginBonus\UseCases\ReceiveUseCase;
 use App\Exceptions\BusinessLogicException;
 use App\Exceptions\GameErrorCode;
 use App\Exceptions\MasterDataException;
-use App\Repositories\Trx\VipLoginBonusHistoryRepositoryInterface;
+use App\Repositories\Shard\VipLoginBonusHistoryRepositoryInterface;
 use Nexus\Core\ResourceDelivery\Services\ResourceDeliveryService;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;

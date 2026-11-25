@@ -2,8 +2,8 @@
 
 namespace Tests\Unit\Models;
 
+use App\Models\Shard\TrxUnit;
 use App\Models\Sys\SysMaintenance;
-use App\Models\Trx\TrxUnit;
 use Carbon\CarbonImmutable;
 use Nexus\Core\Exceptions\DirectWriteNotAllowedException;
 use Nexus\Core\Models\_BaseModel;

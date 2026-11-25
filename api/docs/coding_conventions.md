@@ -676,7 +676,7 @@ class MstUnit extends _BaseMst
 - **新規モデル追加時の迷いを排除**: 規約が明確なため、実装時に判断不要
 
 #### Log Model の特別なルール
-- `App\Models\Log\` 配下のLogモデルは、insert onlyのログテーブルを扱う
+- `App\Models\Shard\` 配下のLogモデルは、insert onlyのログテーブルを扱う
 - **基底クラス**: `_BaseLog` を継承（`$connection = 'log'`, `UPDATED_AT = null` が設定済み）
 - **$casts**: ビジネスカラムと `system_at` のみ含める（`created_at`, `updated_at` は含めない）
 - **$fillable**: ビジネスカラムと `system_at` のみ含める（`created_at` は含めない）

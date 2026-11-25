@@ -7,7 +7,7 @@ use App\Domain\InAppPurchase\Services\InAppPurchaseDiamondService;
 use App\Domain\InAppPurchase\Services\InAppPurchasePassService;
 use App\Domain\InAppPurchase\Services\InAppPurchaseValidationService;
 use App\Models\Mst\MstInAppPurchase;
-use App\Repositories\Log\LogInAppPurchaseRepository;
+use App\Repositories\Shard\LogInAppPurchaseRepository;
 use NexusBilling\DataTransferObjects\Verification;
 use NexusBilling\Facades\BillingFacade;
 use NexusVip\Services\VipPointService;

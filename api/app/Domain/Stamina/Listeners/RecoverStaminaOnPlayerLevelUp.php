@@ -3,9 +3,9 @@
 namespace App\Domain\Stamina\Listeners;
 
 use App\Domain\Stamina\Constants\StaminaConst;
-use App\Models\Trx\TrxStamina;
+use App\Models\Shard\TrxStamina;
 use App\Repositories\Mst\MstPlayerLevelRepository;
-use App\Repositories\Trx\TrxStaminaRepository;
+use App\Repositories\Shard\TrxStaminaRepository;
 use Nexus\Core\Utilities\ClockUtility;
 use NexusLevel\Events\PlayerLeveledUp;
 use NexusStamina\Services\StaminaRecoveryIntervalProviderInterface;

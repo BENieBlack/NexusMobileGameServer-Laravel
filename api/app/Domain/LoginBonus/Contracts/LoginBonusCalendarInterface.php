@@ -2,7 +2,7 @@
 
 namespace App\Domain\LoginBonus\Contracts;
 
-use App\Models\Trx\TrxVipLoginBonus;
+use App\Models\Shard\TrxVipLoginBonus;
 use NexusLogin\DataTransferObjects\LoginBonusHistory;
 
 /**

@@ -2,7 +2,7 @@
 
 namespace Tests\Feature\Traits;
 
-use App\Models\Trx\TrxItem;
+use App\Models\Shard\TrxItem;
 use App\Persistence\ApiSession;
 use App\Traits\CompositePrimaryKeyTrait;
 use Illuminate\Database\Eloquent\Model;

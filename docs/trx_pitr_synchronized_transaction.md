@@ -215,7 +215,7 @@ private function flushPitrLogs(): void
     $pitrLogger = app()->make(\NexusPitr\Logger\TrxChangeLogger::class);
     
     foreach ($this->repositories as $repository) {
-        if ($repository instanceof \NexusPersistence\Repositories\Trx\_BaseTrxRepository) {
+        if ($repository instanceof \NexusPersistence\Repositories\Shard\_BaseTrxRepository) {
             // Repositoryが保持している変更履歴をPITRログに記録
             $repository->flushPitrLogs();
         }
@@ -240,7 +240,7 @@ private function clearAll(): void
 ### 3. _BaseTrxRepositoryの修正
 
 ```php
-// packages/nexus-core-persistence/src/Repositories/Trx/_BaseTrxRepository.php
+// packages/nexus-core-persistence/src/Repositories/Shard/_BaseTrxRepository.php
 
 use NexusPitr\Traits\LogsChanges;
 use NexusPitr\Logger\ShardMapper;

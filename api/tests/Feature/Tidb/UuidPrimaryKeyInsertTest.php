@@ -2,9 +2,9 @@
 
 namespace Tests\Feature\Tidb;
 
-use App\Models\Trx\TrxMailbox;
+use App\Models\Shard\TrxMailbox;
 use App\Persistence\ApiSession;
-use App\Repositories\Trx\TrxMailboxRepository;
+use App\Repositories\Shard\TrxMailboxRepository;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Nexus\Core\UnitOfWork\Persistence\QueryManager;

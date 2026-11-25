@@ -5,8 +5,8 @@ namespace App\Domain\InAppPurchase\Services;
 use App\Domain\InAppPurchase\Constants\InAppPurchaseConst;
 use App\Domain\Item\Contracts\ItemInventoryInterface;
 use App\Models\Mst\MstInAppPurchase;
-use App\Repositories\Trx\TrxInAppPurchaseRepository;
-use App\Repositories\Trx\TrxUnitRepository;
+use App\Repositories\Shard\TrxInAppPurchaseRepository;
+use App\Repositories\Shard\TrxUnitRepository;
 
 /**
  * InAppPurchasePackService

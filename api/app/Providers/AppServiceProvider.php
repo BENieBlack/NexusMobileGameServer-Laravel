@@ -46,8 +46,6 @@ use App\Domain\Unit\Services\UnitLevelService;
 use App\Exceptions\GameErrorCode;
 use App\Persistence\ApiSession;
 use App\Persistence\CurrentMasterVersion;
-use App\Repositories\Log\LogVipPointRepository;
-use App\Repositories\Log\TradeLogRepositoryAdapter;
 use App\Repositories\Mst\AlbumCatalogRepositoryAdapter;
 use App\Repositories\Mst\EventMasterRepositoryAdapter;
 use App\Repositories\Mst\LoginBonusRepositoryAdapter;
@@ -65,6 +63,28 @@ use App\Repositories\Mst\RewardTrackMasterRepositoryAdapter;
 use App\Repositories\Mst\TagRepositoryAdapter;
 use App\Repositories\Mst\TradeMasterRepositoryAdapter;
 use App\Repositories\Mst\VipLoginBonusRepositoryInterface;
+use App\Repositories\Shard\AlbumEntryRepositoryAdapter;
+use App\Repositories\Shard\DiamondRepositoryAdapter;
+use App\Repositories\Shard\EquipmentRepositoryAdapter;
+use App\Repositories\Shard\GachaProgressRepositoryAdapter;
+use App\Repositories\Shard\ItemRepositoryAdapter;
+use App\Repositories\Shard\LoginBonusHistoryRepositoryAdapter;
+use App\Repositories\Shard\LogVipPointRepository;
+use App\Repositories\Shard\MailboxRepositoryAdapter;
+use App\Repositories\Shard\MissionReceiptRepositoryAdapter;
+use App\Repositories\Shard\NotificationRepositoryAdapter;
+use App\Repositories\Shard\ProgressRepositoryAdapter;
+use App\Repositories\Shard\RewardTrackLineRepositoryAdapter;
+use App\Repositories\Shard\RewardTrackMilestoneRepositoryAdapter;
+use App\Repositories\Shard\RewardTrackRepositoryAdapter;
+use App\Repositories\Shard\StaminaRepositoryAdapter;
+use App\Repositories\Shard\TradeLogRepositoryAdapter;
+use App\Repositories\Shard\TradeProductCountRepositoryAdapter;
+use App\Repositories\Shard\TrxVipLoginBonusRepository;
+use App\Repositories\Shard\UnitRepositoryAdapter;
+use App\Repositories\Shard\VipLoginBonusHistoryRepositoryInterface;
+use App\Repositories\Shard\WalletBalanceRepositoryAdapter;
+use App\Repositories\Shard\WalletRepositoryAdapter;
 use App\Repositories\Sys\AgreementRepositoryAdapter;
 use App\Repositories\Sys\ChatMessageRepositoryAdapter;
 use App\Repositories\Sys\ChatRoomMemberRepositoryAdapter;
@@ -78,26 +98,6 @@ use App\Repositories\Sys\PlayerRepositoryAdapter;
 use App\Repositories\Sys\SysMaintenanceRepository;
 use App\Repositories\Sys\SysPlayerDeviceRepository;
 use App\Repositories\Sys\SysPlayerTokenRepository;
-use App\Repositories\Trx\AlbumEntryRepositoryAdapter;
-use App\Repositories\Trx\DiamondRepositoryAdapter;
-use App\Repositories\Trx\EquipmentRepositoryAdapter;
-use App\Repositories\Trx\GachaProgressRepositoryAdapter;
-use App\Repositories\Trx\ItemRepositoryAdapter;
-use App\Repositories\Trx\LoginBonusHistoryRepositoryAdapter;
-use App\Repositories\Trx\MailboxRepositoryAdapter;
-use App\Repositories\Trx\MissionReceiptRepositoryAdapter;
-use App\Repositories\Trx\NotificationRepositoryAdapter;
-use App\Repositories\Trx\ProgressRepositoryAdapter;
-use App\Repositories\Trx\RewardTrackLineRepositoryAdapter;
-use App\Repositories\Trx\RewardTrackMilestoneRepositoryAdapter;
-use App\Repositories\Trx\RewardTrackRepositoryAdapter;
-use App\Repositories\Trx\StaminaRepositoryAdapter;
-use App\Repositories\Trx\TradeProductCountRepositoryAdapter;
-use App\Repositories\Trx\TrxVipLoginBonusRepository;
-use App\Repositories\Trx\UnitRepositoryAdapter;
-use App\Repositories\Trx\VipLoginBonusHistoryRepositoryInterface;
-use App\Repositories\Trx\WalletBalanceRepositoryAdapter;
-use App\Repositories\Trx\WalletRepositoryAdapter;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Support\Facades\Event;
@@ -458,7 +458,7 @@ class AppServiceProvider extends ServiceProvider
     /**
      * Repositoryをリクエストスコープで共有する
      *
-     * Trx/Log/SysのRepositoryは取得したモデルをインスタンス内にキャッシュする。
+     * Shard（Trx系・Log系）とSysのRepositoryは取得したモデルをインスタンス内にキャッシュする。
      * 注入のたびに別インスタンスだと同じSELECTがUseCaseごとに走り、
      * 書き込みキューもインスタンスごとに分かれてしまうため、
      * リクエスト（キューならジョブ）単位で1つを共有する。
@@ -471,7 +471,7 @@ class AppServiceProvider extends ServiceProvider
      */
     private function registerScopedRepositories(): void
     {
-        foreach (['Trx', 'Log', 'Sys'] as $group) {
+        foreach (['Shard', 'Sys'] as $group) {
             foreach (glob(app_path("Repositories/{$group}/*.php")) ?: [] as $file) {
                 $class = "App\\Repositories\\{$group}\\".basename($file, '.php');
 

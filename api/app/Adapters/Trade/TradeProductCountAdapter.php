@@ -2,7 +2,7 @@
 
 namespace App\Adapters\Trade;
 
-use App\Models\Trx\TrxTradeProduct;
+use App\Models\Shard\TrxTradeProduct;
 use NexusTrade\DataTransferObjects\TradeProductCount;
 
 /**

@@ -444,7 +444,7 @@ trait LogsChanges
 ### 4. Repository統合例
 
 ```php
-namespace App\Repositories\Trx;
+namespace App\Repositories\Shard;
 
 use NexusPitr\Traits\LogsChanges;
 use Illuminate\Support\Facades\DB;

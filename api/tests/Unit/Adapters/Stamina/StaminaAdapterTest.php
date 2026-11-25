@@ -3,7 +3,7 @@
 namespace Tests\Unit\Adapters\Stamina;
 
 use App\Adapters\Stamina\StaminaAdapter;
-use App\Models\Trx\TrxStamina;
+use App\Models\Shard\TrxStamina;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 

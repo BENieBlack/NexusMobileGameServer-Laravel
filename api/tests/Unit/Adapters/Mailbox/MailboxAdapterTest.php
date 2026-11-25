@@ -3,7 +3,7 @@
 namespace Tests\Unit\Adapters\Mailbox;
 
 use App\Adapters\Mailbox\MailboxAdapter;
-use App\Models\Trx\TrxMailbox;
+use App\Models\Shard\TrxMailbox;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
