@@ -51,20 +51,20 @@ API（api/）の接続は `api/config/database.php`、Tool（tool/）の接続�
 |---|---|---|
 | sys | `packages/*/database/migrations/sys/`、`api/database/migrations/sys/` | `sys` |
 | mst | `packages/*/database/migrations/mst/`、`api/database/migrations/mst/` | `mst` |
-| trx | `packages/*/database/migrations/trx/` | `trx1`..`trxN` 全部 |
-| log | `packages/*/database/migrations/log/`、`api/database/migrations/log/` | `trx1`..`trxN` 全部 |
+| shard（trx と log） | `packages/*/database/migrations/shard/`、`api/database/migrations/shard/` | `trx1`..`trxN` 全部 |
 | adm | `tool/database/migrations/adm/` | `admin` |
 | tol | `tool/database/migrations/tol/` | `tool` |
 
+- trx と log は同じシャードDBに同居するので、マイグレーションも `shard/` 1 つにまとめる。trx と log の区別は、テーブル接頭辞（`trx_` / `log_`）・モデル・Repository で残る。
 - テーブルは機能を持つパッケージのマイグレーションに書く。`api/database/migrations/` には Laravel 標準テーブルと、パッケージに属さない `log_action_*` だけがある。
-- ファイル名は `2026_01_01_000001_create_{機能}_tables.php`、log は `create_{機能}_log_tables.php`。trx と log は同じDBの同じ `migrations` テーブルに記録されるので、両グループを合わせて同名ファイルがあってはいけない（`api/tests/Architecture/MigrationNameUniquenessTest.php`）。
-- trx/log のパスは `packages/nexus-core/src/Pitr/Support/ShardMigrationPaths.php` が `packages/` を走査して集める。パッケージを足しても一覧を直す必要はない。`nexus-tidb` の変換マイグレーションは必ず最後に流れる。
+- ファイル名は `2026_01_01_000001_create_{機能}_tables.php`、log は `create_{機能}_log_tables.php`。trx と log は同じDBの同じ `migrations` テーブルに記録されるので、`shard/` の中で同名ファイルがあってはいけない（`api/tests/Architecture/MigrationNameUniquenessTest.php`）。
+- shard のパスは `packages/nexus-core/src/Pitr/Support/ShardMigrationPaths.php` が `packages/` を走査して集める。パッケージを足しても一覧を直す必要はない。`nexus-tidb` の変換マイグレーションは必ず最後に流れる。
 
 ### 書き方
 
-- API側（sys/mst/trx/log）は `Schema::create('テーブル名', ...)` と書き、**接続名を書かない**。流すときに `--database` で接続を指定するため（trx は同じファイルを全シャードに流す）。
+- API側（sys/mst/shard）は `Schema::create('テーブル名', ...)` と書き、**接続名を書かない**。流すときに `--database` で接続を指定するため（shard は同じファイルを全シャードに流す）。
 - Tool側（adm/tol）は `Schema::connection('admin')` / `Schema::connection('tool')` を書く。
-- 1ファイルに1パッケージ・1グループ分のテーブルをまとめる。見本: `packages/nexus-core/database/migrations/{mst,trx,log}/`（リソース）、`packages/nexus-core/database/migrations/sys/`。
+- 1ファイルに1パッケージ・1グループ分のテーブルをまとめる。見本: `packages/nexus-core/database/migrations/{mst,shard}/`（リソース）、`packages/nexus-core/database/migrations/sys/`。
 
 ### 既存ファイルを書き換えてよい期間
 
@@ -79,12 +79,12 @@ API（api/）の接続は `api/config/database.php`、Tool（tool/）の接続�
 
 | コマンド | 内容 |
 |---|---|
-| `make migrate` | sys と mst（基底 DB だけ。版の DB は対象外）を `--database` 指定で、trx を `php artisan trx:migrate`、log を `php artisan pitr:migrate`（どちらも全シャード） |
-| `make migrate-fresh` | sys/mst（基底 DB だけ）を `migrate:fresh`、trx を `trx:migrate --fresh`、log は通常の `pitr:migrate` |
-| `trx:rollback` / `pitr:rollback` | 全シャードでロールバック（`--step`） |
+| `make migrate` | sys と mst（基底 DB だけ。版の DB は対象外）を `--database` 指定で、shard（trx と log のテーブル）を `php artisan trx:migrate`（全シャード） |
+| `make migrate-fresh` | sys/mst（基底 DB だけ）を `migrate:fresh`、shard を `trx:migrate --fresh`（trx と log のテーブルを 1 回で作り直す） |
+| `trx:rollback` | 全シャードでロールバック（`--step`） |
 
 - **引数なしの `php artisan migrate` は使わない**。既定接続が sqlite なので、意図しないDBに流れる。
-- **`pitr:migrate --fresh` は使わない**。trx と log は同じDBにあるので、log 側で fresh すると直前に作った trx のテーブルまで消える。全部作り直すときは `make migrate-fresh`。
+- 作り直しは `trx:migrate --fresh`（`make migrate-fresh` に含まれる）。trx と log のテーブルを 1 回で作る。
 - 既存のマイグレーションファイルを書き換えたときは通常の migrate では反映されない。`make migrate-fresh` → `make seed` で作り直す（上の「既存ファイルを書き換えてよい期間」）。
 - Tool の adm/tol は `make migrate` に含まれない。tool-php コンテナで `php artisan migrate --path=database/migrations/adm --database=admin` と `--path=database/migrations/tol --database=tool` を実行する（[tool.md](./tool.md)）。
 
@@ -124,7 +124,7 @@ API（api/）の接続は `api/config/database.php`、Tool（tool/）の接続�
 - 同じテーブルを複数指すときは役割を前に付ける（`request_sys_player_id`、`receive_sys_player_id`）。
 - 外部サービス側の識別子は `platform_` 等を付けて区別する（`mst_billing_platform_product.platform_product_id`）。
 - 種類が混ざる参照は `content_type` + `content_mst_id`（`mst_login_bonus_content` など報酬系）。
-- TiDB の UUID 変換はこの命名規約を使って変換対象の参照カラムを見つけるので、規約から外れた名前にすると変換が漏れる（`packages/nexus-tidb/database/migrations/trx/2026_01_01_999999_convert_trx_ids_to_uuid.php`）。
+- TiDB の UUID 変換はこの命名規約を使って変換対象の参照カラムを見つけるので、規約から外れた名前にすると変換が漏れる（`packages/nexus-tidb/database/migrations/shard/2026_01_01_999999_convert_trx_ids_to_uuid.php`）。
 
 ### 外部キー制約を張らない
 
@@ -187,10 +187,10 @@ API（api/）の接続は `api/config/database.php`、Tool（tool/）の接続�
 
 | 種類 | 内容 | 定義 |
 |---|---|---|
-| `log_action_*` | ゲーム内の行動の記録（APIアクセス、ガチャ、課金、強化、ログインボーナス受取など） | `api/database/migrations/log/`、各パッケージの `log/` |
-| `log_change_trx` | trx テーブルの変更履歴（PITR 用、全テーブル共通、`id` は UUID） | `packages/nexus-core/database/migrations/log/` |
-| `log_change_trx_*` | テーブル別の変更履歴（before/after と差分） | 各パッケージの `log/` |
-| `log_pitr_*` | PITR の復旧・検証の記録 | `packages/nexus-core/database/migrations/log/` |
+| `log_action_*` | ゲーム内の行動の記録（APIアクセス、ガチャ、課金、強化、ログインボーナス受取など） | `api/database/migrations/shard/`、各パッケージの `shard/` |
+| `log_change_trx` | trx テーブルの変更履歴（PITR 用、全テーブル共通、`id` は UUID） | `packages/nexus-core/database/migrations/shard/` |
+| `log_change_trx_*` | テーブル別の変更履歴（before/after と差分） | 各パッケージの `shard/` |
+| `log_pitr_*` | PITR の復旧・検証の記録 | `packages/nexus-core/database/migrations/shard/` |
 
 - 追記専用。更新・削除しない。
 - 日時は2種類持つ: `system_at`（アプリの時刻。`ClockUtility::now()` で入れるので、デバッグで時刻をずらすとそれに連動する）と `created_at`（DBが実際に記録した時刻）。範囲検索は `system_at` にインデックスを張って使う。
@@ -208,7 +208,7 @@ API（api/）の接続は `api/config/database.php`、Tool（tool/）の接続�
 
 ### テーブル
 
-定義: `packages/nexus-core-billing/database/migrations/trx/2026_01_01_000001_create_billing_tables.php`、`packages/nexus-wallet/database/migrations/trx/2026_01_01_000001_create_wallet_tables.php`
+定義: `packages/nexus-core-billing/database/migrations/shard/2026_01_01_000001_create_billing_tables.php`、`packages/nexus-wallet/database/migrations/shard/2026_01_01_000001_create_wallet_tables.php`
 
 | テーブル | 主キー | 役割 |
 |---|---|---|
@@ -306,7 +306,7 @@ TiDB モード（`DB_IS_TIDB=true`）で本番を動かすときに、テーブ�
 | 複合主キー（`trx_item` など）、`sys_player_id` が主キー（`trx_player` など） | そのまま | 同じ |
 | mst の `id` | 文字列 | 同じ |
 
-- 変換は `convert_{trx,log}_ids_to_uuid.php` が最後に流れて行う。参照カラムは列名（`{参照先テーブル名}_id`）から見つけるので、命名規約（5節）から外れると変換が漏れる
+- 変換は `convert_{trx,log}_ids_to_uuid.php`（どちらも `shard/` にあり、最後に流れる）が行う。参照カラムは列名（`{参照先テーブル名}_id`）から見つけるので、命名規約（5節）から外れると変換が漏れる
 - `sys_player.id` は TiDB モードでも連番。プレイヤーの採番方法は MySQL と同じ
 
 ### 連番の主キーで何が起きるか

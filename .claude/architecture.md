@@ -96,7 +96,7 @@ Traits/                   UseCaseTrait, CompositePrimaryKeyTrait, RequiresAuthen
 | `nexus-core` の `UnitOfWork`（`Nexus\Core\UnitOfWork\`） | `QueryManager`、`UsesUnitOfWork`、`PlayerSessionResolverInterface` |
 | `nexus-core-security` | 認証・署名・レート制限・冪等性の Middleware、Slack通知 |
 | `nexus-core-auth` / `nexus-core-billing` | トークン発行・検証 / App Store・Google Play の課金連携 |
-| `nexus-core` の `Pitr`（`Nexus\Core\Pitr\`） | trx の変更ログ（PITR）、`ShardMapper`、`pitr:migrate` |
+| `nexus-core` の `Pitr`（`Nexus\Core\Pitr\`） | trx の変更ログ（PITR）、`ShardMapper`、`trx:migrate`（シャードのマイグレーション） |
 | `nexus-tidb` | TiDBモードの切り替え（`TidbMode`） |
 | `nexus-core` の `ResourceDelivery`（`Nexus\Core\ResourceDelivery\`） | 報酬配布。`ResourceDeliveryService` に `ResourceDeliveryHandlerInterface` 実装を登録する。通貨の付与は `CurrencyGranterInterface`（実装は nexus-wallet） |
 

@@ -47,12 +47,12 @@ class MigrateShardsCommandTest extends TestCase
         $this->assertSame('trx1', $this->calls[0][1]['--database']);
         $this->assertSame('trx2', $this->calls[1][1]['--database']);
 
-        // パス未指定なら、packages/を走査して集めたtrxディレクトリを既定にする
+        // パス未指定なら、packages/を走査して集めたshardディレクトリを既定にする
         $paths = $this->calls[0][1]['--path'];
         $this->assertNotEmpty($paths);
 
         foreach ($paths as $path) {
-            $this->assertStringEndsWith('database/migrations/trx', $path);
+            $this->assertStringEndsWith('database/migrations/shard', $path);
         }
     }
 

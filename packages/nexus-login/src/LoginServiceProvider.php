@@ -18,7 +18,7 @@ class LoginServiceProvider extends ServiceProvider
         $basePath = __DIR__.'/../database/migrations';
 
         // mst, trx, log, sys の各ディレクトリを個別にロード
-        foreach (['mst', 'trx', 'log', 'sys'] as $dbType) {
+        foreach (['mst', 'shard', 'sys'] as $dbType) {
             $path = $basePath.'/'.$dbType;
             if (is_dir($path)) {
                 $this->loadMigrationsFrom($path);

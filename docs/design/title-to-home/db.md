@@ -45,22 +45,22 @@
 | `sys_player` `sys_player_device` `sys_sharding` `sys_sharding_node` `sys_sharding_node_player` | `packages/nexus-core/database/migrations/sys/2026_01_01_000001_create_core_tables.php` |
 | `sys_player_token`（ほか `sys_player_transfer_code` `sys_player_external_account`） | `packages/nexus-core-auth/database/migrations/sys/2026_01_01_000001_create_auth_tables.php` |
 | `sys_agreement` | `packages/nexus-agreement/database/migrations/sys/2026_01_01_000001_create_agreement_tables.php` |
-| `trx_agreement` | `packages/nexus-agreement/database/migrations/trx/2026_01_01_000001_create_agreement_tables.php` |
+| `trx_agreement` | `packages/nexus-agreement/database/migrations/shard/2026_01_01_000001_create_agreement_tables.php` |
 | `mst_login_bonus` `mst_login_bonus_content` | `packages/nexus-login/database/migrations/mst/2026_01_01_000001_create_login_tables.php` |
-| `trx_login_bonus` | `packages/nexus-login/database/migrations/trx/2026_01_01_000001_create_login_tables.php` |
-| `log_action_login_bonus_receive` | `packages/nexus-login/database/migrations/log/2026_01_01_000001_create_login_log_tables.php` |
+| `trx_login_bonus` | `packages/nexus-login/database/migrations/shard/2026_01_01_000001_create_login_tables.php` |
+| `log_action_login_bonus_receive` | `packages/nexus-login/database/migrations/shard/2026_01_01_000001_create_login_log_tables.php` |
 | `mst_vip_*` | `packages/nexus-vip/database/migrations/mst/2026_01_01_000001_create_vip_tables.php` |
-| `trx_vip_login_bonus` | `packages/nexus-vip/database/migrations/trx/2026_01_01_000001_create_vip_tables.php` |
-| `log_action_vip_login_bonus_receive`（ほか `log_action_vip_point_change`） | `packages/nexus-vip/database/migrations/log/2026_01_01_000001_create_vip_log_tables.php` |
-| `trx_unit` `trx_item` `trx_equipment` | `packages/nexus-core/database/migrations/trx/2026_01_01_000001_create_resource_tables.php` |
-| `trx_player` | `packages/nexus-core/database/migrations/trx/2026_01_01_000001_create_core_tables.php` |
-| `trx_wallet` `trx_wallet_balance` | `packages/nexus-wallet/database/migrations/trx/2026_01_01_000001_create_wallet_tables.php` |
-| `trx_diamond` `trx_diamond_balance` | `packages/nexus-core-billing/database/migrations/trx/2026_01_01_000001_create_billing_tables.php` |
-| `trx_stamina` | `packages/nexus-stamina/database/migrations/trx/2026_01_01_000001_create_stamina_tables.php` |
+| `trx_vip_login_bonus` | `packages/nexus-vip/database/migrations/shard/2026_01_01_000001_create_vip_tables.php` |
+| `log_action_vip_login_bonus_receive`（ほか `log_action_vip_point_change`） | `packages/nexus-vip/database/migrations/shard/2026_01_01_000001_create_vip_log_tables.php` |
+| `trx_unit` `trx_item` `trx_equipment` | `packages/nexus-core/database/migrations/shard/2026_01_01_000001_create_resource_tables.php` |
+| `trx_player` | `packages/nexus-core/database/migrations/shard/2026_01_01_000001_create_core_tables.php` |
+| `trx_wallet` `trx_wallet_balance` | `packages/nexus-wallet/database/migrations/shard/2026_01_01_000001_create_wallet_tables.php` |
+| `trx_diamond` `trx_diamond_balance` | `packages/nexus-core-billing/database/migrations/shard/2026_01_01_000001_create_billing_tables.php` |
+| `trx_stamina` | `packages/nexus-stamina/database/migrations/shard/2026_01_01_000001_create_stamina_tables.php` |
 | `sys_deploy*` | `packages/nexus-version/database/migrations/sys/2026_01_01_000001_create_version_tables.php` |
 | `sys_maintenance` | `packages/nexus-maintenance/database/migrations/sys/2026_01_01_000001_create_maintenance_tables.php` |
 
-`log_action_login_bonus_receive` は `api/database/migrations/log/` ではなく nexus-login パッケージ側にある。
+`log_action_login_bonus_receive` は `api/database/migrations/shard/` ではなく nexus-login パッケージ側にある。
 
 ## 3. 認証・プレイヤー（sys）
 

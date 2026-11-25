@@ -8,8 +8,8 @@ use Illuminate\Support\Facades\Schema;
 /**
  * LogDB用プレイヤーログテーブル作成マイグレーション
  *
- * 注意: このマイグレーションは`php artisan pitr:migrate`で実行してください。
- * PitrMigrateCommandが全LogDBシャード（trx1, trx2, ...）に対して自動的に実行します。
+ * 注意: このマイグレーションは`php artisan trx:migrate`で実行してください。
+ * TrxMigrateCommandが全シャード（trx1, trx2, ...）に対して自動的に実行します。
  */
 return new class extends Migration
 {

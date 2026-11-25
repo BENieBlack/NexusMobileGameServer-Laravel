@@ -91,7 +91,7 @@ grep（`api`・`packages`・`tool` の PHP、マイグレーション、シー�
 | trx | `trx_in_app_purchase.mst_in_app_purchase_id`（PK の一部） | **string(255)**（数値を文字列で入れている） | 変えない | Model・Repository は `int` で比べている（`TrxInAppPurchaseRepository::selectByBillingPlatformAndMstInAppPurchaseId(string, int)` と `=== $mstInAppPurchaseId`）。列は既に文字列で、`id` が文字列になると素直になる。型を `string` に直す |
 | trx | `trx_in_app_purchase_effect.mst_in_app_purchase_id` | unsignedBigInteger | `string` | `selectAllEffectsByMstInAppPurchaseId(int)`・`setMstInAppPurchaseId(int)`・cast `integer` を直す |
 | trx | `trx_reward_track_line.mst_in_app_purchase_id`（nexus-reward-track） | unsignedBigInteger | `string` | `RewardTrackLine::$mstInAppPurchaseId`（int）、`RewardTrackLineRepositoryInterface::insertLine(…, int $mstInAppPurchaseId, …)`、`RewardTrackService::grantLine(…, int, …)`、`RewardTrackLineAdapter` の `(int)` を直す |
-| log | `log_action_in_app_purchase.mst_in_app_purchase_id`（`api/database/migrations/log/…game_log_tables.php`） | string | 変えない | 既に string（`LogInAppPurchase` の cast も string）。**既存の行の値は旧 id（`"1"`・`"2"`…）のまま残る** |
+| log | `log_action_in_app_purchase.mst_in_app_purchase_id`（`api/database/migrations/shard/…game_log_tables.php`） | string | 変えない | 既に string（`LogInAppPurchase` の cast も string）。**既存の行の値は旧 id（`"1"`・`"2"`…）のまま残る** |
 | log | `log_change_trx_in_app_purchase.mst_in_app_purchase_id` | string | 変えない | 同上。`before_data`・`after_data`（JSON）にも旧値が入る |
 | log | `log_vip_point.mst_in_app_purchase_id`（nullable。nexus-vip） | string | 変えない | 同上 |
 | mst | `mst_in_app_purchase` が持つ `app_store_product_id`・`google_play_product_id` | unsignedBigInteger（nullable。`mst_billing_platform_product.id` を指す） | `string(255)` nullable | `MstBillingPlatformProduct` の relation はそのまま動く。`MstInAppPurchaseSeeder` の `->id`（数値）の渡し方が変わる |
@@ -195,14 +195,14 @@ erDiagram
 | ファイル | 変えるテーブル |
 | --- | --- |
 | `packages/nexus-core-billing/database/migrations/mst/2026_01_01_000001_create_billing_tables.php` | 1〜4 と、`mst_in_app_purchase__l10n.mst_in_app_purchase_id` の型（bigint → string。PK `pk_in_app_purchase_language` の一部） |
-| 同 `…/trx/…create_billing_tables.php` | `trx_in_app_purchase_effect.mst_in_app_purchase_id` の型 |
+| 同 `…/shard/…create_billing_tables.php` | `trx_in_app_purchase_effect.mst_in_app_purchase_id` の型 |
 | `packages/nexus-core/database/migrations/mst/…create_resource_tables.php` | 5・6 |
 | `packages/nexus-event/…/mst/…create_event_tables.php` | 7 |
 | `packages/nexus-level/…/mst/…create_level_tables.php` | 8 |
 | `packages/nexus-login/…/mst/…create_login_tables.php` | 9 |
 | `packages/nexus-mailbox/…/mst/…create_mailbox_tables.php` | 10 |
 | `packages/nexus-mission/…/mst/…create_mission_tables.php` | 11 |
-| `packages/nexus-reward-track/…/mst/…create_reward_track_tables.php`、`…/trx/…create_reward_track_tables.php` | 12（PR ②）。`mst_reward_track_line.mst_in_app_purchase_id`・`trx_reward_track_line.mst_in_app_purchase_id` の型変更は **PR ④**（11 節。同じファイルを 2 回書き換える） |
+| `packages/nexus-reward-track/…/mst/…create_reward_track_tables.php`、`…/shard/…create_reward_track_tables.php` | 12（PR ②）。`mst_reward_track_line.mst_in_app_purchase_id`・`trx_reward_track_line.mst_in_app_purchase_id` の型変更は **PR ④**（11 節。同じファイルを 2 回書き換える） |
 | `packages/nexus-tag/…`、`packages/nexus-trade/…` | 13・14 |
 | `packages/nexus-vip/…/mst/…create_vip_tables.php` | 15・16 |
 

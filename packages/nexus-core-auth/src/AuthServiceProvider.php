@@ -18,7 +18,7 @@ class AuthServiceProvider extends ServiceProvider
     {
         $baseDir = __DIR__.'/../database/migrations';
 
-        foreach (['mst', 'trx', 'log', 'sys'] as $type) {
+        foreach (['mst', 'shard', 'sys'] as $type) {
             $path = "{$baseDir}/{$type}";
             if (is_dir($path)) {
                 $this->loadMigrationsFrom($path);

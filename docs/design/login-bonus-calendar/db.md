@@ -25,8 +25,8 @@
 
 | 要るもの | 既にある場所 | 確かめた内容 |
 | --- | --- | --- |
-| 通常の進捗（最後に配った日数・受取日） | `trx_login_bonus`（主キー `(sys_player_id, type)`。`type = daily` の 1 行。`day`・`received_date`・`mst_login_bonus_id`） | `packages/nexus-login/database/migrations/trx/...create_login_tables.php`。`TrxLoginBonusRepository::selectByType` が `queryOrMemory()` で読む |
-| VIP の進捗 | `trx_vip_login_bonus`（主キー `sys_player_id`。`mst_vip_login_bonus_id`・`day`・`vip_level`・`received_at`） | `packages/nexus-vip/database/migrations/trx/...create_vip_tables.php` |
+| 通常の進捗（最後に配った日数・受取日） | `trx_login_bonus`（主キー `(sys_player_id, type)`。`type = daily` の 1 行。`day`・`received_date`・`mst_login_bonus_id`） | `packages/nexus-login/database/migrations/shard/...create_login_tables.php`。`TrxLoginBonusRepository::selectByType` が `queryOrMemory()` で読む |
+| VIP の進捗 | `trx_vip_login_bonus`（主キー `sys_player_id`。`mst_vip_login_bonus_id`・`day`・`vip_level`・`received_at`） | `packages/nexus-vip/database/migrations/shard/...create_vip_tables.php` |
 | **受取時の VIP レベル（R4 ②）** | `trx_vip_login_bonus.vip_level`（`unsignedTinyInteger`、**not null**。コメント「受け取り時のVIPレベル」） | 列は create マイグレーション当初から定義済み。配るたびに `VipLoginBonusService::recordHistory` → `upsertLatest` が `bonusData['current_vip_level']` で上書きする。したがって**既存行にも値が入っている**（null になる経路が無い）。マイグレーション・既存データの移行は不要 |
 | 全日の報酬（通常） | `mst_login_bonus_content`（`mst_login_bonus_id`・`day`・`content_*`・**`sort_desc`**（旧 `sort_order` を置き換え）） | `sort_desc`（降順。大きい値が先）あり。`day = 0` はカムバック用で、通常の `day` は 1〜`loop_days` |
 | 全日の報酬（VIP） | `mst_vip_login_bonus_content`（`id`（連番）・`mst_vip_login_bonus_id`・`day`・`content_*`・**`sort_desc`（今回追加）**）。索引 `idx_vip_login_bonus_day (mst_vip_login_bonus_id, day)` | クライアントが配信の SQLite から引いて `sort_desc` 降順に並べる。サーバーは判定・配布で 1 日分を読む |

@@ -122,15 +122,13 @@ migrate: up ## マイグレーションを実行
 	$(call migrate_group,migrate,sys,sys)
 	$(call migrate_group,migrate,mst,mst)
 	$(DOCKER_COMPOSE) exec -T api-php php artisan trx:migrate --force
-	$(DOCKER_COMPOSE) exec -T api-php php artisan pitr:migrate --force
 
-migrate-fresh: up ## マイグレーションをリセットして再実行（trx/logも作り直す）
+migrate-fresh: up ## マイグレーションをリセットして再実行（trx/logのテーブルも作り直す）
 	$(call migrate_group,migrate:fresh,sys,sys)
 	$(call migrate_group,migrate:fresh,mst,mst)
 	$(DOCKER_COMPOSE) exec -T api-php php artisan trx:migrate --fresh --force
-	# trx と log は同じシャードDBに同居している。log まで --fresh にすると
-	# 直前に作った trx のテーブルを落とすため、log は空のDBへ通常の migrate で足す
-	$(DOCKER_COMPOSE) exec -T api-php php artisan pitr:migrate --force
+	# trx と log は同じシャードDBに同居し、マイグレーションも shard ディレクトリ 1 つにある。
+	# trx:migrate --fresh 1 回で trx と log の両方のテーブルを作り直す
 	@echo "初期データ（シャーディング設定・マスター）も消えたので、続けて make seed を流してください"
 
 seed: up ## シーダーを実行

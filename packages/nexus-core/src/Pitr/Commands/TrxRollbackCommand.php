@@ -5,11 +5,13 @@ namespace Nexus\Core\Pitr\Commands;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Artisan;
 use Nexus\Core\Pitr\Logger\ShardMapper;
+use Nexus\Core\Pitr\Support\ShardMigrationPaths;
 
 /**
  * TrxRollbackCommand
  *
- * すべてのTrxDBシャードに対してマイグレーションをロールバック
+ * すべてのシャード（trx1, trx2, ...）に対してマイグレーションをロールバック
+ * trx と log は同じシャードDBに同居しているので、両方のテーブルがこの1回で戻る
  * 動的シャーディング対応（DB_SHARD_COUNTに応じてtrx1, trx2, ...に実行）
  */
 class TrxRollbackCommand extends Command
@@ -28,7 +30,7 @@ class TrxRollbackCommand extends Command
      *
      * @var string
      */
-    protected $description = 'Rollback TrxDB migrations on all shards dynamically';
+    protected $description = 'Rollback shard (trx and log tables) migrations on all shards dynamically';
 
     /**
      * Execute the console command.
@@ -37,15 +39,19 @@ class TrxRollbackCommand extends Command
     {
         $trxConnections = ShardMapper::allTrxConnections();
 
-        $this->info('Rolling back TrxDB migrations on all shards...');
-        $this->info('This includes migrations from packages: nexus-core, nexus-wallet, nexus-stamina, nexus-core-billing, nexus-mailbox, nexus-gacha, nexus-login, nexus-vip');
+        // パスはpackages/を走査して集める（trx と log のテーブルを含む shard ディレクトリ）
+        $migrationPaths = ShardMigrationPaths::find();
+
+        $this->info('Rolling back shard migrations on all shards...');
+        $this->info('Migration paths: '.implode(', ', $migrationPaths));
         $this->newLine();
 
         foreach ($trxConnections as $trxConnection) {
-            $this->info("📦 Rolling back TrxDB: {$trxConnection}");
+            $this->info("📦 Rolling back shard: {$trxConnection}");
 
             $options = [
                 '--database' => $trxConnection,
+                '--path' => $migrationPaths,
                 '--step' => $this->option('step'),
             ];
 
@@ -65,7 +71,7 @@ class TrxRollbackCommand extends Command
             $this->newLine();
         }
 
-        $this->info('🎉 All TrxDB rollbacks completed successfully!');
+        $this->info('🎉 All shard rollbacks completed successfully!');
 
         return self::SUCCESS;
     }

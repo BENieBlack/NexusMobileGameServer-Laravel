@@ -71,7 +71,7 @@ packages/nexus-pitr/
 │   └── nexus-pitr.php              # PITR設定ファイル
 ├── database/
 │   └── migrations/
-│       └── (マイグレーションはapi/database/migrations/log/に配置)
+│       └── (マイグレーションはapi/database/migrations/shard/に配置)
 ├── src/
 │   ├── NexusPitrServiceProvider.php
 │   ├── Dto/
@@ -218,7 +218,7 @@ php artisan pitr:verify \
 ### セットアップ
 1. LogDBマイグレーション実行
    ```bash
-   php artisan migrate --path=database/migrations/log
+   php artisan migrate --path=database/migrations/shard
    ```
 
 2. .env設定

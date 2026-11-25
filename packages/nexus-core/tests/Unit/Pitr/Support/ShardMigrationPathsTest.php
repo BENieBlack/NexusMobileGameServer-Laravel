@@ -9,28 +9,20 @@ use Tests\TestCase;
 /**
  * ShardMigrationPaths のテスト
  *
- * trx / log のマイグレーションは各パッケージが持っている。
+ * trx / log のマイグレーションは各パッケージの database/migrations/shard/ にある。
  * 一覧を手で持つとパッケージを増やすたびに更新が要るため、
  * packages/ を走査して集める。
  */
 class ShardMigrationPathsTest extends TestCase
 {
     #[Test]
-    public function パッケージのtrxマイグレーションを集める(): void
+    public function パッケージのshardマイグレーションを集める(): void
     {
-        $paths = ShardMigrationPaths::find('trx');
+        $paths = ShardMigrationPaths::find();
 
-        $this->assertContains('../packages/nexus-core/database/migrations/trx', $paths);
-        $this->assertContains('../packages/nexus-album/database/migrations/trx', $paths);
-    }
-
-    #[Test]
-    public function パッケージのlogマイグレーションを集める(): void
-    {
-        $paths = ShardMigrationPaths::find('log');
-
-        $this->assertContains('../packages/nexus-core/database/migrations/log', $paths);
-        $this->assertContains('database/migrations/log', $paths, 'アプリ自身のlogも含む');
+        $this->assertContains('../packages/nexus-core/database/migrations/shard', $paths);
+        $this->assertContains('../packages/nexus-album/database/migrations/shard', $paths);
+        $this->assertContains('database/migrations/shard', $paths, 'アプリ自身のshardも含む');
     }
 
     #[Test]
@@ -38,25 +30,25 @@ class ShardMigrationPathsTest extends TestCase
     {
         // 対象テーブルが揃ってからでないと変換できない。
         // ファイル名の日付順では保証できないのでパスの並びで最後に回している
-        foreach (['trx', 'log'] as $type) {
-            $paths = ShardMigrationPaths::find($type);
-            $tidbPath = "../packages/nexus-tidb/database/migrations/{$type}";
+        $paths = ShardMigrationPaths::find();
+        $tidbPath = '../packages/nexus-tidb/database/migrations/shard';
 
-            $this->assertContains($tidbPath, $paths);
-            $this->assertSame($tidbPath, end($paths), "{$type} でnexus-tidbが最後になっていない");
-        }
+        $this->assertContains($tidbPath, $paths);
+        $this->assertSame($tidbPath, end($paths), 'nexus-tidb が最後になっていない');
     }
 
     #[Test]
-    public function 存在しない種別では何も返さない(): void
+    public function trxとlogの旧ディレクトリは含まない(): void
     {
-        $this->assertSame([], ShardMigrationPaths::find('no_such_type'));
+        foreach (ShardMigrationPaths::find() as $path) {
+            $this->assertStringEndsWith('database/migrations/shard', $path);
+        }
     }
 
     #[Test]
     public function 同じパスを重複して返さない(): void
     {
-        $paths = ShardMigrationPaths::find('trx');
+        $paths = ShardMigrationPaths::find();
 
         $this->assertSame(array_values(array_unique($paths)), $paths);
     }

@@ -10,7 +10,8 @@ use Nexus\Core\Pitr\Support\ShardMigrationPaths;
 /**
  * TrxMigrateCommand
  *
- * すべてのTrxDBシャードに対してマイグレーションを実行
+ * すべてのシャード（trx1, trx2, ...）に対してマイグレーションを実行
+ * trx と log は同じシャードDBに同居しているので、両方のテーブルをこの1回で作る
  * 動的シャーディング対応（DB_SHARD_COUNTに応じてtrx1, trx2, ...に実行）
  */
 class TrxMigrateCommand extends Command
@@ -31,7 +32,7 @@ class TrxMigrateCommand extends Command
      *
      * @var string
      */
-    protected $description = 'Run TrxDB migrations on all shards dynamically';
+    protected $description = 'Run shard (trx and log tables) migrations on all shards dynamically';
 
     /**
      * Execute the console command.
@@ -41,18 +42,18 @@ class TrxMigrateCommand extends Command
         $trxConnections = ShardMapper::allTrxConnections();
 
         // パスはpackages/を走査して集める（パッケージを増やしても直さなくてよい）
-        $trxMigrationPaths = ShardMigrationPaths::find('trx');
+        $trxMigrationPaths = ShardMigrationPaths::find();
 
         $shardCount = count($trxConnections);
         $shardList = implode(', ', $trxConnections);
 
-        $this->info("Running TrxDB migrations on all {$shardCount} shards...");
+        $this->info("Running shard migrations on all {$shardCount} shards...");
         $this->info("Target shards: {$shardList}");
         $this->info('Migration paths: '.implode(', ', $trxMigrationPaths));
         $this->newLine();
 
         foreach ($trxConnections as $trxConnection) {
-            $this->info("📦 Migrating TrxDB: {$trxConnection}");
+            $this->info("📦 Migrating shard: {$trxConnection}");
 
             $options = [
                 '--database' => $trxConnection,
@@ -71,7 +72,7 @@ class TrxMigrateCommand extends Command
                 $options['--step'] = true;
             }
 
-            // TrxDBマイグレーション実行（trxサブディレクトリのみ）
+            // シャードのマイグレーション実行（shardサブディレクトリ。trx と log のテーブルを含む）
             // --fresh はシャードの全テーブルを落としてから流し直す。
             // 既存マイグレーションを書き換えたときはこちらでないと反映されない
             $migrateCommand = $this->option('fresh') ? 'migrate:fresh' : 'migrate';
@@ -88,7 +89,7 @@ class TrxMigrateCommand extends Command
             $this->newLine();
         }
 
-        $this->info('🎉 All TrxDB migrations completed successfully!');
+        $this->info('🎉 All shard migrations completed successfully!');
 
         return self::SUCCESS;
     }

@@ -23,7 +23,7 @@ TrxDB故障時のポイントインタイムリカバリーシステム
 ### 1. マイグレーション実行
 
 ```bash
-php artisan migrate --path=database/migrations/log
+php artisan trx:migrate   # trx と log のテーブルを全シャードに作る
 ```
 
 これにより以下のテーブルが作成されます:

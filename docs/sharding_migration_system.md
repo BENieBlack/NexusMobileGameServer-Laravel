@@ -43,7 +43,7 @@ php artisan migrate:shards --force
 php artisan migrate:shards --fresh --force
 
 # 特定のパスのマイグレーションのみ実行
-php artisan migrate:shards --path=database/migrations/trx/custom
+php artisan migrate:shards --path=database/migrations/shard/custom
 
 # Dry run（実際には実行せず、SQLのみ表示）
 php artisan migrate:shards --pretend
@@ -52,7 +52,7 @@ php artisan migrate:shards --pretend
 **動作:**
 1. `config/sharding.php`からシャード接続名のリストを取得
 2. 各シャードに対して順番に`migrate`コマンドを実行
-3. デフォルトで`database/migrations/trx`ディレクトリのマイグレーションを使用
+3. デフォルトで`database/migrations/shard`ディレクトリのマイグレーションを使用
 4. エラーが発生したシャードをログに記録し、他のシャードは継続
 
 #### `migrate:shards-status`
@@ -337,7 +337,7 @@ api/
 ### マイグレーション作成時
 
 1. **適切なディレクトリに配置**
-   - トランザクションDB用: `database/migrations/trx/`
+   - シャードDB（trx と log のテーブル）用: `database/migrations/shard/`
    - システムDB用: `database/migrations/sys/`
    - マスターDB用: `database/migrations/mst/`
 
@@ -413,7 +413,7 @@ php artisan migrate:shards
 php artisan migrate:status --database=trx1
 
 # 特定のシャードで直接マイグレーション実行
-php artisan migrate --database=trx1 --path=database/migrations/trx
+php artisan migrate --database=trx1 --path=database/migrations/shard
 ```
 
 ## まとめ
